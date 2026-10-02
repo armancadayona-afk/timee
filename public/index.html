@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Worker Timer</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="login-shell">
+    <section class="card login-card" aria-labelledby="loginTitle">
+      <div class="brand-mark" aria-hidden="true">WT</div>
+      <div class="eyebrow">Work session</div>
+      <h1 id="loginTitle">Sign in</h1>
+      <p class="muted">Use your assigned admin or worker account.</p>
+      <form id="loginForm">
+        <label>Username
+          <input id="username" name="username" autocomplete="username" required autofocus>
+        </label>
+        <label>Password
+          <input id="password" name="password" type="password" autocomplete="current-password" required>
+        </label>
+        <button id="loginBtn" class="btn" type="submit">Sign in</button>
+        <p id="message" class="small muted" aria-live="polite"></p>
+      </form>
+    </section>
+  </main>
+<script>
+  const form = document.getElementById('loginForm');
+  const button = document.getElementById('loginBtn');
+  const message = document.getElementById('message');
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    button.disabled = true;
+    message.textContent = 'Signing in…';
+    try {
+      const response = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: form.username.value, password: form.password.value })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Login failed');
+      location.href = data.redirect;
+    } catch (error) {
+      message.textContent = error.message;
+      button.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>

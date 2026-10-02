@@ -1,0 +1,22 @@
+{
+  "name": "worker-timer-monitor",
+  "version": "3.3.0",
+  "private": true,
+  "description": "Three workers with automatic camera/audio and independent Start/Pause/Resume timer",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "check": "node --check server.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "express-session": "^1.18.1",
+    "socket.io": "^4.8.1",
+    "session-file-store": "^1.5.0"
+  }
+}
