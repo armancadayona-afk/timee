@@ -13,12 +13,26 @@
     .timer { font-size: 38px; margin: 12px 0 8px; }
     .history { white-space: pre-wrap; margin-top: 10px; font-size: 13px; color: var(--muted); }
     .tools { display: flex; gap: 12px; margin: 20px 0; }
+    .controls-group { display: flex; gap: 8px; margin: 8px 0; flex-wrap: wrap; }
+    .controls-group .btn { flex: 1; min-width: 90px; }
+
+    @keyframes pulse-red {
+      0% { background-color: #EF4444; }
+      50% { background-color: #B91C1C; }
+      100% { background-color: #EF4444; }
+    }
+
+    .btn-record-active {
+      animation: pulse-red 1.5s infinite;
+      color: #FFFFFF !important;
+      font-weight: bold;
+    }
   </style>
 </head>
 <body>
   <main class="wrap">
     <h1>Work Timer Admin</h1>
-    <p class="muted">Worker cameras connect automatically. Control live camera feeds and timer shifts for workers below.</p>
+    <p class="muted">Worker camera control & recording panel. Admin manages video feeds, front/back cameras, and broadcast recordings below.</p>
     <div class="tools">
       <button class="btn" id="audio">Enable Audio</button>
       <button class="btn secondary" id="logout">Log Out</button>
@@ -30,7 +44,7 @@
   <script src="/socket.io/socket.io.js"></script>
   <script>
     let workers = [], socket, iceServers = [], audioEnabled = false;
-    const peers = new Map(), requested = new Map();
+    const peers = new Map(), requested = new Map(), activeRecorders = new Map();
 
     async function api(path, body) {
       const r = await fetch(path, {
@@ -53,12 +67,108 @@
     }
 
     function closePeer(id) {
+      if (activeRecorders.has(id)) {
+        const session = activeRecorders.get(id);
+        activeRecorders.delete(id);
+        try { session.recorder.stop(); } catch (_) {}
+      }
+
       const p = peers.get(id);
       if (p?.pc) p.pc.close();
       peers.delete(id);
       const v = document.getElementById('video-' + id);
       if (v) v.srcObject = null;
       requested.delete(id);
+    }
+
+    function toggleRecord(id, name) {
+      const card = document.getElementById(id);
+      const btn = card?.querySelector('.btn-record');
+      const video = document.getElementById('video-' + id);
+
+      if (activeRecorders.has(id)) {
+        const session = activeRecorders.get(id);
+        activeRecorders.delete(id);
+        try { session.recorder.stop(); } catch (_) {}
+        if (btn) {
+          btn.textContent = '● RECORD';
+          btn.classList.remove('btn-record-active');
+          btn.style.background = '';
+        }
+        return;
+      }
+
+      const stream = video?.srcObject;
+      if (!stream || !stream.getTracks().length) {
+        alert('No active video stream to record. Start the live camera stream first.');
+        return;
+      }
+
+      const chunks = [];
+      const mimeTypes = [
+        'video/webm;codecs=vp9,opus',
+        'video/webm;codecs=vp8,opus',
+        'video/webm',
+        'video/mp4'
+      ];
+      const selectedType = mimeTypes.find(t => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(t)) || '';
+
+      let recorder;
+      try {
+        recorder = new MediaRecorder(stream, selectedType ? { mimeType: selectedType } : {});
+      } catch (e) {
+        alert('Recording error: ' + e.message);
+        return;
+      }
+
+      recorder.ondataavailable = e => {
+        if (e.data && e.data.size > 0) chunks.push(e.data);
+      };
+
+      recorder.onstop = () => {
+        if (!chunks.length) return;
+        const blob = new Blob(chunks, { type: recorder.mimeType || 'video/webm' });
+        const now = new Date();
+        const pad = n => String(n).padStart(2, '0');
+        const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
+        const sanitizeName = (name || 'Worker').replace(/[^a-zA-Z0-9_-]/g, '');
+        const fileName = `WorkTimer_${sanitizeName}_${dateStr}.mp4`;
+
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const base64Data = reader.result;
+          if (window.AndroidAdmin && window.AndroidAdmin.saveRecording) {
+            window.AndroidAdmin.saveRecording(fileName, base64Data);
+          } else {
+            const a = document.createElement('a');
+            a.href = base64Data;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => {
+              document.body.removeChild(a);
+            }, 1000);
+          }
+        };
+        reader.readAsDataURL(blob);
+
+        if (card) {
+          const liveEl = card.querySelector('.live');
+          if (liveEl) liveEl.textContent = 'Recording saved: ' + fileName;
+        }
+      };
+
+      recorder.start(1000);
+      activeRecorders.set(id, { recorder, chunks });
+
+      if (btn) {
+        btn.textContent = '■ STOP RECORDING';
+        btn.classList.add('btn-record-active');
+      }
+      if (card) {
+        const liveEl = card.querySelector('.live');
+        if (liveEl) liveEl.textContent = '● RECORDING LIVE BROADCAST…';
+      }
     }
 
     function update() {
@@ -76,36 +186,41 @@
             <p class="live" style="min-height: 20px; font-weight: 600;"></p>
 
             <div class="controls-group">
+              <button class="btn btn-sm secondary btn-front">FRONT</button>
+              <button class="btn btn-sm secondary btn-back">BACK</button>
+              <button class="btn btn-sm btn-record" style="background: #059669; color: white;">● RECORD</button>
+            </div>
+
+            <div class="controls-group">
               <button class="btn btn-sm btn-live" style="flex:2;">Start Live</button>
-              <button class="btn btn-sm secondary btn-front">Front Cam</button>
-              <button class="btn btn-sm secondary btn-back">Back Cam</button>
+              <button class="btn btn-sm secondary btn-timer-stop">Stop Time</button>
             </div>
 
             <div class="controls-group">
               <button class="btn btn-sm btn-timer-action" style="flex:2;">Start Time</button>
-              <button class="btn btn-sm secondary btn-timer-stop">Stop Time</button>
+              <button class="btn btn-sm secondary btn-history">History</button>
             </div>
 
-            <button class="btn btn-sm secondary btn-history" style="margin-top:12px; width:100%;">History</button>
             <p class="history"></p>
           `;
 
           c.querySelector('video').id = 'video-' + w.id;
           document.getElementById('workers').append(c);
 
-          // Front Camera button
           c.querySelector('.btn-front').onclick = () => {
-            socket.emit('admin-switch-camera', { workerId: w.id, camera: 'front' });
+            socket.emit('admin-switch-camera', { workerId: w.id, camera: 'front', facing: 'front' });
             c.querySelector('.live').textContent = 'Switching to Front Camera…';
           };
 
-          // Back Camera button
           c.querySelector('.btn-back').onclick = () => {
-            socket.emit('admin-switch-camera', { workerId: w.id, camera: 'back' });
+            socket.emit('admin-switch-camera', { workerId: w.id, camera: 'back', facing: 'back' });
             c.querySelector('.live').textContent = 'Switching to Back Camera…';
           };
 
-          // Start/Stop Live Camera Feed button
+          c.querySelector('.btn-record').onclick = () => {
+            toggleRecord(w.id, w.name);
+          };
+
           c.querySelector('.btn-live').onclick = () => {
             if (w.liveMode === 'NONE') {
               requested.set(w.id, Date.now());
@@ -118,18 +233,15 @@
             }
           };
 
-          // Start/Pause/Resume Timer button
           c.querySelector('.btn-timer-action').onclick = () => {
             const action = w.status === 'WORKING' ? 'pause' : w.status === 'PAUSED' ? 'resume' : 'start';
             socket.emit('admin-timer-control', { workerId: w.id, action });
           };
 
-          // Stop Timer button
           c.querySelector('.btn-timer-stop').onclick = () => {
             socket.emit('admin-timer-control', { workerId: w.id, action: 'stop' });
           };
 
-          // History button
           c.querySelector('.btn-history').onclick = async () => {
             try {
               const d = await api('/api/work-sessions/' + w.id);
@@ -142,28 +254,26 @@
           };
         }
 
-        // Update Text and Values
         c.querySelector('h2').textContent = w.name;
         c.querySelector('.state').textContent = w.status + ' · ' + (w.online ? 'Connected' : 'Offline');
         c.querySelector('.timer').textContent = fmt((w.accumulatedMs || 0) + (w.status === 'WORKING' && w.startedAt ? Date.now() - w.startedAt : 0));
 
-        // Update Camera Live Button Text
         const btnLive = c.querySelector('.btn-live');
         btnLive.textContent = w.liveMode === 'NONE' ? 'Start Live' : 'Stop Live';
         btnLive.disabled = !w.online || !w.captureReady;
 
-        // Front / Back buttons
         const btnFront = c.querySelector('.btn-front');
         const btnBack = c.querySelector('.btn-back');
         btnFront.disabled = !w.online;
         btnBack.disabled = !w.online;
 
-        // Timer action button text
+        const btnRecord = c.querySelector('.btn-record');
+        btnRecord.disabled = !w.online || w.liveMode === 'NONE';
+
         const btnTimerAction = c.querySelector('.btn-timer-action');
         btnTimerAction.textContent = w.status === 'WORKING' ? 'Pause Time' : w.status === 'PAUSED' ? 'Resume Time' : 'Start Time';
         btnTimerAction.disabled = !w.online;
 
-        // Timer stop button
         const btnTimerStop = c.querySelector('.btn-timer-stop');
         btnTimerStop.disabled = !w.online || (w.status !== 'WORKING' && w.status !== 'PAUSED');
 
