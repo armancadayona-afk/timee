@@ -844,6 +844,31 @@ io.on('connection', socket => {
     }
   );
 
+  socket.on(
+    'admin-switch-camera',
+    ({ workerId, camera, facing } = {}) => {
+      if (user.role !== 'admin') return;
+
+      const state = states.get(workerId);
+
+      if (!state || !state.socketId) {
+        socket.emit('live-error', {
+          workerId,
+          message: 'Worker app is not connected.'
+        });
+        return;
+      }
+
+      const targetFacing = String(camera || facing || 'switch').toLowerCase();
+
+      io.to(state.socketId).emit('switch-camera', {
+        workerId: state.id,
+        camera: targetFacing,
+        facing: targetFacing
+      });
+    }
+  );
+
 
   socket.on(
     'worker-live-ack',
