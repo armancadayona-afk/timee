@@ -637,6 +637,41 @@ app.post('/api/admin/worker/timer', requireRole('admin'), (req, res) => {
   });
 });
 
+app.post('/api/admin/workers/:workerId/reset-time', requireRole('admin'), (req, res) => {
+  const workerId = req.params.workerId;
+  const state = states.get(workerId);
+
+  if (!state) {
+    return res.status(404).json({
+      ok: false,
+      error: 'Unknown worker'
+    });
+  }
+
+  const previousAccumulatedMs = timerState.elapsed(state);
+
+  if (state.status === 'WORKING') {
+    state.accumulatedMs = 0;
+    state.startedAt = Date.now();
+  } else {
+    state.accumulatedMs = 0;
+    state.startedAt = null;
+  }
+
+  persistState();
+  broadcastStates();
+
+  if (state.socketId) {
+    io.to(state.socketId).emit('timer-updated', safeWorkerState(state));
+  }
+
+  res.json({
+    ok: true,
+    previousAccumulatedMs,
+    state: safeWorkerState(state)
+  });
+});
+
 app.get('/api/rtc-config', requireAuth, (_req, res) => {
   let iceServers = [
     {
@@ -1023,13 +1058,7 @@ io.on('connection', socket => {
       }
 
       if (state.liveMode !== LIVE_NONE) {
-        socket.emit('live-error', {
-          workerId,
-          mode: normalizedMode,
-          message:
-            'Another live feed is already active or waiting for Worker approval. Stop it first.'
-        });
-        return;
+        stopWorkerLive(state, 'mode-switch', true);
       }
 
       state.liveMode =
@@ -1157,6 +1186,31 @@ io.on('connection', socket => {
           state.online = false;
           resetLiveState(state);
         }
+      }
+
+      persistState();
+      broadcastStates();
+
+      if (state.socketId) {
+        io.to(state.socketId).emit('timer-updated', safeWorkerState(state));
+      }
+    }
+  );
+
+  socket.on(
+    'admin-reset-time',
+    ({ workerId } = {}) => {
+      if (user.role !== 'admin') return;
+
+      const state = states.get(workerId);
+      if (!state) return;
+
+      if (state.status === 'WORKING') {
+        state.accumulatedMs = 0;
+        state.startedAt = Date.now();
+      } else {
+        state.accumulatedMs = 0;
+        state.startedAt = null;
       }
 
       persistState();

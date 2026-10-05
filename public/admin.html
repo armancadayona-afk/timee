@@ -10,7 +10,8 @@
     .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; }
     .card { padding: 20px; }
     video { width: 100%; background: #02050a; border-radius: 12px; aspect-ratio: 4/3; }
-    .timer { font-size: 38px; margin: 12px 0 8px; }
+    .timer { font-size: 38px; margin: 12px 0 2px; }
+    .est-pay { font-size: 16px; font-weight: 700; color: #34D399; margin-bottom: 8px; }
     .history { white-space: pre-wrap; margin-top: 10px; font-size: 13px; color: var(--muted); }
     .tools { display: flex; gap: 12px; margin: 20px 0; }
     .controls-group { display: flex; gap: 8px; margin: 8px 0; flex-wrap: wrap; }
@@ -27,14 +28,33 @@
       color: #FFFFFF !important;
       font-weight: bold;
     }
+
+    /* Modal Overlay for Reset Confirmation */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.75);
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+    }
+    .modal-content {
+      background: var(--panel-2);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 24px;
+      max-width: 420px;
+      width: 90%;
+      color: #fff;
+    }
   </style>
 </head>
 <body>
   <main class="wrap">
     <h1>Work Timer Admin</h1>
-    <p class="muted">Worker camera control & recording panel. Admin manages video feeds, front/back cameras, and broadcast recordings below.</p>
+    <p class="muted">Worker camera control, screen sharing & recording panel.</p>
     <div class="tools">
-      <button class="btn" id="audio">Enable Audio</button>
       <button class="btn secondary" id="logout">Log Out</button>
     </div>
     <p id="message">Connecting…</p>
@@ -122,11 +142,26 @@
     </section>
   </main>
 
+  <!-- Reset Confirmation Modal -->
+  <div id="resetModal" class="modal-overlay">
+    <div class="modal-content">
+      <h3 id="resetModalTitle" style="color: #EF4444; margin-bottom: 12px;">Reset Worker Time?</h3>
+      <p id="resetModalBody" style="font-size: 14px; margin-bottom: 16px; line-height: 1.5;"></p>
+      <div style="display: flex; gap: 10px; justify-content: flex-end;">
+        <button class="btn secondary" onclick="closeResetModal()">CANCEL</button>
+        <button class="btn danger" id="resetModalConfirmBtn" style="background: #EF4444; color: white;">RESET TIME</button>
+      </div>
+    </div>
+  </div>
+
   <script src="/socket.io/socket.io.js"></script>
   <script>
-    let workers = [], socket, iceServers = [], audioEnabled = false;
+    let workers = [], socket, iceServers = [];
     const peers = new Map(), requested = new Map(), activeRecorders = new Map();
     const liveModes = new Map();
+    const workerAudio = new Map(); // workerId -> boolean
+    const pingStatusMap = new Map(); // workerId -> string
+    let pendingResetWorkerId = null;
 
     async function api(path, body) {
       const r = await fetch(path, {
@@ -148,8 +183,23 @@
       return [Math.floor(t / 3600), Math.floor(t / 60) % 60, t % 60].map(x => String(x).padStart(2, '0')).join(':');
     }
 
+    function calcPay(ms) {
+      const hours = Math.max(0, ms) / 3600000.0;
+      return (hours * 7.0).toFixed(2);
+    }
+
+    function formatLastSeen(timestamp) {
+      if (!timestamp) return 'Never';
+      const diffSec = Math.floor((Date.now() - timestamp) / 1000);
+      if (diffSec < 10) return 'Just now';
+      if (diffSec < 60) return `${diffSec}s ago`;
+      const diffMin = Math.floor(diffSec / 60);
+      if (diffMin < 60) return `${diffMin}m ago`;
+      const diffHours = Math.floor(diffMin / 60);
+      return `${diffHours}h ago`;
+    }
+
     function closePeer(id) {
-      // Finalize active recording for this peer safely
       if (activeRecorders.has(id)) {
         const session = activeRecorders.get(id);
         activeRecorders.delete(id);
@@ -255,6 +305,29 @@
       }
     }
 
+    function openResetModal(workerId, name, currentTimeStr) {
+      pendingResetWorkerId = workerId;
+      document.getElementById('resetModalTitle').textContent = `Reset ${name} Time?`;
+      document.getElementById('resetModalBody').innerHTML = `
+        Current recorded time: <strong>${currentTimeStr}</strong><br><br>
+        This will reset the current timer to <strong>00:00:00</strong>.<br><br>
+        If the worker is currently WORKING, the timer will continue from 00:00:00.
+      `;
+      document.getElementById('resetModal').style.display = 'flex';
+    }
+
+    function closeResetModal() {
+      pendingResetWorkerId = null;
+      document.getElementById('resetModal').style.display = 'none';
+    }
+
+    document.getElementById('resetModalConfirmBtn').onclick = () => {
+      if (pendingResetWorkerId) {
+        socket.emit('admin-reset-time', { workerId: pendingResetWorkerId });
+      }
+      closeResetModal();
+    };
+
     function update() {
       for (const w of workers) {
         let c = document.getElementById(w.id);
@@ -266,7 +339,9 @@
             <h2></h2>
             <video autoplay playsinline muted></video>
             <div class="timer">00:00:00</div>
+            <div class="est-pay">Estimated Pay: $0.00</div>
             <p class="state"></p>
+            <p class="ping-status" style="font-size: 12px; color: #A0C8B6; margin: 2px 0 6px;"></p>
             <p class="live" style="min-height: 20px; font-weight: 600;"></p>
 
             <div class="controls-group">
@@ -285,6 +360,11 @@
             </div>
 
             <div class="controls-group">
+              <button class="btn btn-sm btn-audio" style="flex:1;">AUDIO OFF</button>
+              <button class="btn btn-sm secondary btn-ping" style="flex:1;">PING WORKER</button>
+            </div>
+
+            <div class="controls-group">
               <button class="btn btn-sm btn-record" style="background: #059669; color: white; flex:1;">● RECORD</button>
             </div>
 
@@ -294,6 +374,7 @@
             </div>
 
             <div class="controls-group">
+              <button class="btn btn-sm danger btn-reset-time" style="background: #ef4444; color: white; border: none; flex:1;">RESET TIME</button>
               <button class="btn btn-sm secondary btn-history" style="flex:1;">History</button>
             </div>
 
@@ -305,18 +386,51 @@
 
           const workerId = w.id;
 
-          // Front Camera button
-          c.querySelector('.btn-front').onclick = () => {
+          // Per-worker Audio button
+          c.querySelector('.btn-audio').onclick = () => {
+            const isAudioOn = !workerAudio.get(workerId);
+            workerAudio.set(workerId, isAudioOn);
+
+            const btnAudio = c.querySelector('.btn-audio');
+            btnAudio.textContent = isAudioOn ? 'AUDIO ON' : 'AUDIO OFF';
+            btnAudio.style.background = isAudioOn ? '#10B981' : '';
+            btnAudio.style.color = isAudioOn ? '#FFFFFF' : '';
+
+            const video = document.getElementById('video-' + workerId);
+            if (video) {
+              video.muted = !isAudioOn;
+              if (isAudioOn) video.play().catch(() => {});
+            }
+          };
+
+          // Ping button
+          c.querySelector('.btn-ping').onclick = () => {
             const current = workers.find(x => x.id === workerId);
             if (!current) return;
+            pingStatusMap.set(workerId, 'Pinging worker…');
+            c.querySelector('.ping-status').textContent = 'Pinging worker…';
+
+            const nonce = 'ping_' + Date.now();
+            socket.emit('admin-ping-worker', { workerId, nonce });
+
+            setTimeout(() => {
+              if (pingStatusMap.get(workerId) === 'Pinging worker…') {
+                const lastSeen = current.lastSeenAt ? formatLastSeen(current.lastSeenAt) : 'Never';
+                const msg = `No response · Last seen: ${lastSeen}`;
+                pingStatusMap.set(workerId, msg);
+                c.querySelector('.ping-status').textContent = msg;
+              }
+            }, 5000);
+          };
+
+          // Front Camera button
+          c.querySelector('.btn-front').onclick = () => {
             socket.emit('admin-switch-camera', { workerId, camera: 'front', facing: 'front' });
             c.querySelector('.live').textContent = 'Switching to Front Camera…';
           };
 
           // Back Camera button
           c.querySelector('.btn-back').onclick = () => {
-            const current = workers.find(x => x.id === workerId);
-            if (!current) return;
             socket.emit('admin-switch-camera', { workerId, camera: 'back', facing: 'back' });
             c.querySelector('.live').textContent = 'Switching to Back Camera…';
           };
@@ -328,49 +442,51 @@
             toggleRecord(workerId, current.name);
           };
 
-          // Start Camera button
+          // Start Camera button (handles CAMERA <-> SCREEN switching)
           c.querySelector('.btn-camera-start').onclick = () => {
             const current = workers.find(x => x.id === workerId);
             if (!current) return;
+
             if (current.liveMode === 'SCREEN' || current.liveMode === 'SCREEN_PENDING') {
-              socket.emit('admin-live-stop', { workerId });
+              c.querySelector('.live').textContent = 'Switching to Camera…';
               closePeer(workerId);
+            } else {
+              c.querySelector('.live').textContent = 'Connecting camera…';
             }
+
             requested.set(workerId, Date.now());
             socket.emit('admin-live-request', { workerId, mode: 'camera' });
-            c.querySelector('.live').textContent = 'Connecting camera…';
           };
 
           // Stop Camera button
           c.querySelector('.btn-camera-stop').onclick = () => {
-            const current = workers.find(x => x.id === workerId);
-            if (!current) return;
             socket.emit('admin-live-stop', { workerId });
             closePeer(workerId);
-            requested.set(workerId, Date.now() + 31536000000); // Prevent auto-restart
+            requested.set(workerId, Date.now() + 31536000000);
             c.querySelector('.live').textContent = 'Camera feed stopped';
           };
 
-          // Start Screen Share button
+          // Start Screen Share button (handles CAMERA <-> SCREEN switching)
           c.querySelector('.btn-screen-start').onclick = () => {
             const current = workers.find(x => x.id === workerId);
             if (!current) return;
+
             if (current.liveMode === 'CAMERA' || current.liveMode === 'CAMERA_PENDING') {
-              socket.emit('admin-live-stop', { workerId });
+              c.querySelector('.live').textContent = 'Switching to Screen…';
               closePeer(workerId);
+            } else {
+              c.querySelector('.live').textContent = 'Waiting for worker screen-share approval…';
             }
+
             requested.set(workerId, Date.now());
             socket.emit('admin-live-request', { workerId, mode: 'screen' });
-            c.querySelector('.live').textContent = 'Waiting for worker screen-share approval…';
           };
 
           // Stop Screen Share button
           c.querySelector('.btn-screen-stop').onclick = () => {
-            const current = workers.find(x => x.id === workerId);
-            if (!current) return;
             socket.emit('admin-live-stop', { workerId });
             closePeer(workerId);
-            requested.set(workerId, Date.now() + 31536000000); // Prevent auto-restart
+            requested.set(workerId, Date.now() + 31536000000);
             c.querySelector('.live').textContent = 'Screen Share stopped';
           };
 
@@ -384,15 +500,19 @@
 
           // Stop Timer button
           c.querySelector('.btn-timer-stop').onclick = () => {
+            socket.emit('admin-timer-control', { workerId, action: 'stop' });
+          };
+
+          // Reset Time button
+          c.querySelector('.btn-reset-time').onclick = () => {
             const current = workers.find(x => x.id === workerId);
             if (!current) return;
-            socket.emit('admin-timer-control', { workerId, action: 'stop' });
+            const elapsed = (current.accumulatedMs || 0) + (current.status === 'WORKING' && current.startedAt ? Date.now() - current.startedAt : 0);
+            openResetModal(workerId, current.name, fmt(elapsed));
           };
 
           // History button
           c.querySelector('.btn-history').onclick = async () => {
-            const current = workers.find(x => x.id === workerId);
-            if (!current) return;
             try {
               const d = await api('/api/work-sessions/' + workerId);
               c.querySelector('.history').textContent = d.sessions.map(s =>
@@ -407,9 +527,24 @@
         // Update Text and Values
         c.querySelector('h2').textContent = w.name;
         c.querySelector('.state').textContent = w.status + ' · ' + (w.online ? 'Connected' : 'Offline');
-        c.querySelector('.timer').textContent = fmt((w.accumulatedMs || 0) + (w.status === 'WORKING' && w.startedAt ? Date.now() - w.startedAt : 0));
 
-        // Update buttons based on liveMode
+        const elapsedMs = (w.accumulatedMs || 0) + (w.status === 'WORKING' && w.startedAt ? Date.now() - w.startedAt : 0);
+        c.querySelector('.timer').textContent = fmt(elapsedMs);
+        c.querySelector('.est-pay').textContent = `Estimated Pay: $${calcPay(elapsedMs)}`;
+
+        // Ping status text
+        if (!pingStatusMap.has(w.id)) {
+          c.querySelector('.ping-status').textContent = w.lastSeenAt ? `Last seen: ${formatLastSeen(w.lastSeenAt)}` : '';
+        } else {
+          c.querySelector('.ping-status').textContent = pingStatusMap.get(w.id);
+        }
+
+        // Video Muted state based on per-worker audio setting
+        const video = document.getElementById('video-' + w.id);
+        const isAudioOn = !!workerAudio.get(w.id);
+        if (video) video.muted = !isAudioOn;
+
+        // Button states
         const btnCamStart = c.querySelector('.btn-camera-start');
         const btnCamStop = c.querySelector('.btn-camera-stop');
         const btnFront = c.querySelector('.btn-front');
@@ -436,10 +571,10 @@
           btnCamStop.disabled = false;
           btnFront.disabled = false;
           btnBack.disabled = false;
-          btnScreenStart.disabled = true;
+          btnScreenStart.disabled = false; // Allow switching to Screen directly!
           btnScreenStop.disabled = true;
         } else if (w.liveMode === 'SCREEN' || w.liveMode === 'SCREEN_PENDING') {
-          btnCamStart.disabled = true;
+          btnCamStart.disabled = false; // Allow switching to Camera directly!
           btnCamStop.disabled = true;
           btnFront.disabled = true;
           btnBack.disabled = true;
@@ -465,23 +600,8 @@
           c.querySelector('.live').textContent = 'Worker offline';
           continue;
         }
-
-        if (socket?.connected && w.captureReady && w.liveMode === 'NONE' && !peers.has(w.id) && !requested.has(w.id)) {
-          requested.set(w.id, Date.now());
-          socket.emit('admin-live-request', { workerId: w.id, mode: 'camera' });
-          c.querySelector('.live').textContent = 'Connecting camera…';
-        }
       }
     }
-
-    document.getElementById('audio').onclick = () => {
-      audioEnabled = true;
-      document.querySelectorAll('video').forEach(v => {
-        v.muted = false;
-        v.play().catch(() => {});
-      });
-      document.getElementById('audio').textContent = 'Audio enabled';
-    };
 
     document.getElementById('logout').onclick = async () => {
       await api('/api/logout', {});
@@ -509,6 +629,17 @@
         update();
       });
 
+      socket.on('worker-ping-result', p => {
+        if (p.ok) {
+          pingStatusMap.set(p.workerId, 'Last response: Just now');
+        } else {
+          const w = workers.find(x => x.id === p.workerId);
+          const lastSeen = w?.lastSeenAt ? formatLastSeen(w.lastSeenAt) : 'Never';
+          pingStatusMap.set(p.workerId, `No response · Last seen: ${lastSeen}`);
+        }
+        update();
+      });
+
       socket.on('disconnect', () => {
         document.getElementById('message').textContent = 'Reconnecting…';
         for (const id of [...peers.keys()]) closePeer(id);
@@ -526,7 +657,8 @@
         pc.ontrack = e => {
           const v = document.getElementById('video-' + p.workerId);
           v.srcObject = e.streams[0] || new MediaStream(e.track ? [e.track] : []);
-          v.muted = !audioEnabled;
+          const isAudioOn = !!workerAudio.get(p.workerId);
+          v.muted = !isAudioOn;
           v.play().catch(() => {});
           const card = document.getElementById(p.workerId);
           if (card) {
