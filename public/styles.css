@@ -66,3 +66,8 @@ th{color:var(--muted);font-weight:700}
 @media(max-width:520px){.wrap{padding:20px 14px 34px}.card{padding:16px}.worker-card .timer{font-size:30px}}
 
 .action-row{align-items:stretch}.action-row .btn{flex:1 1 auto}
+.btn-sm{padding:7px 12px;min-height:36px;font-size:13px}
+.btn.danger{background:var(--bad);color:#07101e}
+.controls-group{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.controls-group .btn{flex:1 1 auto;text-align:center}
+

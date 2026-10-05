@@ -24,6 +24,8 @@ const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 const DATA_DIR = path.join(__dirname, 'data');
 const STATE_FILE = path.join(DATA_DIR, 'state.json');
 const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
+const TASKS_FILE = path.join(DATA_DIR, 'tasks.json');
+const CHAT_FILE = path.join(DATA_DIR, 'chat.json');
 const HTTP_SESSION_DIR = path.join(DATA_DIR, 'http-sessions');
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -82,21 +84,21 @@ const users = [
     id: 'worker1',
     username: process.env.WORKER1_USERNAME || 'john',
     password: process.env.WORKER1_PASSWORD || 'john123',
-    name: process.env.WORKER1_NAME || 'John'
+    name: process.env.WORKER1_NAME || 'Worker 1'
   },
   {
     role: 'worker',
     id: 'worker2',
     username: process.env.WORKER2_USERNAME || 'mark',
     password: process.env.WORKER2_PASSWORD || 'mark123',
-    name: process.env.WORKER2_NAME || 'Mark'
+    name: process.env.WORKER2_NAME || 'Worker 2'
   },
   {
     role: 'worker',
     id: 'worker3',
     username: process.env.WORKER3_USERNAME || 'anne',
     password: process.env.WORKER3_PASSWORD || 'anne123',
-    name: process.env.WORKER3_NAME || 'Anne'
+    name: process.env.WORKER3_NAME || 'Worker 3'
   }
 ];
 
@@ -169,8 +171,19 @@ function persistState() {
   writeJsonAtomic(STATE_FILE, output);
 }
 
+const tasks = readJson(TASKS_FILE, []);
+const chatMessages = readJson(CHAT_FILE, []);
+
 function persistSessions() {
   writeJsonAtomic(SESSIONS_FILE, workSessions.slice(-1000));
+}
+
+function persistTasks() {
+  writeJsonAtomic(TASKS_FILE, tasks);
+}
+
+function persistChat() {
+  writeJsonAtomic(CHAT_FILE, chatMessages);
 }
 
 function safeWorkerState(state) {
@@ -571,6 +584,59 @@ app.get('/api/work-sessions/:workerId', requireRole('admin'), (req, res) => {
   });
 });
 
+app.post('/api/admin/worker/timer', requireRole('admin'), (req, res) => {
+  const { workerId, action } = req.body || {};
+  const state = states.get(workerId);
+
+  if (!state) {
+    return res.status(404).json({
+      ok: false,
+      error: 'Unknown worker'
+    });
+  }
+
+  if (action === 'start') {
+    if (state.status === 'PAUSED') {
+      timerState.resume(state);
+    } else if (!state.sessionId) {
+      startShift(state);
+    }
+  } else if (action === 'pause') {
+    if (state.status === 'WORKING') {
+      timerState.pause(state);
+    }
+  } else if (action === 'resume') {
+    if (state.status === 'PAUSED') {
+      timerState.resume(state);
+    }
+  } else if (action === 'stop') {
+    if (state.sessionId) {
+      const socketId = finishShift(state, 'admin-stop', 'STOPPED');
+      if (socketId) {
+        io.to(socketId).emit('timer-stopped', {
+          reason: 'admin-stop'
+        });
+      }
+    } else {
+      state.status = 'STOPPED';
+      state.online = false;
+      resetLiveState(state);
+    }
+  }
+
+  persistState();
+  broadcastStates();
+
+  if (state.socketId) {
+    io.to(state.socketId).emit('timer-updated', safeWorkerState(state));
+  }
+
+  res.json({
+    ok: true,
+    state: safeWorkerState(state)
+  });
+});
+
 app.get('/api/rtc-config', requireAuth, (_req, res) => {
   let iceServers = [
     {
@@ -595,6 +661,163 @@ app.get('/api/rtc-config', requireAuth, (_req, res) => {
     ok: true,
     iceServers
   });
+});
+
+// Tasks API
+app.get('/api/tasks', requireAuth, (req, res) => {
+  const user = req.session.user;
+  if (user.role === 'worker') {
+    const workerTasks = tasks.filter(t => t.workerId === user.id);
+    return res.json({ ok: true, tasks: workerTasks });
+  } else if (user.role === 'admin') {
+    const workerId = req.query.workerId;
+    const filtered = workerId ? tasks.filter(t => t.workerId === workerId) : tasks;
+    return res.json({ ok: true, tasks: filtered });
+  }
+  res.status(403).json({ ok: false, error: 'Forbidden' });
+});
+
+app.get('/api/worker/tasks', requireRole('worker'), (req, res) => {
+  const workerTasks = tasks.filter(t => t.workerId === req.session.user.id);
+  res.json({ ok: true, tasks: workerTasks });
+});
+
+app.post('/api/tasks', requireRole('admin'), (req, res) => {
+  const { workerId, title, description, dueAt } = req.body || {};
+  if (!workerId || !title) {
+    return res.status(400).json({ ok: false, error: 'workerId and title are required' });
+  }
+  const idStr = 'task_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+  const newTask = {
+    taskId: idStr,
+    id: idStr,
+    workerId,
+    title: String(title).trim(),
+    description: String(description || '').trim(),
+    status: 'ASSIGNED',
+    assignedAt: Date.now(),
+    assignedBy: req.session.user.name || 'Admin',
+    dueAt: dueAt || null,
+    submittedAt: null,
+    completedAt: null,
+    adminNote: ''
+  };
+  tasks.push(newTask);
+  persistTasks();
+
+  io.to(`worker:${workerId}`).to('admins').emit('task:assigned', newTask);
+  io.to(`worker:${workerId}`).to('admins').emit('task:updated', newTask);
+
+  res.json({ ok: true, task: newTask });
+});
+
+app.post('/api/tasks/:taskId/submit', requireRole('worker'), (req, res) => {
+  const taskId = req.params.taskId;
+  const task = tasks.find(t => t.taskId === taskId || t.id === taskId);
+  if (!task) return res.status(404).json({ ok: false, error: 'Task not found' });
+  if (task.workerId !== req.session.user.id) {
+    return res.status(403).json({ ok: false, error: 'Cannot submit task assigned to another worker' });
+  }
+
+  task.status = 'SUBMITTED';
+  task.submittedAt = Date.now();
+  persistTasks();
+
+  io.to(`worker:${task.workerId}`).to('admins').emit('task:submitted', task);
+  io.to(`worker:${task.workerId}`).to('admins').emit('task:updated', task);
+
+  res.json({ ok: true, task });
+});
+
+app.post('/api/tasks/:taskId/approve', requireRole('admin'), (req, res) => {
+  const taskId = req.params.taskId;
+  const task = tasks.find(t => t.taskId === taskId || t.id === taskId);
+  if (!task) return res.status(404).json({ ok: false, error: 'Task not found' });
+
+  task.status = 'COMPLETED';
+  task.completedAt = Date.now();
+  persistTasks();
+
+  io.to(`worker:${task.workerId}`).to('admins').emit('task:approved', task);
+  io.to(`worker:${task.workerId}`).to('admins').emit('task:updated', task);
+
+  res.json({ ok: true, task });
+});
+
+app.post('/api/tasks/:taskId/return', requireRole('admin'), (req, res) => {
+  const taskId = req.params.taskId;
+  const { adminNote } = req.body || {};
+  const task = tasks.find(t => t.taskId === taskId || t.id === taskId);
+  if (!task) return res.status(404).json({ ok: false, error: 'Task not found' });
+
+  task.status = 'RETURNED';
+  task.adminNote = String(adminNote || '').trim();
+  persistTasks();
+
+  io.to(`worker:${task.workerId}`).to('admins').emit('task:returned', task);
+  io.to(`worker:${task.workerId}`).to('admins').emit('task:updated', task);
+
+  res.json({ ok: true, task });
+});
+
+// Chat API
+app.get('/api/chat/:workerId', requireAuth, (req, res) => {
+  const workerId = req.params.workerId;
+  const user = req.session.user;
+  if (user.role === 'worker' && user.id !== workerId) {
+    return res.status(403).json({ ok: false, error: 'Forbidden' });
+  }
+
+  const messages = chatMessages.filter(m => m.workerId === workerId);
+  res.json({ ok: true, messages });
+});
+
+app.post('/api/chat/:workerId/messages', requireAuth, (req, res) => {
+  const workerId = req.params.workerId;
+  const user = req.session.user;
+  if (user.role === 'worker' && user.id !== workerId) {
+    return res.status(403).json({ ok: false, error: 'Forbidden' });
+  }
+
+  const msgText = String(req.body.message || '').trim();
+  if (!msgText) return res.status(400).json({ ok: false, error: 'Message cannot be empty' });
+
+  const newMsg = {
+    messageId: 'msg_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+    workerId,
+    senderId: user.id || 'admin',
+    senderRole: user.role.toUpperCase(),
+    message: msgText,
+    createdAt: Date.now(),
+    readAt: null
+  };
+
+  chatMessages.push(newMsg);
+  persistChat();
+
+  io.to(`worker:${workerId}`).to('admins').emit('chat:message', newMsg);
+
+  res.json({ ok: true, message: newMsg });
+});
+
+app.post('/api/chat/:workerId/read', requireAuth, (req, res) => {
+  const workerId = req.params.workerId;
+  const user = req.session.user;
+  if (user.role === 'worker' && user.id !== workerId) {
+    return res.status(403).json({ ok: false, error: 'Forbidden' });
+  }
+
+  let count = 0;
+  chatMessages.forEach(m => {
+    if (m.workerId === workerId && !m.readAt && m.senderRole !== user.role.toUpperCase()) {
+      m.readAt = Date.now();
+      count++;
+    }
+  });
+  if (count > 0) persistChat();
+
+  io.to(`worker:${workerId}`).to('admins').emit('chat:read', { workerId });
+  res.json({ ok: true, count });
 });
 
 app.use(
@@ -625,6 +848,8 @@ io.on('connection', socket => {
       [...states.values()].map(safeWorkerState)
     );
   } else if (user.role === 'worker' && user.id) {
+    socket.join(`worker:${user.id}`);
+    socket.join('workers');
     const state = states.get(user.id);
 
     if (!state) {
@@ -672,6 +897,33 @@ io.on('connection', socket => {
     state.lastSeenAt = Date.now();
     persistState();
     broadcastStates();
+  });
+
+  socket.on('chat:message', ({ workerId, message }) => {
+    const msgText = String(message || '').trim();
+    if (!msgText) return;
+
+    let targetWorkerId = workerId;
+    if (user.role === 'worker') {
+      targetWorkerId = user.id;
+    }
+
+    if (!targetWorkerId) return;
+
+    const newMsg = {
+      messageId: 'msg_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+      workerId: targetWorkerId,
+      senderId: user.id || 'admin',
+      senderRole: user.role.toUpperCase(),
+      message: msgText,
+      createdAt: Date.now(),
+      readAt: null
+    };
+
+    chatMessages.push(newMsg);
+    persistChat();
+
+    io.to(`worker:${targetWorkerId}`).to('admins').emit('chat:message', newMsg);
   });
 
   socket.on('admin-ping-worker', ({ workerId, nonce } = {}) => {
@@ -866,6 +1118,53 @@ io.on('connection', socket => {
         camera: targetFacing,
         facing: targetFacing
       });
+    }
+  );
+
+  socket.on(
+    'admin-timer-control',
+    ({ workerId, action } = {}) => {
+      if (user.role !== 'admin') return;
+
+      const state = states.get(workerId);
+
+      if (!state) return;
+
+      if (action === 'start') {
+        if (state.status === 'PAUSED') {
+          timerState.resume(state);
+        } else if (!state.sessionId) {
+          startShift(state);
+        }
+      } else if (action === 'pause') {
+        if (state.status === 'WORKING') {
+          timerState.pause(state);
+        }
+      } else if (action === 'resume') {
+        if (state.status === 'PAUSED') {
+          timerState.resume(state);
+        }
+      } else if (action === 'stop') {
+        if (state.sessionId) {
+          const socketId = finishShift(state, 'admin-stop', 'STOPPED');
+          if (socketId) {
+            io.to(socketId).emit('timer-stopped', {
+              reason: 'admin-stop'
+            });
+          }
+        } else {
+          state.status = 'STOPPED';
+          state.online = false;
+          resetLiveState(state);
+        }
+      }
+
+      persistState();
+      broadcastStates();
+
+      if (state.socketId) {
+        io.to(state.socketId).emit('timer-updated', safeWorkerState(state));
+      }
     }
   );
 

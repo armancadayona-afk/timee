@@ -39,12 +39,94 @@
     </div>
     <p id="message">Connecting…</p>
     <section id="workers" class="grid"></section>
+
+    <!-- Tasks Management Section -->
+    <section class="card" style="margin-top: 24px;">
+      <h2>Tasks Management</h2>
+      <p class="muted" style="margin-bottom: 16px;">Assign and review worker tasks in real-time.</p>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;">
+        <!-- Assign Task Form -->
+        <div style="background: var(--panel-2); padding: 16px; border-radius: 12px; border: 1px solid var(--line);">
+          <h3>Assign New Task</h3>
+          <form id="taskForm" onsubmit="event.preventDefault(); assignTask();">
+            <label>Assign Task To:
+              <select id="taskWorkerId" style="width: 100%; margin-top: 7px; padding: 10px; border-radius: 8px; background: #08111f; color: var(--text); border: 1px solid var(--line);">
+                <option value="worker1">Worker 1</option>
+                <option value="worker2">Worker 2</option>
+                <option value="worker3">Worker 3</option>
+              </select>
+            </label>
+
+            <label>Task Title:
+              <input type="text" id="taskTitle" placeholder="e.g. Update listing photos" required>
+            </label>
+
+            <label>Task Description:
+              <textarea id="taskDesc" rows="3" placeholder="Enter task instructions..." style="width: 100%; margin-top: 7px; padding: 10px; border-radius: 8px; background: #08111f; color: var(--text); border: 1px solid var(--line); font-family: inherit;"></textarea>
+            </label>
+
+            <div style="display: flex; gap: 10px;">
+              <label style="flex: 1;">Due Date:
+                <input type="date" id="taskDueDate">
+              </label>
+              <label style="flex: 1;">Due Time:
+                <input type="time" id="taskDueTime">
+              </label>
+            </div>
+
+            <button type="submit" class="btn" style="width: 100%; margin-top: 14px;">ASSIGN TASK</button>
+          </form>
+        </div>
+
+        <!-- Task List -->
+        <div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <h3>Task List</h3>
+            <select id="filterTaskWorker" onchange="loadTasks()" style="padding: 6px 10px; border-radius: 8px; background: #08111f; color: var(--text); border: 1px solid var(--line);">
+              <option value="">All Workers</option>
+              <option value="worker1">Worker 1</option>
+              <option value="worker2">Worker 2</option>
+              <option value="worker3">Worker 3</option>
+            </select>
+          </div>
+          <div id="adminTaskList" style="display: grid; gap: 12px; max-height: 480px; overflow-y: auto;">
+            <p class="muted">Loading tasks…</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Chat Section -->
+    <section class="card" style="margin-top: 24px;">
+      <h2>Private Chat</h2>
+      <p class="muted" style="margin-bottom: 16px;">Direct private message threads with each worker.</p>
+
+      <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 16px;">
+        <label style="margin: 0;">Select Worker: </label>
+        <select id="chatWorkerSelect" onchange="switchChatWorker(this.value)" style="padding: 8px 12px; border-radius: 8px; background: #08111f; color: var(--text); border: 1px solid var(--line); font-weight: 700;">
+          <option value="worker1">Worker 1</option>
+          <option value="worker2">Worker 2</option>
+          <option value="worker3">Worker 3</option>
+        </select>
+      </div>
+
+      <div id="adminChatContainer" style="background: #08111f; border: 1px solid var(--line); border-radius: 12px; height: 320px; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px;">
+        <!-- Chat messages render here -->
+      </div>
+
+      <form id="adminChatForm" onsubmit="event.preventDefault(); sendAdminChat();" style="display: flex; gap: 10px; margin-top: 12px;">
+        <input type="text" id="adminChatInput" placeholder="Type a message..." style="flex: 1; margin: 0;" required autocomplete="off">
+        <button type="submit" class="btn" style="min-width: 90px;">Send</button>
+      </form>
+    </section>
   </main>
 
   <script src="/socket.io/socket.io.js"></script>
   <script>
     let workers = [], socket, iceServers = [], audioEnabled = false;
     const peers = new Map(), requested = new Map(), activeRecorders = new Map();
+    const liveModes = new Map();
 
     async function api(path, body) {
       const r = await fetch(path, {
@@ -67,6 +149,7 @@
     }
 
     function closePeer(id) {
+      // Finalize active recording for this peer safely
       if (activeRecorders.has(id)) {
         const session = activeRecorders.get(id);
         activeRecorders.delete(id);
@@ -79,6 +162,7 @@
       const v = document.getElementById('video-' + id);
       if (v) v.srcObject = null;
       requested.delete(id);
+      liveModes.set(id, 'NONE');
     }
 
     function toggleRecord(id, name) {
@@ -186,19 +270,31 @@
             <p class="live" style="min-height: 20px; font-weight: 600;"></p>
 
             <div class="controls-group">
-              <button class="btn btn-sm secondary btn-front">FRONT</button>
-              <button class="btn btn-sm secondary btn-back">BACK</button>
-              <button class="btn btn-sm btn-record" style="background: #059669; color: white;">● RECORD</button>
+              <button class="btn btn-sm btn-camera-start" style="flex:1;">Start Camera</button>
+              <button class="btn btn-sm secondary btn-camera-stop" style="flex:1;">Stop Camera</button>
             </div>
 
             <div class="controls-group">
-              <button class="btn btn-sm btn-live" style="flex:2;">Start Live</button>
-              <button class="btn btn-sm secondary btn-timer-stop">Stop Time</button>
+              <button class="btn btn-sm secondary btn-front" style="flex:1;">Front Camera</button>
+              <button class="btn btn-sm secondary btn-back" style="flex:1;">Back Camera</button>
+            </div>
+
+            <div class="controls-group">
+              <button class="btn btn-sm btn-screen-start" style="flex:1;">Start Screen Share</button>
+              <button class="btn btn-sm danger btn-screen-stop" style="background: #ef4444; color: white; border: none; flex:1;">Stop Screen Share</button>
+            </div>
+
+            <div class="controls-group">
+              <button class="btn btn-sm btn-record" style="background: #059669; color: white; flex:1;">● RECORD</button>
             </div>
 
             <div class="controls-group">
               <button class="btn btn-sm btn-timer-action" style="flex:2;">Start Time</button>
-              <button class="btn btn-sm secondary btn-history">History</button>
+              <button class="btn btn-sm secondary btn-timer-stop">Stop Time</button>
+            </div>
+
+            <div class="controls-group">
+              <button class="btn btn-sm secondary btn-history" style="flex:1;">History</button>
             </div>
 
             <p class="history"></p>
@@ -207,44 +303,98 @@
           c.querySelector('video').id = 'video-' + w.id;
           document.getElementById('workers').append(c);
 
+          const workerId = w.id;
+
+          // Front Camera button
           c.querySelector('.btn-front').onclick = () => {
-            socket.emit('admin-switch-camera', { workerId: w.id, camera: 'front', facing: 'front' });
+            const current = workers.find(x => x.id === workerId);
+            if (!current) return;
+            socket.emit('admin-switch-camera', { workerId, camera: 'front', facing: 'front' });
             c.querySelector('.live').textContent = 'Switching to Front Camera…';
           };
 
+          // Back Camera button
           c.querySelector('.btn-back').onclick = () => {
-            socket.emit('admin-switch-camera', { workerId: w.id, camera: 'back', facing: 'back' });
+            const current = workers.find(x => x.id === workerId);
+            if (!current) return;
+            socket.emit('admin-switch-camera', { workerId, camera: 'back', facing: 'back' });
             c.querySelector('.live').textContent = 'Switching to Back Camera…';
           };
 
+          // Record button
           c.querySelector('.btn-record').onclick = () => {
-            toggleRecord(w.id, w.name);
+            const current = workers.find(x => x.id === workerId);
+            if (!current) return;
+            toggleRecord(workerId, current.name);
           };
 
-          c.querySelector('.btn-live').onclick = () => {
-            if (w.liveMode === 'NONE') {
-              requested.set(w.id, Date.now());
-              socket.emit('admin-live-request', { workerId: w.id, mode: 'camera' });
-              c.querySelector('.live').textContent = 'Connecting camera and audio…';
-            } else {
-              socket.emit('admin-live-stop', { workerId: w.id });
-              closePeer(w.id);
-              c.querySelector('.live').textContent = 'Live camera stopped';
+          // Start Camera button
+          c.querySelector('.btn-camera-start').onclick = () => {
+            const current = workers.find(x => x.id === workerId);
+            if (!current) return;
+            if (current.liveMode === 'SCREEN' || current.liveMode === 'SCREEN_PENDING') {
+              socket.emit('admin-live-stop', { workerId });
+              closePeer(workerId);
             }
+            requested.set(workerId, Date.now());
+            socket.emit('admin-live-request', { workerId, mode: 'camera' });
+            c.querySelector('.live').textContent = 'Connecting camera…';
           };
 
+          // Stop Camera button
+          c.querySelector('.btn-camera-stop').onclick = () => {
+            const current = workers.find(x => x.id === workerId);
+            if (!current) return;
+            socket.emit('admin-live-stop', { workerId });
+            closePeer(workerId);
+            requested.set(workerId, Date.now() + 31536000000); // Prevent auto-restart
+            c.querySelector('.live').textContent = 'Camera feed stopped';
+          };
+
+          // Start Screen Share button
+          c.querySelector('.btn-screen-start').onclick = () => {
+            const current = workers.find(x => x.id === workerId);
+            if (!current) return;
+            if (current.liveMode === 'CAMERA' || current.liveMode === 'CAMERA_PENDING') {
+              socket.emit('admin-live-stop', { workerId });
+              closePeer(workerId);
+            }
+            requested.set(workerId, Date.now());
+            socket.emit('admin-live-request', { workerId, mode: 'screen' });
+            c.querySelector('.live').textContent = 'Waiting for worker screen-share approval…';
+          };
+
+          // Stop Screen Share button
+          c.querySelector('.btn-screen-stop').onclick = () => {
+            const current = workers.find(x => x.id === workerId);
+            if (!current) return;
+            socket.emit('admin-live-stop', { workerId });
+            closePeer(workerId);
+            requested.set(workerId, Date.now() + 31536000000); // Prevent auto-restart
+            c.querySelector('.live').textContent = 'Screen Share stopped';
+          };
+
+          // Start/Pause/Resume Timer button
           c.querySelector('.btn-timer-action').onclick = () => {
-            const action = w.status === 'WORKING' ? 'pause' : w.status === 'PAUSED' ? 'resume' : 'start';
-            socket.emit('admin-timer-control', { workerId: w.id, action });
+            const current = workers.find(x => x.id === workerId);
+            if (!current) return;
+            const action = current.status === 'WORKING' ? 'pause' : current.status === 'PAUSED' ? 'resume' : 'start';
+            socket.emit('admin-timer-control', { workerId, action });
           };
 
+          // Stop Timer button
           c.querySelector('.btn-timer-stop').onclick = () => {
-            socket.emit('admin-timer-control', { workerId: w.id, action: 'stop' });
+            const current = workers.find(x => x.id === workerId);
+            if (!current) return;
+            socket.emit('admin-timer-control', { workerId, action: 'stop' });
           };
 
+          // History button
           c.querySelector('.btn-history').onclick = async () => {
+            const current = workers.find(x => x.id === workerId);
+            if (!current) return;
             try {
-              const d = await api('/api/work-sessions/' + w.id);
+              const d = await api('/api/work-sessions/' + workerId);
               c.querySelector('.history').textContent = d.sessions.map(s =>
                 new Date(s.startedAt).toLocaleString() + ' | ' + (s.endedAt ? fmt(s.durationMs) : 'Active shift')
               ).join('\n') || 'No completed shifts';
@@ -254,39 +404,72 @@
           };
         }
 
+        // Update Text and Values
         c.querySelector('h2').textContent = w.name;
         c.querySelector('.state').textContent = w.status + ' · ' + (w.online ? 'Connected' : 'Offline');
         c.querySelector('.timer').textContent = fmt((w.accumulatedMs || 0) + (w.status === 'WORKING' && w.startedAt ? Date.now() - w.startedAt : 0));
 
-        const btnLive = c.querySelector('.btn-live');
-        btnLive.textContent = w.liveMode === 'NONE' ? 'Start Live' : 'Stop Live';
-        btnLive.disabled = !w.online || !w.captureReady;
-
+        // Update buttons based on liveMode
+        const btnCamStart = c.querySelector('.btn-camera-start');
+        const btnCamStop = c.querySelector('.btn-camera-stop');
         const btnFront = c.querySelector('.btn-front');
         const btnBack = c.querySelector('.btn-back');
-        btnFront.disabled = !w.online;
-        btnBack.disabled = !w.online;
+        const btnScreenStart = c.querySelector('.btn-screen-start');
+        const btnScreenStop = c.querySelector('.btn-screen-stop');
 
+        if (!w.online) {
+          btnCamStart.disabled = true;
+          btnCamStop.disabled = true;
+          btnFront.disabled = true;
+          btnBack.disabled = true;
+          btnScreenStart.disabled = true;
+          btnScreenStop.disabled = true;
+        } else if (w.liveMode === 'NONE') {
+          btnCamStart.disabled = !w.captureReady;
+          btnCamStop.disabled = true;
+          btnFront.disabled = true;
+          btnBack.disabled = true;
+          btnScreenStart.disabled = false;
+          btnScreenStop.disabled = true;
+        } else if (w.liveMode === 'CAMERA' || w.liveMode === 'CAMERA_PENDING') {
+          btnCamStart.disabled = true;
+          btnCamStop.disabled = false;
+          btnFront.disabled = false;
+          btnBack.disabled = false;
+          btnScreenStart.disabled = true;
+          btnScreenStop.disabled = true;
+        } else if (w.liveMode === 'SCREEN' || w.liveMode === 'SCREEN_PENDING') {
+          btnCamStart.disabled = true;
+          btnCamStop.disabled = true;
+          btnFront.disabled = true;
+          btnBack.disabled = true;
+          btnScreenStart.disabled = true;
+          btnScreenStop.disabled = false;
+        }
+
+        // Record button
         const btnRecord = c.querySelector('.btn-record');
-        btnRecord.disabled = !w.online || w.liveMode === 'NONE';
+        btnRecord.disabled = !w.online || (w.liveMode !== 'CAMERA' && w.liveMode !== 'SCREEN');
 
+        // Timer action button text
         const btnTimerAction = c.querySelector('.btn-timer-action');
         btnTimerAction.textContent = w.status === 'WORKING' ? 'Pause Time' : w.status === 'PAUSED' ? 'Resume Time' : 'Start Time';
         btnTimerAction.disabled = !w.online;
 
+        // Timer stop button
         const btnTimerStop = c.querySelector('.btn-timer-stop');
         btnTimerStop.disabled = !w.online || (w.status !== 'WORKING' && w.status !== 'PAUSED');
 
         if (!w.online) {
           closePeer(w.id);
-          c.querySelector('.live').textContent = 'Camera offline';
+          c.querySelector('.live').textContent = 'Worker offline';
           continue;
         }
 
         if (socket?.connected && w.captureReady && w.liveMode === 'NONE' && !peers.has(w.id) && !requested.has(w.id)) {
           requested.set(w.id, Date.now());
           socket.emit('admin-live-request', { workerId: w.id, mode: 'camera' });
-          c.querySelector('.live').textContent = 'Connecting camera and audio…';
+          c.querySelector('.live').textContent = 'Connecting camera…';
         }
       }
     }
@@ -333,6 +516,7 @@
       });
 
       socket.on('rtc-offer', async p => {
+        liveModes.set(p.workerId, p.mode === 'screen' ? 'SCREEN' : 'CAMERA');
         const early = peers.get(p.workerId)?.ice || [];
         closePeer(p.workerId);
         const pc = new RTCPeerConnection({ iceServers });
@@ -345,7 +529,10 @@
           v.muted = !audioEnabled;
           v.play().catch(() => {});
           const card = document.getElementById(p.workerId);
-          if (card) card.querySelector('.live').textContent = 'Live camera + audio';
+          if (card) {
+            const currentMode = liveModes.get(p.workerId);
+            card.querySelector('.live').textContent = currentMode === 'SCREEN' ? 'Screen Share LIVE' : 'Camera feed LIVE';
+          }
         };
 
         pc.onicecandidate = e => {
@@ -398,11 +585,199 @@
         if (p.mode === 'NONE') closePeer(p.workerId);
       });
 
+      socket.on('task:assigned', () => loadTasks());
+      socket.on('task:submitted', () => loadTasks());
+      socket.on('task:approved', () => loadTasks());
+      socket.on('task:returned', () => loadTasks());
+      socket.on('task:updated', () => loadTasks());
+      socket.on('chat:message', (msg) => {
+        if (msg.workerId === activeChatWorkerId) {
+          loadChat();
+        }
+      });
+
+      loadTasks();
+      loadChat();
+
       setInterval(() => {
         for (const [id, at] of requested) if (Date.now() - at > 30000) requested.delete(id);
         update();
       }, 500);
     })().catch(e => document.getElementById('message').textContent = e.message);
+
+    // Tasks JS Functions
+    async function loadTasks() {
+      const workerFilter = document.getElementById('filterTaskWorker')?.value || '';
+      const url = workerFilter ? `/api/tasks?workerId=${workerFilter}` : '/api/tasks';
+      try {
+        const data = await api(url);
+        renderTasks(data.tasks || []);
+      } catch (e) {
+        const container = document.getElementById('adminTaskList');
+        if (container) container.innerHTML = `<p class="muted">Error loading tasks: ${e.message}</p>`;
+      }
+    }
+
+    function statusBadge(status) {
+      const colors = {
+        'ASSIGNED': '#3B82F6',
+        'IN_PROGRESS': '#F59E0B',
+        'SUBMITTED': '#8B5CF6',
+        'COMPLETED': '#10B981',
+        'RETURNED': '#EF4444'
+      };
+      const labels = {
+        'ASSIGNED': 'Assigned',
+        'IN_PROGRESS': 'In Progress',
+        'SUBMITTED': 'Submitted — Review Needed',
+        'COMPLETED': 'Completed ✓',
+        'RETURNED': 'Returned'
+      };
+      const c = colors[status] || '#6B7280';
+      const l = labels[status] || status;
+      return `<span style="background: ${c}22; color: ${c}; border: 1px solid ${c}55; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700;">${l}</span>`;
+    }
+
+    function getWorkerDisplayName(workerId) {
+      if (workerId === 'worker1') return 'Worker 1';
+      if (workerId === 'worker2') return 'Worker 2';
+      if (workerId === 'worker3') return 'Worker 3';
+      return workerId;
+    }
+
+    function renderTasks(tasks) {
+      const container = document.getElementById('adminTaskList');
+      if (!container) return;
+      if (!tasks.length) {
+        container.innerHTML = `<p class="muted">No tasks found.</p>`;
+        return;
+      }
+      container.innerHTML = tasks.slice().reverse().map(t => {
+        const dueText = t.dueAt ? ` | Due: ${t.dueAt}` : '';
+        let actions = '';
+        if (t.status === 'SUBMITTED') {
+          actions = `
+            <div style="display: flex; gap: 8px; margin-top: 10px;">
+              <button class="btn btn-sm" onclick="approveTask('${t.taskId || t.id}')" style="background: #10B981; color: white;">APPROVE COMPLETED</button>
+              <button class="btn btn-sm danger" onclick="returnTaskPrompt('${t.taskId || t.id}')">RETURN TASK</button>
+            </div>
+          `;
+        }
+        const noteHtml = t.adminNote ? `<p style="color: #EF4444; margin-top: 6px; font-size: 12px;"><strong>Admin Note:</strong> ${t.adminNote}</p>` : '';
+        return `
+          <div style="background: var(--panel-2); padding: 12px; border-radius: 10px; border: 1px solid var(--line);">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+              <div>
+                <strong style="font-size: 15px;">${t.title}</strong>
+                <span class="muted" style="font-size: 12px; display: block; margin-top: 2px;">Assigned to: ${getWorkerDisplayName(t.workerId)}${dueText}</span>
+              </div>
+              ${statusBadge(t.status)}
+            </div>
+            ${t.description ? `<p style="margin-top: 8px; font-size: 13px; color: var(--text);">${t.description}</p>` : ''}
+            ${noteHtml}
+            ${actions}
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function assignTask() {
+      const workerId = document.getElementById('taskWorkerId').value;
+      const title = document.getElementById('taskTitle').value;
+      const description = document.getElementById('taskDesc').value;
+      const dateVal = document.getElementById('taskDueDate').value;
+      const timeVal = document.getElementById('taskDueTime').value;
+
+      let dueAt = '';
+      if (dateVal) {
+        dueAt = dateVal + (timeVal ? ` ${timeVal}` : '');
+      }
+
+      try {
+        await api('/api/tasks', { workerId, title, description, dueAt });
+        document.getElementById('taskTitle').value = '';
+        document.getElementById('taskDesc').value = '';
+        document.getElementById('taskDueDate').value = '';
+        document.getElementById('taskDueTime').value = '';
+        loadTasks();
+      } catch (e) {
+        alert('Error assigning task: ' + e.message);
+      }
+    }
+
+    async function approveTask(taskId) {
+      try {
+        await api(`/api/tasks/${taskId}/approve`, {});
+        loadTasks();
+      } catch (e) {
+        alert('Error approving task: ' + e.message);
+      }
+    }
+
+    async function returnTaskPrompt(taskId) {
+      const note = prompt('Enter Admin Note for returning this task:');
+      if (note === null) return;
+      try {
+        await api(`/api/tasks/${taskId}/return`, { adminNote: note });
+        loadTasks();
+      } catch (e) {
+        alert('Error returning task: ' + e.message);
+      }
+    }
+
+    let activeChatWorkerId = 'worker1';
+
+    function switchChatWorker(workerId) {
+      activeChatWorkerId = workerId;
+      loadChat();
+    }
+
+    async function loadChat() {
+      const workerId = activeChatWorkerId;
+      try {
+        const data = await api(`/api/chat/${workerId}`);
+        renderChatMessages(data.messages || []);
+      } catch (e) {
+        const container = document.getElementById('adminChatContainer');
+        if (container) container.innerHTML = `<p class="muted">Error loading chat: ${e.message}</p>`;
+      }
+    }
+
+    function renderChatMessages(messages) {
+      const container = document.getElementById('adminChatContainer');
+      if (!container) return;
+      if (!messages.length) {
+        container.innerHTML = `<p class="muted" style="margin: auto;">No messages yet with ${getWorkerDisplayName(activeChatWorkerId)}.</p>`;
+        return;
+      }
+      container.innerHTML = messages.map(m => {
+        const isAdmin = m.senderRole === 'ADMIN';
+        const align = isAdmin ? 'flex-end' : 'flex-start';
+        const bg = isAdmin ? '#1E3A8A' : '#1F2937';
+        const senderLabel = isAdmin ? 'Admin' : getWorkerDisplayName(m.workerId);
+        const timeStr = new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        return `
+          <div style="align-self: ${align}; max-width: 75%; background: ${bg}; padding: 8px 12px; border-radius: 12px; color: #fff; font-size: 13px;">
+            <div style="font-size: 11px; opacity: 0.7; margin-bottom: 2px;">${senderLabel} · ${timeStr}</div>
+            <div>${m.message}</div>
+          </div>
+        `;
+      }).join('');
+      container.scrollTop = container.scrollHeight;
+    }
+
+    async function sendAdminChat() {
+      const input = document.getElementById('adminChatInput');
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = '';
+      try {
+        await api(`/api/chat/${activeChatWorkerId}/messages`, { message: text });
+        loadChat();
+      } catch (e) {
+        alert('Error sending message: ' + e.message);
+      }
+    }
   </script>
 </body>
 </html>
