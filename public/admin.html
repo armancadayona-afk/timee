@@ -526,7 +526,8 @@
 
         // Update Text and Values
         c.querySelector('h2').textContent = w.name;
-        c.querySelector('.state').textContent = w.status + ' · ' + (w.online ? 'Connected' : 'Offline');
+        const connState = w.online ? 'Connected' : (w.status === 'WORKING' || w.status === 'PAUSED' ? 'Reconnecting...' : 'Offline');
+        c.querySelector('.state').textContent = w.status + ' · ' + connState;
 
         const elapsedMs = (w.accumulatedMs || 0) + (w.status === 'WORKING' && w.startedAt ? Date.now() - w.startedAt : 0);
         c.querySelector('.timer').textContent = fmt(elapsedMs);

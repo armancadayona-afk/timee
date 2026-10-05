@@ -120,9 +120,9 @@ function initialWorkerState(user) {
     socketId: null,
     sessionId: null,
     lastSeenAt: null,
-    disconnectTimer: null,
 
     liveMode: LIVE_NONE,
+    desiredLiveMode: LIVE_NONE,
     liveAdminSocketId: null,
     liveRequestedAt: null
   };
@@ -144,10 +144,25 @@ for (const worker of users.filter(user => user.role === 'worker')) {
   const state = initialWorkerState(worker);
   const old = persisted[worker.id];
 
-  // Do not restore a previously running live/timer state after a server restart.
-  // Historical shift records remain in sessions.json.
-  if (old && Number.isFinite(Number(old.lastSeenAt))) {
-    state.lastSeenAt = Number(old.lastSeenAt);
+  if (old) {
+    if (Number.isFinite(Number(old.lastSeenAt))) {
+      state.lastSeenAt = Number(old.lastSeenAt);
+    }
+    if (['WORKING', 'PAUSED', 'STOPPED', 'OFFLINE'].includes(old.status)) {
+      state.status = old.status;
+    }
+    if (old.startedAt != null) {
+      state.startedAt = Number(old.startedAt);
+    }
+    if (Number.isFinite(Number(old.accumulatedMs))) {
+      state.accumulatedMs = Number(old.accumulatedMs);
+    }
+    if (old.sessionId) {
+      state.sessionId = String(old.sessionId);
+    }
+    if (['NONE', 'CAMERA', 'SCREEN'].includes(old.desiredLiveMode)) {
+      state.desiredLiveMode = old.desiredLiveMode;
+    }
   }
 
   states.set(worker.id, state);
@@ -164,7 +179,12 @@ function persistState() {
 
   for (const [id, state] of states.entries()) {
     output[id] = {
-      lastSeenAt: state.lastSeenAt
+      status: state.status,
+      startedAt: state.startedAt,
+      accumulatedMs: state.accumulatedMs,
+      sessionId: state.sessionId,
+      lastSeenAt: state.lastSeenAt,
+      desiredLiveMode: state.desiredLiveMode || LIVE_NONE
     };
   }
 
@@ -198,8 +218,35 @@ function safeWorkerState(state) {
     accumulatedMs: state.accumulatedMs,
     lastSeenAt: state.lastSeenAt,
     liveMode: state.liveMode,
+    desiredLiveMode: state.desiredLiveMode || LIVE_NONE,
     liveRequestedAt: state.liveRequestedAt
   };
+}
+
+function checkAutoReconnectLive(state) {
+  if (!state || !state.captureReady || !state.online || !state.socketId) return;
+  if (!state.desiredLiveMode || state.desiredLiveMode === LIVE_NONE) return;
+  if (state.liveMode !== LIVE_NONE) return;
+
+  const adminSockets = io.sockets.adapter.rooms.get('admins');
+  if (!adminSockets || adminSockets.size === 0) return;
+
+  const targetAdminSocketId = state.liveAdminSocketId && io.sockets.sockets.get(state.liveAdminSocketId)
+    ? state.liveAdminSocketId
+    : [...adminSockets][0];
+
+  const modeStr = state.desiredLiveMode === LIVE_SCREEN ? 'screen' : 'camera';
+  state.liveMode = modeStr === 'camera' ? LIVE_CAMERA_PENDING : LIVE_SCREEN_PENDING;
+  state.liveAdminSocketId = targetAdminSocketId;
+  state.liveRequestedAt = Date.now();
+
+  broadcastStates();
+
+  io.to(state.socketId).emit('live-request', {
+    adminSocketId: targetAdminSocketId,
+    workerId: state.id,
+    mode: modeStr
+  });
 }
 
 function broadcastStates() {
@@ -406,29 +453,12 @@ app.post('/api/login', loginRateLimit, (req, res) => {
 
   if (user.role === 'worker') {
     const state = states.get(user.id);
+    const oldSocketId = state?.socketId;
 
-    // Logging in does not start the timer. If a prior session is still marked
-    // running, close it so the Worker explicitly starts the next shift.
-    if (state.status === 'WORKING' || state.sessionId) {
-      const oldSocketId = finishShift(state, 'relogin', 'STOPPED');
-
-      if (oldSocketId) {
-        io.to(oldSocketId).emit('session-replaced');
-        io.sockets.sockets.get(oldSocketId)?.disconnect(true);
-      }
-    } else {
-      const oldSocketId = state.socketId;
-      stopWorkerLive(state, 'relogin', true);
-      state.status = 'STOPPED';
-      state.online = false;
-      state.socketId = null;
-      state.startedAt = null;
-      state.accumulatedMs = 0;
-
-      if (oldSocketId) {
-        io.to(oldSocketId).emit('session-replaced');
-        io.sockets.sockets.get(oldSocketId)?.disconnect(true);
-      }
+    if (oldSocketId) {
+      io.to(oldSocketId).emit('session-replaced');
+      io.sockets.sockets.get(oldSocketId)?.disconnect(true);
+      if (state) state.socketId = null;
     }
 
     broadcastStates();
@@ -914,6 +944,7 @@ io.on('connection', socket => {
     if (!state || state.socketId !== socket.id) return;
     state.captureReady = true;
     broadcastStates();
+    checkAutoReconnectLive(state);
   });
 
   socket.on('worker-heartbeat', () => {
@@ -932,6 +963,7 @@ io.on('connection', socket => {
     state.lastSeenAt = Date.now();
     persistState();
     broadcastStates();
+    checkAutoReconnectLive(state);
   });
 
   socket.on('chat:message', ({ workerId, message }) => {
@@ -1057,6 +1089,11 @@ io.on('connection', socket => {
         return;
       }
 
+      state.desiredLiveMode =
+        normalizedMode === 'camera'
+          ? LIVE_CAMERA
+          : LIVE_SCREEN;
+
       if (state.liveMode !== LIVE_NONE) {
         stopWorkerLive(state, 'mode-switch', true);
       }
@@ -1069,6 +1106,7 @@ io.on('connection', socket => {
       state.liveAdminSocketId = socket.id;
       state.liveRequestedAt = Date.now();
 
+      persistState();
       broadcastStates();
 
       io.to(state.socketId).emit('live-request', {
@@ -1118,10 +1156,12 @@ io.on('connection', socket => {
 
       if (!state) return;
 
+      state.desiredLiveMode = LIVE_NONE;
       if (state.liveMode !== LIVE_NONE) {
         stopWorkerLive(state, 'admin-stop', true);
-        broadcastStates();
       }
+      persistState();
+      broadcastStates();
     }
   );
 
@@ -1508,23 +1548,8 @@ io.on('connection', socket => {
         state.online = false;
         state.captureReady = false;
         state.socketId = null;
+        persistState();
         broadcastStates();
-
-        clearDisconnectTimer(state);
-
-        state.disconnectTimer = setTimeout(() => {
-          if (
-            !state.socketId &&
-            state.sessionId
-          ) {
-            finishShift(
-              state,
-              'disconnect-timeout',
-              'STOPPED'
-            );
-            broadcastStates();
-          }
-        }, 30000);
       }
     }
 
