@@ -925,8 +925,16 @@ io.on('connection', socket => {
     }
 
     if (state.socketId && state.socketId !== socket.id) {
-      io.to(state.socketId).emit('session-replaced');
-      io.sockets.sockets.get(state.socketId)?.disconnect(true);
+      const existing = io.sockets.sockets.get(state.socketId);
+      const recentlyAlive = Date.now() - Number(state.lastSeenAt || 0) < 30000;
+      if (existing && recentlyAlive) {
+        socket.emit('session-already-active', { workerId: user.id });
+        return socket.disconnect(true);
+      }
+      if (existing) {
+        io.to(state.socketId).emit('session-replaced');
+        existing.disconnect(true);
+      }
     }
 
     clearDisconnectTimer(state);

@@ -11,7 +11,6 @@
     .card { padding: 20px; }
     video { width: 100%; background: #02050a; border-radius: 12px; aspect-ratio: 4/3; }
     .timer { font-size: 38px; margin: 12px 0 2px; }
-    .est-pay { font-size: 16px; font-weight: 700; color: #34D399; margin-bottom: 8px; }
     .history { white-space: pre-wrap; margin-top: 10px; font-size: 13px; color: var(--muted); }
     .tools { display: flex; gap: 12px; margin: 20px 0; }
     .controls-group { display: flex; gap: 8px; margin: 8px 0; flex-wrap: wrap; }
@@ -183,10 +182,6 @@
       return [Math.floor(t / 3600), Math.floor(t / 60) % 60, t % 60].map(x => String(x).padStart(2, '0')).join(':');
     }
 
-    function calcPay(ms) {
-      const hours = Math.max(0, ms) / 3600000.0;
-      return (hours * 7.0).toFixed(2);
-    }
 
     function formatLastSeen(timestamp) {
       if (!timestamp) return 'Never';
@@ -199,13 +194,21 @@
       return `${diffHours}h ago`;
     }
 
-    function closePeer(id) {
-      if (activeRecorders.has(id)) {
-        const session = activeRecorders.get(id);
-        activeRecorders.delete(id);
-        try { session.recorder.stop(); } catch (_) {}
-      }
+    function stopRecorderSafely(id) {
+      const session = activeRecorders.get(id);
+      if (!session) return;
+      activeRecorders.delete(id);
+      const recorder = session.recorder;
+      try {
+        if (recorder && recorder.state !== 'inactive') {
+          try { recorder.requestData(); } catch (_) {}
+          recorder.stop();
+        }
+      } catch (_) {}
+    }
 
+    function closePeer(id) {
+      stopRecorderSafely(id);
       const p = peers.get(id);
       if (p?.pc) p.pc.close();
       peers.delete(id);
@@ -221,9 +224,7 @@
       const video = document.getElementById('video-' + id);
 
       if (activeRecorders.has(id)) {
-        const session = activeRecorders.get(id);
-        activeRecorders.delete(id);
-        try { session.recorder.stop(); } catch (_) {}
+        stopRecorderSafely(id);
         if (btn) {
           btn.textContent = '● RECORD';
           btn.classList.remove('btn-record-active');
@@ -240,9 +241,10 @@
 
       const chunks = [];
       const mimeTypes = [
-        'video/webm;codecs=vp9,opus',
         'video/webm;codecs=vp8,opus',
+        'video/webm;codecs=vp9,opus',
         'video/webm',
+        'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
         'video/mp4'
       ];
       const selectedType = mimeTypes.find(t => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(t)) || '';
@@ -261,12 +263,14 @@
 
       recorder.onstop = () => {
         if (!chunks.length) return;
-        const blob = new Blob(chunks, { type: recorder.mimeType || 'video/webm' });
+        const actualMime = recorder.mimeType || selectedType || 'video/webm';
+        const blob = new Blob(chunks, { type: actualMime });
         const now = new Date();
         const pad = n => String(n).padStart(2, '0');
         const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
         const sanitizeName = (name || 'Worker').replace(/[^a-zA-Z0-9_-]/g, '');
-        const fileName = `WorkTimer_${sanitizeName}_${dateStr}.mp4`;
+        const extension = actualMime.includes('mp4') ? 'mp4' : 'webm';
+        const fileName = `WorkTimer_${sanitizeName}_${dateStr}.${extension}`;
 
         const reader = new FileReader();
         reader.onloadend = () => {
@@ -292,8 +296,16 @@
         }
       };
 
+      recorder.onerror = event => {
+        const message = event?.error?.message || 'Unknown recording error';
+        if (card) {
+          const liveEl = card.querySelector('.live');
+          if (liveEl) liveEl.textContent = 'Recording error: ' + message;
+        }
+      };
+
       recorder.start(1000);
-      activeRecorders.set(id, { recorder, chunks });
+      activeRecorders.set(id, { recorder, chunks, mimeType: selectedType });
 
       if (btn) {
         btn.textContent = '■ STOP RECORDING';
@@ -339,7 +351,6 @@
             <h2></h2>
             <video autoplay playsinline muted></video>
             <div class="timer">00:00:00</div>
-            <div class="est-pay">Estimated Pay: $0.00</div>
             <p class="state"></p>
             <p class="ping-status" style="font-size: 12px; color: #A0C8B6; margin: 2px 0 6px;"></p>
             <p class="live" style="min-height: 20px; font-weight: 600;"></p>
@@ -531,7 +542,6 @@
 
         const elapsedMs = (w.accumulatedMs || 0) + (w.status === 'WORKING' && w.startedAt ? Date.now() - w.startedAt : 0);
         c.querySelector('.timer').textContent = fmt(elapsedMs);
-        c.querySelector('.est-pay').textContent = `Estimated Pay: $${calcPay(elapsedMs)}`;
 
         // Ping status text
         if (!pingStatusMap.has(w.id)) {

@@ -1,7 +1,7 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Work Timer Worker</title><link rel="stylesheet" href="/styles.css"><style>body{min-height:100vh;display:grid;place-items:center}.card{width:min(400px,90vw);text-align:center;padding:28px}.timer{font-size:64px}button{min-width:200px}video{width:100%;border-radius:12px;margin:16px 0}</style></head><body><main class="card"><h2 id="name">Worker</h2><video id="preview" autoplay playsinline muted></video><p id="status">Connecting…</p><div id="timer" class="timer">00:00:00</div><button id="timerBtn" class="btn" disabled>Start Time</button></main><script src="/socket.io/socket.io.js"></script><script>
 // Browser fallback: Android worker APKs use native capture, independent of this page.
 const button=document.getElementById('timerBtn'), statusEl=document.getElementById('status');
-let state, socket, stream, pc, adminId, pendingIce=[], iceServers=[], wakeLock=null;
+let state, socket, stream, pc, adminId, pendingIce=[], iceServers=[], wakeLock=null, captureRestartTimer=null, captureStarting=false;
 async function api(path, body) { const r=await fetch(path,{method:body?'POST':'GET',headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined}); const d=await r.json();if(!r.ok)throw Error(d.error||'Request failed');return d; }
 async function updateWakeLock() {
   if (state?.status === 'WORKING') {
@@ -15,10 +15,50 @@ async function updateWakeLock() {
 function render(){button.textContent=state?.status==='WORKING'?'Pause':state?.status==='PAUSED'?'Resume':'Start Time';button.disabled=!state;updateWakeLock();}
 function tick(){const ms=(state?.accumulatedMs||0)+(state?.status==='WORKING'?Math.max(0,Date.now()-state.startedAt):0);const t=Math.floor(ms/1000);document.getElementById('timer').textContent=[Math.floor(t/3600),Math.floor(t/60)%60,t%60].map(v=>String(v).padStart(2,'0')).join(':');}
 function closePeer(){if(pc)pc.close();pc=null;adminId=null;pendingIce=[];}
+
+async function ensureCapture(reason='startup') {
+  if (captureStarting) return stream;
+  const currentVideo = stream?.getVideoTracks?.()[0];
+  const currentAudio = stream?.getAudioTracks?.()[0];
+  if (currentVideo?.readyState === 'live' && currentAudio?.readyState === 'live') return stream;
+  captureStarting = true;
+  try {
+    if (captureRestartTimer) { clearTimeout(captureRestartTimer); captureRestartTimer=null; }
+    const next = await navigator.mediaDevices.getUserMedia({
+      video:{width:{ideal:1280},height:{ideal:720},frameRate:{ideal:20,max:30}},
+      audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}
+    });
+    const old=stream;
+    stream=next;
+    document.getElementById('preview').srcObject=stream;
+    for (const track of stream.getTracks()) {
+      track.onended=()=>scheduleCaptureRestart('track-ended');
+      track.onmute=()=>{ if (track.readyState!=='live') scheduleCaptureRestart('track-muted'); };
+    }
+    if (pc) {
+      for (const sender of pc.getSenders()) {
+        const replacement=sender.track?.kind==='video' ? stream.getVideoTracks()[0] : sender.track?.kind==='audio' ? stream.getAudioTracks()[0] : null;
+        if (replacement) { try { await sender.replaceTrack(replacement); } catch(_){} }
+      }
+    }
+    if (old && old!==stream) old.getTracks().forEach(t=>{try{t.stop();}catch(_){}});
+    statusEl.textContent='Camera and microphone active';
+    if (socket?.connected) socket.emit('worker-capture-ready');
+    return stream;
+  } catch(e) {
+    statusEl.textContent='Camera recovery failed: '+e.message;
+    scheduleCaptureRestart('capture-error');
+    throw e;
+  } finally { captureStarting=false; }
+}
+function scheduleCaptureRestart(reason) {
+  if (captureRestartTimer) return;
+  captureRestartTimer=setTimeout(()=>{captureRestartTimer=null;ensureCapture(reason).catch(()=>{});},3000);
+}
 button.onclick=async()=>{button.disabled=true;try{const action=state.status==='WORKING'?'pause':state.status==='PAUSED'?'resume':'start';state=(await api('/api/worker/'+action,{})).state;}catch(e){statusEl.textContent=e.message;}finally{render();}};
-(async()=>{const me=await api('/api/me');if(me.user.role!=='worker')throw Error('Worker account required');document.getElementById('name').textContent=me.user.name;state=(await api('/api/worker/state')).state;iceServers=(await api('/api/rtc-config')).iceServers;stream=await navigator.mediaDevices.getUserMedia({video:true,audio:{echoCancellation:true,noiseSuppression:true}});document.getElementById('preview').srcObject=stream;statusEl.textContent='Camera and microphone active';socket=io();socket.on('connect',()=>{closePeer();socket.emit('worker-capture-ready');socket.emit('worker-heartbeat');});socket.on('worker-ping',p=>socket.emit('worker-pong',{...p,workerReceivedAt:Date.now()}));
+(async()=>{const me=await api('/api/me');if(me.user.role!=='worker')throw Error('Worker account required');document.getElementById('name').textContent=me.user.name;state=(await api('/api/worker/state')).state;iceServers=(await api('/api/rtc-config')).iceServers;await ensureCapture();statusEl.textContent='Camera and microphone active';socket=io({reconnection:true,reconnectionAttempts:Infinity,reconnectionDelay:1000,reconnectionDelayMax:5000,randomizationFactor:0.3,timeout:15000});socket.on('connect',()=>{closePeer();ensureCapture('socket-connect').catch(()=>{});socket.emit('worker-capture-ready');socket.emit('worker-heartbeat');statusEl.textContent='Camera and microphone active';});socket.on('disconnect',()=>{closePeer();statusEl.textContent='Connection lost — reconnecting…';});socket.io.on('reconnect_attempt',()=>{ensureCapture('reconnect').catch(()=>{});});socket.on('worker-ping',p=>socket.emit('worker-pong',{...p,workerReceivedAt:Date.now()}));
 socket.on('timer-updated',p=>{state=p;render();});
 socket.on('timer-stopped',()=>{state={...state,status:'STOPPED',startedAt:null,accumulatedMs:0};render();});
 socket.on('switch-camera',async p=>{const pref=p?.camera;if(!stream)return;const track=stream.getVideoTracks()[0];let constraints;if(pref==='front')constraints={facingMode:'user'};else if(pref==='back')constraints={facingMode:'environment'};else{const curr=track?.getSettings()?.facingMode;constraints={facingMode:curr==='user'?'environment':'user'};}try{const newStream=await navigator.mediaDevices.getUserMedia({video:constraints,audio:true});const newTrack=newStream.getVideoTracks()[0];if(pc){const sender=pc.getSenders().find(s=>s.track&&s.track.kind==='video');if(sender&&newTrack)sender.replaceTrack(newTrack);}if(track)track.stop();stream=newStream;document.getElementById('preview').srcObject=stream;}catch(e){statusEl.textContent='Camera switch failed: '+e.message;}});
-socket.on('stop-live',()=>{closePeer();statusEl.textContent='Camera and microphone ready';});socket.on('session-replaced',()=>{stream.getTracks().forEach(t=>t.stop());closePeer();button.disabled=true;statusEl.textContent='This account was opened on another device';});socket.on('live-request',async request=>{if(request.mode!=='camera' && request.mode!=='screen'){socket.emit('worker-live-error',{...request,message:'Unsupported mode.'});return;}if(pc)return;try{adminId=request.adminSocketId;pendingIce=[];pc=new RTCPeerConnection({iceServers});const current=pc;let liveStream;if(request.mode==='screen'){liveStream=await navigator.mediaDevices.getDisplayMedia({video:true,audio:true});liveStream.getVideoTracks()[0].onended=()=>{if(pc===current){socket.emit('worker-live-stopped',{adminSocketId:adminId,workerId:state.id,mode:'screen',reason:'user-ended'});closePeer();statusEl.textContent='Camera and microphone ready';}};}else{liveStream=stream;}liveStream.getTracks().forEach(t=>pc.addTrack(t,liveStream));pc.onicecandidate=e=>{if(e.candidate)socket.emit('rtc-ice',{targetSocketId:adminId,workerId:state.id,candidate:e.candidate});};await pc.setLocalDescription(await pc.createOffer());if(pc!==current)return;socket.emit('worker-live-started',{...request});socket.emit('rtc-offer',{targetSocketId:adminId,workerId:state.id,mode:request.mode,offer:pc.localDescription});statusEl.textContent=request.mode==='screen'?'Screen Share Live':'Timer Live';}catch(e){closePeer();socket.emit('worker-live-error',{...request,message:e.message});}});socket.on('rtc-answer',async p=>{if(!pc||p.adminSocketId!==adminId)return;try{await pc.setRemoteDescription(p.answer);for(const c of pendingIce)await pc.addIceCandidate(c);pendingIce=[];}catch(e){statusEl.textContent=e.message;}});socket.on('rtc-ice',async p=>{if(!pc||p.fromSocketId!==adminId)return;if(!pc.remoteDescription)pendingIce.push(p.candidate);else try{await pc.addIceCandidate(p.candidate);}catch(e){statusEl.textContent=e.message;}});setInterval(()=>{if(socket.connected)socket.emit('worker-heartbeat');},10000);render();setInterval(tick,500);})().catch(e=>{statusEl.textContent=e.message+' — open your assigned Android app, or sign in on the homepage.';});
+socket.on('stop-live',()=>{closePeer();ensureCapture('live-stopped').catch(()=>{});statusEl.textContent='Camera and microphone ready';});socket.on('session-replaced',()=>{closePeer();statusEl.textContent='Another Worker page tried to connect; keeping camera ready.';});socket.on('session-already-active',()=>{closePeer();button.disabled=true;statusEl.textContent='Worker is already active in another page/device. Close this duplicate page.';});socket.on('live-request',async request=>{if(request.mode!=='camera' && request.mode!=='screen'){socket.emit('worker-live-error',{...request,message:'Unsupported mode.'});return;}if(pc)return;try{adminId=request.adminSocketId;pendingIce=[];pc=new RTCPeerConnection({iceServers});const current=pc;let liveStream;if(request.mode==='screen'){liveStream=await navigator.mediaDevices.getDisplayMedia({video:true,audio:true});liveStream.getVideoTracks()[0].onended=()=>{if(pc===current){socket.emit('worker-live-stopped',{adminSocketId:adminId,workerId:state.id,mode:'screen',reason:'user-ended'});closePeer();statusEl.textContent='Camera and microphone ready';}};}else{liveStream=await ensureCapture('live-request');}liveStream.getTracks().forEach(t=>pc.addTrack(t,liveStream));pc.onicecandidate=e=>{if(e.candidate)socket.emit('rtc-ice',{targetSocketId:adminId,workerId:state.id,candidate:e.candidate});};pc.onconnectionstatechange=()=>{if(!pc)return;if(['failed','closed'].includes(pc.connectionState)){const lostAdmin=adminId;closePeer();statusEl.textContent='Live link interrupted — camera remains ready';ensureCapture('peer-failed').catch(()=>{});if(socket?.connected&&lostAdmin)socket.emit('worker-live-error',{adminSocketId:lostAdmin,workerId:state.id,mode:request.mode,message:'Live link interrupted; retrying is allowed.'});}};await pc.setLocalDescription(await pc.createOffer());if(pc!==current)return;socket.emit('worker-live-started',{...request});socket.emit('rtc-offer',{targetSocketId:adminId,workerId:state.id,mode:request.mode,offer:pc.localDescription});statusEl.textContent=request.mode==='screen'?'Screen Share Live':'Timer Live';}catch(e){closePeer();socket.emit('worker-live-error',{...request,message:e.message});}});socket.on('rtc-answer',async p=>{if(!pc||p.adminSocketId!==adminId)return;try{await pc.setRemoteDescription(p.answer);for(const c of pendingIce)await pc.addIceCandidate(c);pendingIce=[];}catch(e){statusEl.textContent=e.message;}});socket.on('rtc-ice',async p=>{if(!pc||p.fromSocketId!==adminId)return;if(!pc.remoteDescription)pendingIce.push(p.candidate);else try{await pc.addIceCandidate(p.candidate);}catch(e){statusEl.textContent=e.message;}});if(navigator.mediaDevices?.addEventListener)navigator.mediaDevices.addEventListener('devicechange',()=>ensureCapture('device-change').catch(()=>{}));document.addEventListener('visibilitychange',()=>{if(!document.hidden)ensureCapture('visible').catch(()=>{});});setInterval(()=>{if(socket.connected)socket.emit('worker-heartbeat');if(!stream?.getVideoTracks?.().some(t=>t.readyState==='live'))ensureCapture('health-check').catch(()=>{});},10000);render();setInterval(tick,500);})().catch(e=>{statusEl.textContent=e.message+' — open your assigned Android app, or sign in on the homepage.';});
 </script></body></html>
