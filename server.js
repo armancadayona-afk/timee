@@ -298,7 +298,6 @@ function startShift(state) {
   if (state.sessionId) return;
 
   clearDisconnectTimer(state);
-  // Starting the clock must not interrupt an existing broadcast.
 
   state.status = 'WORKING';
   state.startedAt = Date.now();
@@ -400,6 +399,68 @@ function loginRateLimit(req, res, next) {
   req.loginAttempt = { key, entry };
   next();
 }
+
+// ==========================================
+// WAKE-UP ROUTER LOGIC ("KUMUSTA" KEYWORD)
+// ==========================================
+function processWakeupKeyword(sender, text, channel) {
+  if (!text) return false;
+  const content = String(text).toLowerCase();
+
+  if (content.includes('kumusta')) {
+    console.log(`[WAKE-UP TRIGGERED] Channel: ${channel} | From: ${sender} | Msg: "${text}"`);
+    io.emit('worker-wakeup', {
+      channel,
+      sender: String(sender || 'Unknown'),
+      message: text,
+      timestamp: Date.now()
+    });
+    return true;
+  }
+  return false;
+}
+
+// 1. Android SMS / Direct Gateway Webhook
+app.post(['/api/webhook/sms-wakeup', '/api/webhook/android-sms'], (req, res) => {
+  const payload = req.body.data || req.body;
+  const sender = payload.from || payload.contact || payload.sender || 'SMS';
+  const message = payload.content || payload.message || payload.body || '';
+
+  const triggered = processWakeupKeyword(sender, message, 'SMS');
+  return res.json({ ok: true, triggered });
+});
+
+// 2. Facebook Messenger Webhook Handlers
+app.get('/api/webhook/messenger-wakeup', (req, res) => {
+  const VERIFY_TOKEN = process.env.MESSENGER_VERIFY_TOKEN || 'kitty_verify_token';
+  const mode = req.query['hub.mode'];
+  const token = req.query['hub.verify_token'];
+  const challenge = req.query['hub.challenge'];
+
+  if (mode === 'subscribe' && token === VERIFY_TOKEN) {
+    return res.status(200).send(challenge);
+  }
+  return res.sendStatus(403);
+});
+
+app.post('/api/webhook/messenger-wakeup', (req, res) => {
+  const body = req.body;
+
+  if (body.object === 'page') {
+    (body.entry || []).forEach(entry => {
+      const event = entry.messaging && entry.messaging[0];
+      if (event && event.message && event.message.text) {
+        processWakeupKeyword(event.sender.id, event.message.text, 'Messenger');
+      }
+    });
+    return res.status(200).send('EVENT_RECEIVED');
+  }
+  return res.sendStatus(404);
+});
+
+// ==========================================
+// CORE ROUTES & APIS
+// ==========================================
 
 app.get('/', (_req, res) => {
   const indexPath = path.join(__dirname, 'public', 'index.html');
@@ -925,16 +986,8 @@ io.on('connection', socket => {
     }
 
     if (state.socketId && state.socketId !== socket.id) {
-      const existing = io.sockets.sockets.get(state.socketId);
-      const recentlyAlive = Date.now() - Number(state.lastSeenAt || 0) < 30000;
-      if (existing && recentlyAlive) {
-        socket.emit('session-already-active', { workerId: user.id });
-        return socket.disconnect(true);
-      }
-      if (existing) {
-        io.to(state.socketId).emit('session-replaced');
-        existing.disconnect(true);
-      }
+      io.to(state.socketId).emit('session-replaced');
+      io.sockets.sockets.get(state.socketId)?.disconnect(true);
     }
 
     clearDisconnectTimer(state);
@@ -1269,7 +1322,6 @@ io.on('connection', socket => {
       }
     }
   );
-
 
   socket.on(
     'worker-live-ack',
