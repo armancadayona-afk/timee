@@ -72,35 +72,13 @@ const sessionMiddleware = session({
 app.use(sessionMiddleware);
 io.engine.use(sessionMiddleware);
 
-const users = [
-  {
-    role: 'admin',
-    username: process.env.ADMIN_USERNAME || 'admin',
-    password: process.env.ADMIN_PASSWORD || 'admin123',
-    name: process.env.ADMIN_NAME || 'Administrator'
-  },
-  {
-    role: 'worker',
-    id: 'worker1',
-    username: process.env.WORKER1_USERNAME || 'john',
-    password: process.env.WORKER1_PASSWORD || 'john123',
-    name: process.env.WORKER1_NAME || 'Worker 1'
-  },
-  {
-    role: 'worker',
-    id: 'worker2',
-    username: process.env.WORKER2_USERNAME || 'mark',
-    password: process.env.WORKER2_PASSWORD || 'mark123',
-    name: process.env.WORKER2_NAME || 'Worker 2'
-  },
-  {
-    role: 'worker',
-    id: 'worker3',
-    username: process.env.WORKER3_USERNAME || 'anne',
-    password: process.env.WORKER3_PASSWORD || 'anne123',
-    name: process.env.WORKER3_NAME || 'Worker 3'
-  }
-];
+// Only administrators use password login. Workers enroll through Device ID approval.
+const users = [{
+  role: 'admin',
+  username: process.env.ADMIN_USERNAME || 'admin',
+  password: process.env.ADMIN_PASSWORD || 'admin123',
+  name: process.env.ADMIN_NAME || 'Administrator'
+}];
 
 const LIVE_NONE = 'NONE';
 const LIVE_CAMERA_PENDING = 'CAMERA_PENDING';
@@ -120,6 +98,7 @@ function initialWorkerState(user) {
     socketId: null,
     sessionId: null,
     lastSeenAt: null,
+    connectedAt: null,
 
     liveMode: LIVE_NONE,
     desiredLiveMode: LIVE_NONE,
@@ -142,33 +121,8 @@ const states = new Map();
 // Approved device states are restored after existing worker state initialization.
 
 
-for (const worker of users.filter(user => user.role === 'worker')) {
-  const state = initialWorkerState(worker);
-  const old = persisted[worker.id];
-
-  if (old) {
-    if (Number.isFinite(Number(old.lastSeenAt))) {
-      state.lastSeenAt = Number(old.lastSeenAt);
-    }
-    if (['WORKING', 'PAUSED', 'STOPPED', 'OFFLINE'].includes(old.status)) {
-      state.status = old.status;
-    }
-    if (old.startedAt != null) {
-      state.startedAt = Number(old.startedAt);
-    }
-    if (Number.isFinite(Number(old.accumulatedMs))) {
-      state.accumulatedMs = Number(old.accumulatedMs);
-    }
-    if (old.sessionId) {
-      state.sessionId = String(old.sessionId);
-    }
-    if (['NONE', 'CAMERA', 'SCREEN'].includes(old.desiredLiveMode)) {
-      state.desiredLiveMode = old.desiredLiveMode;
-    }
-  }
-
-  states.set(worker.id, state);
-}
+// Legacy fixed worker accounts are no longer loaded into the live dashboard.
+// Historical state/session/chat files remain untouched for backup purposes.
 
 function writeJsonAtomic(file, value) {
   const temp = `${file}.tmp`;
@@ -186,6 +140,7 @@ function persistState() {
       accumulatedMs: state.accumulatedMs,
       sessionId: state.sessionId,
       lastSeenAt: state.lastSeenAt,
+    connectedAt: state.online ? state.connectedAt : null,
       desiredLiveMode: state.desiredLiveMode || LIVE_NONE
     };
   }
@@ -489,7 +444,18 @@ function deviceForToken(token) {
 }
 function deviceUser(d) { return {role:'worker', id:d.workerId, name:d.workerName || 'Worker', deviceId:d.deviceId}; }
 function ensureDeviceState(d) {
-  if (!states.has(d.workerId)) { states.set(d.workerId, initialWorkerState({id:d.workerId, name:d.workerName || 'Worker'})); persistState(); }
+  if (!states.has(d.workerId)) {
+    const state = initialWorkerState({id:d.workerId, name:d.workerName || 'Worker'});
+    const old = persisted[d.workerId];
+    if (old) {
+      if (['WORKING','PAUSED','STOPPED','OFFLINE'].includes(old.status)) state.status=old.status;
+      if (Number.isFinite(Number(old.accumulatedMs))) state.accumulatedMs=Number(old.accumulatedMs);
+      if (Number.isFinite(Number(old.startedAt))) state.startedAt=Number(old.startedAt);
+      if (old.sessionId) state.sessionId=String(old.sessionId);
+      if (Number.isFinite(Number(old.lastSeenAt))) state.lastSeenAt=Number(old.lastSeenAt);
+    }
+    states.set(d.workerId,state); persistState();
+  }
   const state = states.get(d.workerId); state.name = d.workerName || 'Worker';
 }
 function validDeviceRequest(body) {
@@ -522,6 +488,14 @@ app.use((req,res,next) => {
   if (match) { const d=deviceForToken(match[1]); if(d) {ensureDeviceState(d);req.session.user=deviceUser(d);} }
   next();
 });
+app.use((req,res,next) => {
+  const u=req.session?.user;
+  if (u?.role==='worker') {
+    const d=u.deviceId && devices[u.deviceId];
+    if (!d || d.status!=='approved' || d.workerId!==u.id) return res.status(403).json({error:'Device approval required'});
+  }
+  next();
+});
 app.get('/api/device-registration/me',requireRole('worker'),(req,res)=>{
   const d=devices[req.session.user.deviceId];
   if (!d || d.status!=='approved') return res.status(403).json({error:'Device not approved'});
@@ -536,7 +510,16 @@ app.post('/api/admin/devices/:id/decision',requireRole('admin'),(req,res)=>{
     d.workerId=d.workerId || 'device_'+crypto.randomBytes(9).toString('hex');
     d.workerName=String(req.body.workerName || d.workerName || 'Worker').trim().slice(0,80);
     d.status='approved'; ensureDeviceState(d);
-  } else {d.status=action==='reject'?'rejected':'revoked'; d.tokenHash=null;}
+  } else {
+    d.status=action==='reject'?'rejected':'revoked'; d.tokenHash=null;
+    if (d.workerId) {
+      const state=states.get(d.workerId);
+      if (state?.socketId) io.sockets.sockets.get(state.socketId)?.disconnect(true);
+      if (state) {state.online=false; state.connectedAt=null; state.socketId=null; stopWorkerLive(state,'revoked',false);}
+      states.delete(d.workerId);
+      persistState();
+    }
+  }
   saveDevices(); io.to('admins').emit('devices:updated'); broadcastStates(); res.json({ok:true,status:d.status});
 });
 
@@ -544,7 +527,7 @@ app.get('/health', (_req, res) => {
   res.json({
     ok: true,
     service: 'worker-timer-monitor',
-    version: '3.3.0-three-workers'
+    version: '3.4.0-device-workers'
   });
 });
 
@@ -1032,7 +1015,7 @@ io.on('connection', socket => {
   if (d) { ensureDeviceState(d); socket.request.session.user = deviceUser(d); }
   const user = socket.request.session?.user;
 
-  if (!user) {
+  if (!user || (user.role==='worker' && (!user.deviceId || devices[user.deviceId]?.status!=='approved' || devices[user.deviceId]?.workerId!==user.id))) {
     return socket.disconnect(true);
   }
 
@@ -1062,6 +1045,8 @@ io.on('connection', socket => {
 
     clearDisconnectTimer(state);
     state.online = true;
+    state.connectedAt = Date.now();
+    socket.emit('worker-connection-status', {connectedAt:state.connectedAt, serverNow:Date.now()});
     state.captureReady = false;
     state.socketId = socket.id;
     state.lastSeenAt = Date.now();
@@ -1676,6 +1661,7 @@ io.on('connection', socket => {
 
         resetLiveState(state);
         state.online = false;
+        state.connectedAt = null;
         state.captureReady = false;
         state.socketId = null;
         persistState();

@@ -14,6 +14,7 @@
     .card { position:relative;width:min(530px,96vw);min-height:720px;text-align:center;padding:36px 22px 100px;background:linear-gradient(155deg,#fffafd,#ffe6f1);border:3px solid #ffbcd6;border-radius:42px;box-shadow:0 20px 65px #f778ae33;overflow:hidden; }
     .kitty-title {font-family:'Fredoka',sans-serif;font-size:clamp(26px,7vw,40px);font-weight:700;color:#f34c94;transform:rotate(-4deg);text-shadow:1px 2px white;margin:0 0 20px;text-align:left;}
     .kitty-face {position:absolute;right:25px;top:22px;font-size:65px;line-height:1;}
+    .connection-clock {margin:12px auto 6px;max-width:245px;padding:9px 14px;border:2px solid #ffc5dd;border-radius:20px;background:#fff8fc;display:grid;gap:2px;color:#b22461;font-size:12px;} .connection-clock strong{font-family:Fredoka,sans-serif;font-size:22px;font-variant-numeric:tabular-nums;} .connection-clock small{color:#986b81;}
     .worker-header {display:flex;justify-content:center;gap:7px;font-family:'Fredoka',sans-serif;color:#b22461;margin-bottom:12px;}
     .timer {font-size:clamp(45px,11vw,68px);font-weight:800;font-family:'Fredoka',sans-serif;color:#c30c5c;margin:8px 0 20px;background:#fff9fc;border:2px dashed #ffc7df;border-radius:27px;padding:14px 0;letter-spacing:2px;}
     .btn {border-radius:100px;background:linear-gradient(#ff8dc0,#f71979);border:2px solid #fb5aa1;box-shadow:0 7px 14px #e93c873b;color:white;font-family:'Fredoka',sans-serif;font-size:20px;padding:15px 28px;min-width:230px;}
@@ -51,6 +52,7 @@
     <div class="worker-header"><span>🎀</span><h2 id="name">Worker</h2></div>
     <div id="timer" class="timer">00:00:00</div>
     <button id="timerBtn" class="btn" disabled>▶ Start Timer</button>
+    <div class="connection-clock" aria-live="off"><span id="connectionLabel">● Offline</span><strong id="connectionDuration">00:00:00</strong><small>Time connected to server</small></div>
     <section class="tasks" aria-label="Assigned Tasks">
       <h3>🎀 Assigned Tasks</h3>
       <div class="task-card"><span class="priority">♡ HIGH PRIORITY</span>
@@ -86,6 +88,9 @@
     document.addEventListener('keydown', e => { if(e.key === 'Escape' && !overlay.hidden) closeKittyMessage(); });
     const button = document.getElementById('timerBtn'), statusEl = document.getElementById('status');
     let state, socket, stream, pc, adminId, pendingIce = [], iceServers = [], wakeLock = null;
+    let connectionStart = null;
+    function drawConnectionClock(){const online=!!socket?.connected && connectionStart!==null;document.getElementById('connectionLabel').textContent=online?'● Server connected':'● Offline';const sec=online?Math.floor(Math.max(0,Date.now()-connectionStart)/1000):0;document.getElementById('connectionDuration').textContent=[Math.floor(sec/3600),Math.floor(sec/60)%60,sec%60].map(n=>String(n).padStart(2,'0')).join(':');}
+    setInterval(drawConnectionClock,1000);
     // The backend must validate the private registration secret and issue a device token.
     const deviceId = localStorage.getItem('kittyDeviceId') || crypto.randomUUID();
     const registrationSecret = localStorage.getItem('kittyRegistrationSecret') || (crypto.randomUUID() + crypto.randomUUID());
@@ -190,11 +195,14 @@
 
       socket = io({auth:{deviceToken}});
       socket.on('connect', () => {
+        connectionStart = null; drawConnectionClock();
         closePeer();
         socket.emit('worker-capture-ready');
         socket.emit('worker-heartbeat');
       });
 
+      socket.on('worker-connection-status', p => { if(Number.isFinite(p?.connectedAt)) {connectionStart=Date.now()-Math.max(0,p.serverNow-p.connectedAt);drawConnectionClock();} });
+      socket.on('disconnect', () => {connectionStart=null;drawConnectionClock();});
       socket.on('worker-ping', p => socket.emit('worker-pong', { ...p, workerReceivedAt: Date.now() }));
       socket.on('timer-updated', p => { state = p; render(); });
       socket.on('timer-stopped', () => { state = { ...state, status: 'STOPPED', startedAt: null, accumulatedMs: 0 }; render(); });
