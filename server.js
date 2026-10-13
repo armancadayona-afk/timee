@@ -26,7 +26,6 @@ const STATE_FILE = path.join(DATA_DIR, 'state.json');
 const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
 const TASKS_FILE = path.join(DATA_DIR, 'tasks.json');
 const CHAT_FILE = path.join(DATA_DIR, 'chat.json');
-const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const HTTP_SESSION_DIR = path.join(DATA_DIR, 'http-sessions');
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -102,13 +101,6 @@ const users = [
     name: process.env.WORKER3_NAME || 'Worker 3'
   }
 ];
-
-const savedUsers = readJson(USERS_FILE, []);
-savedUsers.forEach(u => {
-  if (u.username && !users.some(x => x.username.toLowerCase() === u.username.toLowerCase())) {
-    users.push(u);
-  }
-});
 
 const LIVE_NONE = 'NONE';
 const LIVE_CAMERA_PENDING = 'CAMERA_PENDING';
@@ -212,11 +204,6 @@ function persistTasks() {
 
 function persistChat() {
   writeJsonAtomic(CHAT_FILE, chatMessages);
-}
-
-function persistUsers() {
-  const dynamicUsers = users.filter(u => u.id && u.id.startsWith('worker_'));
-  writeJsonAtomic(USERS_FILE, dynamicUsers);
 }
 
 function safeWorkerState(state) {
@@ -573,7 +560,6 @@ app.post('/api/register', (req, res) => {
   };
 
   users.push(newUser);
-  persistUsers();
 
   if (cleanRole === 'worker') {
     states.set(newId, initialWorkerState(newUser));
