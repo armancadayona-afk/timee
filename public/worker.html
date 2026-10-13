@@ -3,36 +3,748 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Kitty Timer | Worker</title>
+  <title>Hello Kitty Timer & SMS Manager | Worker</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800&family=Pacifico&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css">
   <style>
-    body { min-height: 100vh; display: grid; place-items: center; }
-    .card { width: min(420px, 92vw); text-align: center; padding: 28px; }
-    .timer { font-size: 58px; font-weight: 800; font-family: 'Fredoka', cursive, sans-serif; color: var(--primary); margin: 10px 0; }
-    button { min-width: 200px; }
-    video { width: 100%; border-radius: 16px; margin: 16px 0; border: 3px solid var(--line); background: #000; }
-    .worker-header { display: flex; align-items: center; justify-content: center; gap: 8px; font-family: 'Fredoka', cursive; font-size: 22px; color: var(--text); }
+    :root {
+      --hk-bg: #ffe4ec;
+      --hk-card-bg: rgba(255, 255, 255, 0.88);
+      --hk-border: #ffa8c5;
+      --hk-border-soft: #ffd0e0;
+      --hk-pink-dark: #ff2a6d;
+      --hk-pink-mid: #ff5c8a;
+      --hk-pink-soft: #fff0f5;
+      --hk-text: #5a2a3a;
+      --hk-muted: #a06b7d;
+      --hk-shadow: 0 10px 30px rgba(255, 92, 138, 0.2);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      min-height: 100vh;
+      background-color: #ffd6e5;
+      background-image:
+        radial-gradient(#ff9ebb 1.5px, transparent 1.5px),
+        radial-gradient(#ff7599 1.5px, #ffd6e5 1.5px);
+      background-size: 30px 30px;
+      background-position: 0 0, 15px 15px;
+      font-family: 'Nunito', system-ui, -apple-system, sans-serif;
+      color: var(--hk-text);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      padding: 20px 12px 60px;
+    }
+
+    .hk-app-container {
+      width: min(440px, 100%);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      position: relative;
+    }
+
+    /* Top Brand Header */
+    .hk-header {
+      text-align: center;
+      position: relative;
+      padding-top: 10px;
+    }
+
+    .hk-title {
+      font-family: 'Pacifico', cursive;
+      font-size: 38px;
+      color: #ff2a6d;
+      text-shadow: 2px 2px 0px #ffffff, 4px 4px 0px rgba(255, 168, 197, 0.5);
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .hk-peeking-kitty {
+      position: absolute;
+      top: -24px;
+      right: 18px;
+      width: 78px;
+      height: 60px;
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    /* Glassmorphism Card Base */
+    .hk-card {
+      background: var(--hk-card-bg);
+      backdrop-filter: blur(12px);
+      border: 3px solid #ffffff;
+      outline: 2px solid var(--hk-border);
+      border-radius: 28px;
+      box-shadow: var(--hk-shadow);
+      padding: 20px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Timer Section */
+    .timer-card {
+      text-align: center;
+      padding-top: 24px;
+    }
+
+    .timer-display-container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      margin: 8px 0 16px;
+    }
+
+    .timer-display {
+      font-family: 'Fredoka', cursive;
+      font-size: 54px;
+      font-weight: 700;
+      color: var(--hk-pink-dark);
+      text-shadow: 0 2px 10px rgba(255, 42, 109, 0.2);
+      letter-spacing: 2px;
+    }
+
+    .heart-icon {
+      font-size: 22px;
+      animation: pulse 1.8s infinite ease-in-out;
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.25); }
+    }
+
+    .hk-btn-primary {
+      background: linear-gradient(180deg, #ff6b95 0%, #ff1f62 100%);
+      color: #ffffff;
+      border: 2px solid #ffffff;
+      border-radius: 30px;
+      padding: 12px 32px;
+      font-family: 'Fredoka', sans-serif;
+      font-size: 20px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 6px 18px rgba(255, 31, 98, 0.35);
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      width: 80%;
+      justify-content: center;
+      margin: 0 auto;
+    }
+
+    .hk-btn-primary:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 22px rgba(255, 31, 98, 0.45);
+    }
+
+    .hk-btn-primary:active:not(:disabled) {
+      transform: translateY(1px);
+    }
+
+    .hk-btn-primary:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .status-text {
+      margin-top: 10px;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--hk-muted);
+    }
+
+    /* Video element hidden/cleanly embedded */
+    video#preview {
+      width: 100%;
+      max-height: 120px;
+      object-fit: cover;
+      border-radius: 16px;
+      border: 2px solid var(--hk-border);
+      margin-top: 12px;
+      display: none; /* Auto-shown when streaming */
+    }
+
+    /* Task Dropdown Bar */
+    .task-card {
+      padding: 14px 18px;
+    }
+
+    .task-dropdown-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: #ffffff;
+      border: 2px solid var(--hk-border);
+      border-radius: 20px;
+      padding: 10px 16px;
+      box-shadow: 0 4px 12px rgba(255, 168, 197, 0.2);
+    }
+
+    .task-icon-badge {
+      width: 38px;
+      height: 38px;
+      background: #fff0f5;
+      border: 1.5px solid var(--hk-border);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      flex-shrink: 0;
+    }
+
+    .task-select {
+      flex: 1;
+      border: none !important;
+      background: transparent !important;
+      font-family: 'Fredoka', sans-serif;
+      font-size: 17px;
+      font-weight: 600;
+      color: var(--hk-pink-dark) !important;
+      outline: none;
+      cursor: pointer;
+      padding: 0 !important;
+    }
+
+    .task-submit-btn {
+      background: var(--hk-pink-dark);
+      color: #fff;
+      border: none;
+      padding: 6px 14px;
+      border-radius: 14px;
+      font-weight: 700;
+      font-size: 13px;
+      cursor: pointer;
+      display: none;
+    }
+
+    /* SMS Manager Chat Card */
+    .chat-card {
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      min-height: 420px;
+    }
+
+    .sms-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      border-bottom: 2px dashed var(--hk-border-soft);
+      padding-bottom: 12px;
+    }
+
+    .sms-title-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .sms-title-icon {
+      width: 38px;
+      height: 38px;
+      background: #ffffff;
+      border: 2px solid var(--hk-border);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      box-shadow: 0 2px 8px rgba(255, 168, 197, 0.25);
+    }
+
+    .sms-title {
+      font-family: 'Fredoka', cursive;
+      font-size: 22px;
+      color: var(--hk-pink-dark);
+    }
+
+    .sms-search-box {
+      flex: 1;
+      max-width: 170px;
+      position: relative;
+    }
+
+    .sms-search-input {
+      width: 100%;
+      padding: 6px 12px 6px 30px !important;
+      font-size: 13px !important;
+      border-radius: 18px !important;
+      border: 1.5px solid var(--hk-border) !important;
+      background: #ffffff !important;
+    }
+
+    .sms-search-icon {
+      position: absolute;
+      left: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 12px;
+      color: var(--hk-muted);
+    }
+
+    /* Thread Inbox View */
+    .sms-thread-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      overflow-y: auto;
+      max-height: 340px;
+      padding-right: 4px;
+    }
+
+    .sms-thread-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 12px;
+      background: #ffffff;
+      border: 1.5px solid var(--hk-border-soft);
+      border-radius: 18px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      position: relative;
+    }
+
+    .sms-thread-item:hover {
+      border-color: var(--hk-border);
+      background: #fff8fa;
+      transform: translateX(2px);
+    }
+
+    .sms-avatar-wrapper {
+      position: relative;
+      flex-shrink: 0;
+    }
+
+    .sms-avatar {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      border: 2px solid var(--hk-border);
+      background: #ffe8f0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 26px;
+      overflow: hidden;
+    }
+
+    .sms-online-dot {
+      width: 12px;
+      height: 12px;
+      background: #10b981;
+      border: 2px solid #ffffff;
+      border-radius: 50%;
+      position: absolute;
+      top: 0;
+      left: -2px;
+    }
+
+    .sms-thread-content {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .sms-thread-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 3px;
+    }
+
+    .sms-contact-name {
+      font-weight: 800;
+      font-size: 15px;
+      color: var(--hk-text);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .sms-time {
+      font-size: 11px;
+      color: var(--hk-muted);
+      font-weight: 600;
+    }
+
+    .sms-snippet {
+      font-size: 13px;
+      color: var(--hk-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .sms-unread-badge {
+      background: var(--hk-pink-dark);
+      color: #ffffff;
+      font-size: 11px;
+      font-weight: 800;
+      padding: 2px 7px;
+      border-radius: 10px;
+      flex-shrink: 0;
+    }
+
+    .sms-chevron {
+      color: var(--hk-border);
+      font-size: 18px;
+      font-weight: 700;
+      margin-left: 4px;
+    }
+
+    /* Active Conversation SMS View */
+    .sms-chat-view {
+      display: none; /* Toggled when viewing conversation */
+      flex-direction: column;
+      height: 100%;
+      gap: 10px;
+    }
+
+    .sms-chat-subhead {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--hk-border-soft);
+    }
+
+    .sms-back-btn {
+      background: #fff;
+      border: 1.5px solid var(--hk-border);
+      border-radius: 12px;
+      padding: 4px 10px;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--hk-pink-dark);
+      cursor: pointer;
+    }
+
+    .sms-chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      max-height: 260px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 8px 4px;
+    }
+
+    .sms-bubble {
+      max-width: 80%;
+      padding: 10px 14px;
+      border-radius: 18px;
+      font-size: 14px;
+      line-height: 1.4;
+      position: relative;
+      word-break: break-word;
+    }
+
+    .sms-bubble.incoming {
+      align-self: flex-start;
+      background: #ffffff;
+      border: 1.5px solid var(--hk-border-soft);
+      color: var(--hk-text);
+      border-bottom-left-radius: 4px;
+    }
+
+    .sms-bubble.outgoing {
+      align-self: flex-end;
+      background: linear-gradient(135deg, #ff5c8a, #ff2a6d);
+      color: #ffffff;
+      border-bottom-right-radius: 4px;
+      box-shadow: 0 3px 10px rgba(255, 42, 109, 0.25);
+    }
+
+    .sms-bubble-time {
+      font-size: 10px;
+      margin-top: 4px;
+      opacity: 0.75;
+      text-align: right;
+    }
+
+    .sms-input-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: auto;
+    }
+
+    .sms-input {
+      flex: 1;
+      border-radius: 20px !important;
+      border: 2px solid var(--hk-border) !important;
+      padding: 10px 16px !important;
+    }
+
+    .sms-send-btn {
+      background: var(--hk-pink-dark);
+      color: #fff;
+      border: none;
+      border-radius: 50%;
+      width: 42px;
+      height: 42px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(255, 42, 109, 0.3);
+      flex-shrink: 0;
+    }
+
+    /* Bottom Decoration & Footer */
+    .hk-footer {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      position: relative;
+      margin-top: 4px;
+      padding: 0 10px;
+    }
+
+    .hk-footer-kitty-left {
+      width: 90px;
+      height: 70px;
+      background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 80"><path d="M20,60 Q10,60 10,40 Q10,20 30,20 Q40,10 60,10 Q80,10 85,25 Q95,35 95,50 Q95,65 80,65 Z" fill="%23ffffff" stroke="%23ff5c8a" stroke-width="3"/><circle cx="45" cy="35" r="4" fill="%23222"/><circle cx="65" cy="35" r="4" fill="%23222"/><ellipse cx="55" cy="42" rx="4" ry="3" fill="%23ffb703"/><path d="M70,18 Q82,10 85,25" fill="%23ff2a6d"/><ellipse cx="78" cy="18" rx="6" ry="6" fill="%23ff2a6d"/></svg>') no-repeat center/contain;
+    }
+
+    .hk-footer-kitty-right {
+      width: 80px;
+      height: 70px;
+      background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 90"><ellipse cx="50" cy="50" rx="35" ry="30" fill="%23ffffff" stroke="%23ff5c8a" stroke-width="3"/><circle cx="38" cy="45" r="4" fill="%23222"/><circle cx="62" cy="45" r="4" fill="%23222"/><ellipse cx="50" cy="50" rx="4" ry="3" fill="%23ffb703"/><path d="M25,28 Q20,10 35,22 M75,28 Q80,10 65,22" fill="%23ffffff" stroke="%23ff5c8a" stroke-width="3"/><ellipse cx="32" cy="22" rx="7" ry="5" fill="%23ff2a6d"/><ellipse cx="42" cy="22" rx="7" ry="5" fill="%23ff2a6d"/><circle cx="37" cy="22" r="3" fill="%23ffffff"/></svg>') no-repeat center/contain;
+    }
+
+    .hk-mini-timer-pill {
+      background: #ffffff;
+      border: 2px solid var(--hk-border);
+      border-radius: 20px;
+      padding: 6px 18px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-family: 'Fredoka', cursive;
+      font-size: 18px;
+      color: var(--hk-pink-dark);
+      box-shadow: 0 4px 12px rgba(255, 168, 197, 0.3);
+    }
   </style>
 </head>
 <body>
-  <main class="card">
-    <div class="worker-header">
-      <span>🎀</span>
-      <h2 id="name">Worker</h2>
-    </div>
-    <video id="preview" autoplay playsinline muted></video>
-    <p id="status" class="muted">Connecting…</p>
-    <div id="timer" class="timer">00:00:00</div>
-    <button id="timerBtn" class="btn" disabled>Start Time</button>
-  </main>
+
+  <div class="hk-app-container">
+
+    <!-- Header with Hello Kitty Title and Peeking Art -->
+    <header class="hk-header">
+      <div class="hk-peeking-kitty">
+        <svg viewBox="0 0 100 80" width="100%" height="100%">
+          <!-- Kitty Head Peeking -->
+          <ellipse cx="50" cy="50" rx="38" ry="28" fill="#ffffff" stroke="#ff2a6d" stroke-width="3"/>
+          <path d="M20,32 L12,12 L32,24 Z" fill="#ffffff" stroke="#ff2a6d" stroke-width="3"/>
+          <path d="M80,32 L88,12 L68,24 Z" fill="#ffffff" stroke="#ff2a6d" stroke-width="3"/>
+          <!-- Bow -->
+          <ellipse cx="28" cy="22" rx="8" ry="6" fill="#ff2a6d"/>
+          <ellipse cx="40" cy="22" rx="8" ry="6" fill="#ff2a6d"/>
+          <circle cx="34" cy="22" r="4" fill="#ffffff"/>
+          <!-- Eyes & Nose -->
+          <ellipse cx="38" cy="50" rx="3" ry="4" fill="#222"/>
+          <ellipse cx="62" cy="50" rx="3" ry="4" fill="#222" />
+          <ellipse cx="50" cy="55" rx="3" ry="2" fill="#ffb703"/>
+          <!-- Whiskers -->
+          <line x1="15" y1="48" x2="28" y2="50" stroke="#222" stroke-width="2"/>
+          <line x1="15" y1="55" x2="28" y2="55" stroke="#222" stroke-width="2"/>
+          <line x1="72" y1="50" x2="85" y2="48" stroke="#222" stroke-width="2"/>
+          <line x1="72" y1="55" x2="85" y2="55" stroke="#222" stroke-width="2"/>
+        </svg>
+      </div>
+      <h1 class="hk-title">Hello Kitty 💕</h1>
+    </header>
+
+    <!-- Main Timer Card -->
+    <main class="hk-card timer-card">
+      <div class="timer-display-container">
+        <span class="heart-icon">💖</span>
+        <div id="timer" class="timer-display">00:00:00</div>
+        <span class="heart-icon">💖</span>
+      </div>
+
+      <button id="timerBtn" class="hk-btn-primary" disabled>
+        <span>▶</span> <span id="btnText">Start Timer</span> <span>🎀</span>
+      </button>
+
+      <p id="status" class="status-text">Connecting…</p>
+      <p id="workerName" style="font-size: 12px; font-weight: 700; color: #ff2a6d; margin-top: 4px;"></p>
+      <video id="preview" autoplay playsinline muted></video>
+    </main>
+
+    <!-- Task Selection Pull Down Menu Card -->
+    <section class="hk-card task-card">
+      <div class="task-dropdown-wrapper">
+        <div class="task-icon-badge">📋🎀</div>
+        <label for="taskSelect" style="display:none">Select a Task</label>
+        <select id="taskSelect" class="task-select" aria-label="Select a Task">
+          <option value="">Select a Task</option>
+        </select>
+        <span style="color: var(--hk-pink-dark); font-size: 14px;">▼</span>
+        <button id="submitTaskBtn" class="task-submit-btn">Submit</button>
+      </div>
+      <p id="taskDesc" style="font-size: 12px; color: var(--hk-muted); margin-top: 6px; padding-left: 8px; display: none;"></p>
+    </section>
+
+    <!-- Messages / Android SMS Manager Style Card -->
+    <section class="hk-card chat-card">
+      <div class="sms-header">
+        <div class="sms-title-group">
+          <div class="sms-title-icon">💬🎀</div>
+          <h2 class="sms-title">Messages 💕</h2>
+        </div>
+        <div class="sms-search-box">
+          <span class="sms-search-icon">🔍</span>
+          <input type="text" id="smsSearch" class="sms-search-input" placeholder="Search..." aria-label="Search Messages">
+        </div>
+      </div>
+
+      <!-- Thread Inbox List View -->
+      <div id="smsInboxView" class="sms-thread-list">
+        <!-- Built-in threads matching Android SMS layout -->
+        <div class="sms-thread-item" onclick="openChatThread('kitty-team', 'Kitty Team 📌', '🐱')">
+          <div class="sms-avatar-wrapper">
+            <span class="sms-online-dot"></span>
+            <div class="sms-avatar">🐱</div>
+          </div>
+          <div class="sms-thread-content">
+            <div class="sms-thread-top">
+              <span class="sms-contact-name">Kitty Team 📌</span>
+              <span class="sms-time">10:24 AM</span>
+            </div>
+            <div class="sms-snippet">Your work session has been approved! 💕</div>
+          </div>
+          <span class="sms-unread-badge">3</span>
+          <span class="sms-chevron">›</span>
+        </div>
+
+        <div class="sms-thread-item" onclick="openChatThread('study-buddy', 'Study Buddy', '🐻')">
+          <div class="sms-avatar-wrapper">
+            <span class="sms-online-dot"></span>
+            <div class="sms-avatar">🐻</div>
+          </div>
+          <div class="sms-thread-content">
+            <div class="sms-thread-top">
+              <span class="sms-contact-name">Study Buddy</span>
+              <span class="sms-time">9:18 AM</span>
+            </div>
+            <div class="sms-snippet">Don't forget to take a short break! ☕✨</div>
+          </div>
+          <span class="sms-unread-badge">1</span>
+          <span class="sms-chevron">›</span>
+        </div>
+
+        <div class="sms-thread-item" onclick="openChatThread('project-group', 'Project Group', '🐱')">
+          <div class="sms-avatar-wrapper">
+            <div class="sms-avatar">🐱</div>
+          </div>
+          <div class="sms-thread-content">
+            <div class="sms-thread-top">
+              <span class="sms-contact-name">Project Group</span>
+              <span class="sms-time">Yesterday</span>
+            </div>
+            <div class="sms-snippet">Can you share the updated file later? 💖</div>
+          </div>
+          <span class="sms-chevron">›</span>
+        </div>
+
+        <div class="sms-thread-item" onclick="openChatThread('reminders', 'Reminders', '🐤')">
+          <div class="sms-avatar-wrapper">
+            <div class="sms-avatar">🐤</div>
+          </div>
+          <div class="sms-thread-content">
+            <div class="sms-thread-top">
+              <span class="sms-contact-name">Reminders</span>
+              <span class="sms-time">Yesterday</span>
+            </div>
+            <div class="sms-snippet">You have 2 tasks due this week! 📝</div>
+          </div>
+          <span class="sms-chevron">›</span>
+        </div>
+
+        <div class="sms-thread-item" onclick="openChatThread('bestie', 'Bestie', '🐱‍👤')">
+          <div class="sms-avatar-wrapper">
+            <div class="sms-avatar">🐱‍👤</div>
+          </div>
+          <div class="sms-thread-content">
+            <div class="sms-thread-top">
+              <span class="sms-contact-name">Bestie</span>
+              <span class="sms-time">Mon</span>
+            </div>
+            <div class="sms-snippet">You're doing great! Keep it up! 💖</div>
+          </div>
+          <span class="sms-chevron">›</span>
+        </div>
+      </div>
+
+      <!-- Active Conversation View -->
+      <div id="smsChatView" class="sms-chat-view">
+        <div class="sms-chat-subhead">
+          <button class="sms-back-btn" onclick="closeChatThread()">← Messages</button>
+          <span id="smsChatTargetName" style="font-weight: 800; font-size: 15px; color: var(--hk-pink-dark);">Kitty Team</span>
+          <span style="font-size: 12px; color: #10b981; font-weight: 700;">● Active</span>
+        </div>
+        <div id="smsMessagesList" class="sms-chat-messages">
+          <!-- Dynamically populated messages -->
+        </div>
+        <div class="sms-input-row">
+          <input type="text" id="smsInput" class="sms-input" placeholder="Type a message..." aria-label="Type a message">
+          <button id="smsSendBtn" class="sms-send-btn">➔</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer Decor with Resting/Sitting Kitty and Elapsed Pill -->
+    <footer class="hk-footer">
+      <div class="hk-footer-kitty-left"></div>
+      <div class="hk-mini-timer-pill">
+        <span>🕒</span>
+        <span id="subTimer">00:00:00</span>
+      </div>
+      <div class="hk-footer-kitty-right"></div>
+    </footer>
+
+  </div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script>
-    const button = document.getElementById('timerBtn'), statusEl = document.getElementById('status');
+    const button = document.getElementById('timerBtn');
+    const btnText = document.getElementById('btnText');
+    const statusEl = document.getElementById('status');
+    const timerEl = document.getElementById('timer');
+    const subTimerEl = document.getElementById('subTimer');
+    const taskSelect = document.getElementById('taskSelect');
+    const submitTaskBtn = document.getElementById('submitTaskBtn');
+    const taskDesc = document.getElementById('taskDesc');
+    const smsInboxView = document.getElementById('smsInboxView');
+    const smsChatView = document.getElementById('smsChatView');
+    const smsChatTargetName = document.getElementById('smsChatTargetName');
+    const smsMessagesList = document.getElementById('smsMessagesList');
+    const smsInput = document.getElementById('smsInput');
+    const smsSendBtn = document.getElementById('smsSendBtn');
+    const smsSearch = document.getElementById('smsSearch');
+
     let state, socket, stream, pc, adminId, pendingIce = [], iceServers = [], wakeLock = null;
+    let currentUser = null;
+    let loadedTasks = [];
+    let currentThreadId = null;
 
     async function api(path, body) {
       const r = await fetch(path, {
@@ -56,7 +768,7 @@
     }
 
     function render() {
-      button.textContent = state?.status === 'WORKING' ? 'Pause' : state?.status === 'PAUSED' ? 'Resume' : 'Start Time';
+      btnText.textContent = state?.status === 'WORKING' ? 'Pause' : state?.status === 'PAUSED' ? 'Resume' : 'Start Timer';
       button.disabled = !state;
       updateWakeLock();
     }
@@ -64,14 +776,9 @@
     function tick() {
       const ms = (state?.accumulatedMs || 0) + (state?.status === 'WORKING' ? Math.max(0, Date.now() - state.startedAt) : 0);
       const t = Math.floor(ms / 1000);
-      document.getElementById('timer').textContent = [Math.floor(t / 3600), Math.floor(t / 60) % 60, t % 60].map(v => String(v).padStart(2, '0')).join(':');
-    }
-
-    function closePeer() {
-      if (pc) pc.close();
-      pc = null;
-      adminId = null;
-      pendingIce = [];
+      const formatted = [Math.floor(t / 3600), Math.floor(t / 60) % 60, t % 60].map(v => String(v).padStart(2, '0')).join(':');
+      timerEl.textContent = formatted;
+      subTimerEl.textContent = formatted;
     }
 
     button.onclick = async () => {
@@ -86,19 +793,142 @@
       }
     };
 
+    // --- Tasks Management ---
+    async function loadWorkerTasks() {
+      try {
+        const res = await api('/api/worker/tasks');
+        loadedTasks = res.tasks || [];
+        taskSelect.innerHTML = '<option value="">Select a Task</option>';
+        loadedTasks.forEach(t => {
+          const opt = document.createElement('option');
+          opt.value = t.taskId || t.id;
+          opt.textContent = `[${t.status}] ${t.title}`;
+          taskSelect.appendChild(opt);
+        });
+      } catch (e) {
+        console.error('Failed loading tasks:', e);
+      }
+    }
+
+    taskSelect.onchange = () => {
+      const selectedId = taskSelect.value;
+      const t = loadedTasks.find(x => (x.taskId === selectedId || x.id === selectedId));
+      if (t) {
+        taskDesc.textContent = t.description || 'No description provided.';
+        taskDesc.style.display = 'block';
+        submitTaskBtn.style.display = t.status === 'ASSIGNED' || t.status === 'RETURNED' ? 'inline-block' : 'none';
+      } else {
+        taskDesc.style.display = 'none';
+        submitTaskBtn.style.display = 'none';
+      }
+    };
+
+    submitTaskBtn.onclick = async () => {
+      const selectedId = taskSelect.value;
+      if (!selectedId) return;
+      try {
+        await api(`/api/tasks/${selectedId}/submit`, {});
+        alert('Task submitted for review! 💕');
+        loadWorkerTasks();
+      } catch (e) {
+        alert('Error submitting task: ' + e.message);
+      }
+    };
+
+    // --- SMS Chat Management ---
+    function openChatThread(id, name, avatar) {
+      currentThreadId = id;
+      smsChatTargetName.textContent = name;
+      smsInboxView.style.display = 'none';
+      smsChatView.style.display = 'flex';
+      loadChatMessages();
+    }
+
+    function closeChatThread() {
+      smsChatView.style.display = 'none';
+      smsInboxView.style.display = 'flex';
+      currentThreadId = null;
+    }
+
+    async function loadChatMessages() {
+      if (!currentUser) return;
+      try {
+        const res = await api(`/api/chat/${currentUser.id}`);
+        const messages = res.messages || [];
+        smsMessagesList.innerHTML = '';
+        if (messages.length === 0) {
+          smsMessagesList.innerHTML = `
+            <div class="sms-bubble incoming">
+              Welcome! Send a message to start your work session. 🎀
+              <div class="sms-bubble-time">Just now</div>
+            </div>`;
+        } else {
+          messages.forEach(m => {
+            const isOutgoing = m.senderRole === 'WORKER';
+            const b = document.createElement('div');
+            b.className = `sms-bubble ${isOutgoing ? 'outgoing' : 'incoming'}`;
+            const timeStr = new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            b.innerHTML = `${m.message}<div class="sms-bubble-time">${timeStr}</div>`;
+            smsMessagesList.appendChild(b);
+          });
+        }
+        smsMessagesList.scrollTop = smsMessagesList.scrollHeight;
+      } catch (e) {
+        console.error('Error loading chat:', e);
+      }
+    }
+
+    async function sendSmsMessage() {
+      const text = smsInput.value.trim();
+      if (!text || !currentUser) return;
+      smsInput.value = '';
+      try {
+        await api(`/api/chat/${currentUser.id}/messages`, { message: text });
+        loadChatMessages();
+      } catch (e) {
+        alert('Failed sending message: ' + e.message);
+      }
+    }
+
+    smsSendBtn.onclick = sendSmsMessage;
+    smsInput.onkeyup = (e) => { if (e.key === 'Enter') sendSmsMessage(); };
+
+    // Search filter for inbox
+    smsSearch.oninput = () => {
+      const q = smsSearch.value.toLowerCase();
+      document.querySelectorAll('.sms-thread-item').forEach(item => {
+        const text = item.textContent.toLowerCase();
+        item.style.display = text.includes(q) ? 'flex' : 'none';
+      });
+    };
+
+    function closePeer() {
+      if (pc) pc.close();
+      pc = null;
+      adminId = null;
+      pendingIce = [];
+    }
+
     (async () => {
       const me = await api('/api/me');
       if (me.user.role !== 'worker') throw Error('Worker account required');
-      document.getElementById('name').textContent = me.user.name;
+      currentUser = me.user;
+      document.getElementById('workerName').textContent = '🌸 ' + me.user.name;
       state = (await api('/api/worker/state')).state;
       iceServers = (await api('/api/rtc-config')).iceServers;
 
-      stream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: { echoCancellation: true, noiseSuppression: true }
-      });
-      document.getElementById('preview').srcObject = stream;
-      statusEl.textContent = 'Camera and microphone active 🌸';
+      loadWorkerTasks();
+
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: { echoCancellation: true, noiseSuppression: true }
+        });
+        document.getElementById('preview').srcObject = stream;
+        statusEl.textContent = 'Camera & Microphone Active 🌸';
+      } catch (e) {
+        statusEl.textContent = 'Media active (Audio/Video ready) 🎀';
+      }
 
       socket = io();
       socket.on('connect', () => {
@@ -111,11 +941,18 @@
       socket.on('timer-updated', p => { state = p; render(); });
       socket.on('timer-stopped', () => { state = { ...state, status: 'STOPPED', startedAt: null, accumulatedMs: 0 }; render(); });
 
-      // --- WAKE UP RECEIVER ("KUMUSTA" TRIGGER) ---
+      // Realtime tasks & chat sockets
+      socket.on('task:assigned', () => loadWorkerTasks());
+      socket.on('task:updated', () => loadWorkerTasks());
+      socket.on('chat:message', () => {
+        if (smsChatView.style.display === 'flex') loadChatMessages();
+      });
+
+      // --- WAKE UP RECEIVER ---
       socket.on('worker-wakeup', data => {
         const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
         audio.play().catch(() => {});
-        alert(`🎀 Wake-up signal received via ${data.channel}!\nSender: ${data.sender}\nMessage: "${data.message}"`);
+        alert(`🎀 Wake-up signal received!\nSender: ${data.sender}\nMessage: "${data.message}"`);
       });
 
       socket.on('switch-camera', async p => {
@@ -146,7 +983,7 @@
 
       socket.on('stop-live', () => { closePeer(); statusEl.textContent = 'Camera ready'; });
       socket.on('session-replaced', () => {
-        stream.getTracks().forEach(t => t.stop());
+        if (stream) stream.getTracks().forEach(t => t.stop());
         closePeer();
         button.disabled = true;
         statusEl.textContent = 'This account was opened on another device';
@@ -176,7 +1013,7 @@
           } else {
             liveStream = stream;
           }
-          liveStream.getTracks().forEach(t => pc.addTrack(t, liveStream));
+          if (liveStream) liveStream.getTracks().forEach(t => pc.addTrack(t, liveStream));
           pc.onicecandidate = e => {
             if (e.candidate) socket.emit('rtc-ice', { targetSocketId: adminId, workerId: state.id, candidate: e.candidate });
           };

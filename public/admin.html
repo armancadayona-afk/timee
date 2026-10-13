@@ -3,164 +3,221 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Kitty Timer | Admin Panel</title>
+  <title>Hello Kitty Admin Console</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800&family=Pacifico&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css">
   <style>
-    .wrap { width: min(1200px, 100%); margin: 0 auto; padding: 24px 18px 44px; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; }
-    .card { padding: 20px; }
-    video { width: 100%; background: #000; border-radius: 16px; aspect-ratio: 4/3; border: 2px solid var(--line); }
-    .timer { font-size: 38px; margin: 12px 0 2px; font-family: 'Fredoka', cursive; color: var(--primary); }
-    .est-pay { font-size: 15px; font-weight: 800; color: var(--success); margin-bottom: 8px; }
-    .history { white-space: pre-wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
-    .tools { display: flex; gap: 12px; margin: 16px 0; }
-    .controls-group { display: flex; gap: 8px; margin: 8px 0; flex-wrap: wrap; }
-    .controls-group .btn { flex: 1; min-width: 90px; }
-
-    @keyframes pulse-red {
-      0% { background-color: #ff3366; }
-      50% { background-color: #d90429; }
-      100% { background-color: #ff3366; }
+    :root {
+      --hk-bg: #ffe4ec;
+      --hk-card-bg: rgba(255, 255, 255, 0.9);
+      --hk-border: #ffa8c5;
+      --hk-border-soft: #ffd0e0;
+      --hk-pink-dark: #ff2a6d;
+      --hk-pink-mid: #ff5c8a;
+      --hk-text: #5a2a3a;
+      --hk-muted: #a06b7d;
+      --hk-shadow: 0 10px 30px rgba(255, 92, 138, 0.2);
     }
-    .btn-record-active { animation: pulse-red 1.5s infinite; color: #fff !important; }
 
-    .modal-overlay {
-      display: none;
-      position: fixed;
-      top: 0; left: 0; right: 0; bottom: 0;
-      background: rgba(74, 40, 53, 0.65);
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      min-height: 100vh;
+      background-color: #ffd6e5;
+      background-image:
+        radial-gradient(#ff9ebb 1.5px, transparent 1.5px),
+        radial-gradient(#ff7599 1.5px, #ffd6e5 1.5px);
+      background-size: 30px 30px;
+      background-position: 0 0, 15px 15px;
+      font-family: 'Nunito', system-ui, -apple-system, sans-serif;
+      color: var(--hk-text);
+      padding: 20px 16px 60px;
+    }
+
+    .wrap {
+      width: min(1100px, 100%);
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .hk-admin-header {
+      display: flex;
       align-items: center;
-      justify-content: center;
-      z-index: 9999;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      background: var(--hk-card-bg);
+      backdrop-filter: blur(12px);
+      border: 3px solid #ffffff;
+      outline: 2px solid var(--hk-border);
+      border-radius: 24px;
+      padding: 16px 24px;
+      box-shadow: var(--hk-shadow);
     }
-    .modal-content {
+
+    .hk-title {
+      font-family: 'Pacifico', cursive;
+      font-size: 32px;
+      color: var(--hk-pink-dark);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .hk-card {
+      background: var(--hk-card-bg);
+      backdrop-filter: blur(12px);
+      border: 3px solid #ffffff;
+      outline: 2px solid var(--hk-border);
+      border-radius: 24px;
+      padding: 20px;
+      box-shadow: var(--hk-shadow);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 20px;
+    }
+
+    .worker-card {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .worker-video-container {
+      position: relative;
+      background: #222;
+      border-radius: 18px;
+      overflow: hidden;
+      border: 2px solid var(--hk-border);
+      aspect-ratio: 4/3;
+    }
+
+    video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .timer-display {
+      font-family: 'Fredoka', cursive;
+      font-size: 34px;
+      color: var(--hk-pink-dark);
+      text-align: center;
+    }
+
+    .hk-btn {
+      background: linear-gradient(180deg, #ff6b95 0%, #ff1f62 100%);
+      color: #ffffff;
+      border: 2px solid #ffffff;
+      border-radius: 18px;
+      padding: 8px 16px;
+      font-family: 'Fredoka', sans-serif;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(255, 31, 98, 0.25);
+      transition: all 0.2s;
+    }
+
+    .hk-btn.secondary {
       background: #ffffff;
-      border: 2px solid var(--line);
-      border-radius: var(--radius-md);
-      padding: 24px;
-      max-width: 420px;
-      width: 90%;
-      color: var(--text);
+      color: var(--hk-pink-dark);
+      border: 2px solid var(--hk-border);
     }
-    h1 { font-family: 'Fredoka', cursive; color: var(--primary); }
+
+    .hk-btn:hover {
+      transform: translateY(-1px);
+    }
+
+    .controls-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .controls-row .hk-btn {
+      flex: 1;
+      min-width: 90px;
+    }
+
+    input, select, textarea {
+      width: 100%;
+      padding: 8px 12px !important;
+      border-radius: 14px !important;
+      border: 2px solid var(--hk-border) !important;
+      background: #ffffff !important;
+      font-family: inherit;
+    }
   </style>
 </head>
 <body>
-  <main class="wrap">
-    <div style="display: flex; align-items: center; gap: 10px;">
-      <span style="font-size: 32px;">🎀</span>
-      <h1>Work Timer Admin</h1>
-    </div>
-    <p class="muted">Live worker cameras, screen sharing, tasks & SMS wake-up console.</p>
+
+  <div class="wrap">
     
-    <div class="tools">
-      <button class="btn secondary" id="logout">Log Out</button>
-    </div>
-    <p id="message" class="muted">Connecting…</p>
-    
+    <!-- Admin Header Bar -->
+    <header class="hk-admin-header">
+      <div class="hk-title">
+        <span>🎀</span> Hello Kitty Admin Console 💕
+      </div>
+      <button id="logoutBtn" class="hk-btn secondary">Log Out ➔</button>
+    </header>
+
+    <p id="status" style="font-weight: 700; font-size: 13px; color: var(--hk-muted);">Connecting live worker sessions…</p>
+
+    <!-- Workers Live Feeds Section -->
     <section id="workers" class="grid"></section>
 
-    <!-- Tasks Management Section -->
-    <section class="card" style="margin-top: 24px;">
-      <h2>Tasks Management</h2>
-      <p class="muted" style="margin-bottom: 16px;">Assign and review worker tasks in real-time.</p>
-
+    <!-- Task Assignment & Management Section -->
+    <section class="hk-card">
+      <h2 style="font-family: 'Fredoka', cursive; color: var(--hk-pink-dark); margin-bottom: 12px;">Tasks & Assign Console 📋🎀</h2>
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;">
-        <div style="background: var(--panel-2); padding: 16px; border-radius: 12px; border: 1px solid var(--line);">
-          <h3>Assign New Task</h3>
-          <form id="taskForm" onsubmit="event.preventDefault(); assignTask();">
-            <label>Assign Task To:
-              <select id="taskWorkerId" style="width: 100%; margin-top: 4px;">
+        <div>
+          <form id="taskForm" onsubmit="event.preventDefault(); assignTask();" style="display: flex; flex-direction: column; gap: 10px;">
+            <label style="font-size: 13px; font-weight: 800;">Assign Task To:
+              <select id="taskWorkerId" aria-label="Worker Selection">
                 <option value="worker1">Worker 1</option>
                 <option value="worker2">Worker 2</option>
                 <option value="worker3">Worker 3</option>
               </select>
             </label>
 
-            <label>Task Title:
-              <input type="text" id="taskTitle" placeholder="e.g. Update listing photos" required style="width: 100%;">
+            <label style="font-size: 13px; font-weight: 800;">Task Title:
+              <input type="text" id="taskTitle" placeholder="e.g. Clean workspace" required aria-label="Task Title">
             </label>
 
-            <label>Task Description:
-              <textarea id="taskDesc" rows="3" placeholder="Enter task instructions..." style="width: 100%;"></textarea>
+            <label style="font-size: 13px; font-weight: 800;">Instructions:
+              <textarea id="taskDesc" rows="3" placeholder="Task details..." aria-label="Task Description"></textarea>
             </label>
 
-            <div style="display: flex; gap: 10px;">
-              <label style="flex: 1;">Due Date:
-                <input type="date" id="taskDueDate" style="width: 100%;">
-              </label>
-              <label style="flex: 1;">Due Time:
-                <input type="time" id="taskDueTime" style="width: 100%;">
-              </label>
-            </div>
-
-            <button type="submit" class="btn" style="width: 100%; margin-top: 14px;">ASSIGN TASK</button>
+            <button type="submit" class="hk-btn">Assign Task 🌸</button>
           </form>
         </div>
-
         <div>
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-            <h3>Task List</h3>
-            <select id="filterTaskWorker" onchange="loadTasks()">
-              <option value="">All Workers</option>
-              <option value="worker1">Worker 1</option>
-              <option value="worker2">Worker 2</option>
-              <option value="worker3">Worker 3</option>
-            </select>
-          </div>
-          <div id="adminTaskList" style="display: grid; gap: 12px; max-height: 480px; overflow-y: auto;">
-            <p class="muted">Loading tasks…</p>
+          <h3 style="font-family: 'Fredoka', cursive; color: var(--hk-pink-dark); margin-bottom: 8px;">Active Worker Tasks</h3>
+          <div id="adminTasksList" style="max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;">
+            <p style="font-size: 12px; color: var(--hk-muted);">Loading tasks…</p>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- Chat Section -->
-    <section class="card" style="margin-top: 24px;">
-      <h2>Private Chat</h2>
-      <p class="muted" style="margin-bottom: 16px;">Direct private message threads with each worker.</p>
-
-      <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 16px;">
-        <label style="margin: 0;">Select Worker: </label>
-        <select id="chatWorkerSelect" onchange="switchChatWorker(this.value)">
-          <option value="worker1">Worker 1</option>
-          <option value="worker2">Worker 2</option>
-          <option value="worker3">Worker 3</option>
-        </select>
-      </div>
-
-      <div id="adminChatContainer" style="background: var(--panel-2); border: 2px solid var(--line); border-radius: 12px; height: 320px; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px;"></div>
-
-      <form id="adminChatForm" onsubmit="event.preventDefault(); sendAdminChat();" style="display: flex; gap: 10px; margin-top: 12px;">
-        <input type="text" id="adminChatInput" placeholder="Type a message..." style="flex: 1; margin: 0;" required autocomplete="off">
-        <button type="submit" class="btn" style="min-width: 90px;">Send</button>
-      </form>
-    </section>
-  </main>
-
-  <!-- Reset Confirmation Modal -->
-  <div id="resetModal" class="modal-overlay">
-    <div class="modal-content">
-      <h3 id="resetModalTitle" style="color: var(--danger); margin-bottom: 12px;">Reset Worker Time?</h3>
-      <p id="resetModalBody" style="font-size: 14px; margin-bottom: 16px; line-height: 1.5;"></p>
-      <div style="display: flex; gap: 10px; justify-content: flex-end;">
-        <button class="btn secondary" onclick="closeResetModal()">CANCEL</button>
-        <button class="btn danger" id="resetModalConfirmBtn">RESET TIME</button>
-      </div>
-    </div>
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script>
-    let workers = [], socket, iceServers = [];
-    const peers = new Map(), requested = new Map(), activeRecorders = new Map();
-    const liveModes = new Map();
-    const workerAudio = new Map();
-    const pingStatusMap = new Map();
-    let pendingResetWorkerId = null;
+    const logoutBtn = document.getElementById('logoutBtn');
+    const statusEl = document.getElementById('status');
+    const workersContainer = document.getElementById('workers');
+    const adminTasksList = document.getElementById('adminTasksList');
+
+    let socket, workers = [];
 
     async function api(path, body) {
       const r = await fetch(path, {
@@ -168,428 +225,68 @@
         headers: { 'Content-Type': 'application/json' },
         body: body ? JSON.stringify(body) : undefined
       });
-      if (r.status === 401 || r.status === 403) {
-        location.href = '/';
-        throw Error('Sign in required');
-      }
       const d = await r.json();
       if (!r.ok) throw Error(d.error || 'Request failed');
       return d;
     }
 
-    function fmt(ms) {
-      const t = Math.floor(Math.max(0, ms) / 1000);
-      return [Math.floor(t / 3600), Math.floor(t / 60) % 60, t % 60].map(x => String(x).padStart(2, '0')).join(':');
-    }
-
-    function calcPay(ms) {
-      const hours = Math.max(0, ms) / 3600000.0;
-      return (hours * 7.0).toFixed(2);
-    }
-
-    function formatLastSeen(timestamp) {
-      if (!timestamp) return 'Never';
-      const diffSec = Math.floor((Date.now() - timestamp) / 1000);
-      if (diffSec < 10) return 'Just now';
-      if (diffSec < 60) return `${diffSec}s ago`;
-      const diffMin = Math.floor(diffSec / 60);
-      if (diffMin < 60) return `${diffMin}m ago`;
-      const diffHours = Math.floor(diffMin / 60);
-      return `${diffHours}h ago`;
-    }
-
-    function closePeer(id) {
-      if (activeRecorders.has(id)) {
-        const session = activeRecorders.get(id);
-        activeRecorders.delete(id);
-        try { session.recorder.stop(); } catch (_) {}
-      }
-      const p = peers.get(id);
-      if (p?.pc) p.pc.close();
-      peers.delete(id);
-      const v = document.getElementById('video-' + id);
-      if (v) v.srcObject = null;
-      requested.delete(id);
-      liveModes.set(id, 'NONE');
-    }
-
-    function toggleRecord(id, name) {
-      const card = document.getElementById(id);
-      const btn = card?.querySelector('.btn-record');
-      const video = document.getElementById('video-' + id);
-
-      if (activeRecorders.has(id)) {
-        const session = activeRecorders.get(id);
-        activeRecorders.delete(id);
-        try { session.recorder.stop(); } catch (_) {}
-        if (btn) {
-          btn.textContent = '● RECORD';
-          btn.classList.remove('btn-record-active');
-          btn.style.background = '';
-        }
-        return;
-      }
-
-      const stream = video?.srcObject;
-      if (!stream || !stream.getTracks().length) {
-        alert('No active video stream to record. Start the live camera stream first.');
-        return;
-      }
-
-      const chunks = [];
-      const selectedType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus') ? 'video/webm;codecs=vp9,opus' : 'video/webm';
-      let recorder;
-      try {
-        recorder = new MediaRecorder(stream, { mimeType: selectedType });
-      } catch (e) {
-        alert('Recording error: ' + e.message);
-        return;
-      }
-
-      recorder.ondataavailable = e => { if (e.data && e.data.size > 0) chunks.push(e.data); };
-      recorder.onstop = () => {
-        if (!chunks.length) return;
-        const blob = new Blob(chunks, { type: recorder.mimeType || 'video/webm' });
-        const now = new Date();
-        const pad = n => String(n).padStart(2, '0');
-        const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
-        const fileName = `WorkTimer_${(name || 'Worker').replace(/[^a-zA-Z0-9_-]/g, '')}_${dateStr}.webm`;
-
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = fileName;
-        document.body.appendChild(a);
-        a.click();
-        setTimeout(() => document.body.removeChild(a), 1000);
-
-        if (card) card.querySelector('.live').textContent = 'Recording saved: ' + fileName;
-      };
-
-      recorder.start(1000);
-      activeRecorders.set(id, { recorder, chunks });
-      if (btn) btn.classList.add('btn-record-active');
-      if (card) card.querySelector('.live').textContent = '● RECORDING LIVE BROADCAST…';
-    }
-
-    function openResetModal(workerId, name, currentTimeStr) {
-      pendingResetWorkerId = workerId;
-      document.getElementById('resetModalTitle').textContent = `Reset ${name} Time?`;
-      document.getElementById('resetModalBody').innerHTML = `Current recorded time: <strong>${currentTimeStr}</strong><br><br>Reset timer to <strong>00:00:00</strong>?`;
-      document.getElementById('resetModal').style.display = 'flex';
-    }
-
-    function closeResetModal() {
-      pendingResetWorkerId = null;
-      document.getElementById('resetModal').style.display = 'none';
-    }
-
-    document.getElementById('resetModalConfirmBtn').onclick = () => {
-      if (pendingResetWorkerId) socket.emit('admin-reset-time', { workerId: pendingResetWorkerId });
-      closeResetModal();
-    };
-
-    function update() {
-      for (const w of workers) {
-        let c = document.getElementById(w.id);
-        if (!c) {
-          c = document.createElement('article');
-          c.id = w.id;
-          c.className = 'card worker-card';
-          c.innerHTML = `
-            <h2></h2>
-            <video autoplay playsinline muted></video>
-            <div class="timer">00:00:00</div>
-            <div class="est-pay">Estimated Pay: $0.00</div>
-            <p class="state"></p>
-            <p class="ping-status" style="font-size: 12px; color: var(--muted); margin: 2px 0 6px;"></p>
-            <p class="live" style="min-height: 20px; font-weight: 700; color: var(--primary);"></p>
-
-            <div class="controls-group">
-              <button class="btn btn-sm btn-camera-start">Start Camera</button>
-              <button class="btn btn-sm secondary btn-camera-stop">Stop Camera</button>
-            </div>
-            <div class="controls-group">
-              <button class="btn btn-sm secondary btn-front">Front Cam</button>
-              <button class="btn btn-sm secondary btn-back">Back Cam</button>
-            </div>
-            <div class="controls-group">
-              <button class="btn btn-sm btn-screen-start">Start Screen</button>
-              <button class="btn btn-sm danger btn-screen-stop">Stop Screen</button>
-            </div>
-            <div class="controls-group">
-              <button class="btn btn-sm btn-audio">AUDIO OFF</button>
-              <button class="btn btn-sm secondary btn-ping">PING</button>
-            </div>
-            <div class="controls-group">
-              <button class="btn btn-sm btn-record" style="background: var(--success); border-color: var(--success);">● RECORD</button>
-            </div>
-            <div class="controls-group">
-              <button class="btn btn-sm btn-timer-action" style="flex:2;">Start Time</button>
-              <button class="btn btn-sm secondary btn-timer-stop">Stop Time</button>
-            </div>
-            <div class="controls-group">
-              <button class="btn btn-sm danger btn-reset-time">RESET</button>
-              <button class="btn btn-sm secondary btn-history">History</button>
-            </div>
-            <p class="history"></p>
-          `;
-          c.querySelector('video').id = 'video-' + w.id;
-          document.getElementById('workers').append(c);
-
-          const workerId = w.id;
-
-          c.querySelector('.btn-audio').onclick = () => {
-            const isAudioOn = !workerAudio.get(workerId);
-            workerAudio.set(workerId, isAudioOn);
-            const btnAudio = c.querySelector('.btn-audio');
-            btnAudio.textContent = isAudioOn ? 'AUDIO ON' : 'AUDIO OFF';
-            btnAudio.style.background = isAudioOn ? 'var(--success)' : '';
-            const video = document.getElementById('video-' + workerId);
-            if (video) { video.muted = !isAudioOn; if (isAudioOn) video.play().catch(()=>{}); }
-          };
-
-          c.querySelector('.btn-ping').onclick = () => {
-            pingStatusMap.set(workerId, 'Pinging worker…');
-            c.querySelector('.ping-status').textContent = 'Pinging worker…';
-            socket.emit('admin-ping-worker', { workerId, nonce: 'ping_' + Date.now() });
-          };
-
-          c.querySelector('.btn-front').onclick = () => socket.emit('admin-switch-camera', { workerId, camera: 'front' });
-          c.querySelector('.btn-back').onclick = () => socket.emit('admin-switch-camera', { workerId, camera: 'back' });
-          c.querySelector('.btn-record').onclick = () => {
-            const current = workers.find(x => x.id === workerId);
-            if (current) toggleRecord(workerId, current.name);
-          };
-
-          c.querySelector('.btn-camera-start').onclick = () => {
-            requested.set(workerId, Date.now());
-            socket.emit('admin-live-request', { workerId, mode: 'camera' });
-          };
-          c.querySelector('.btn-camera-stop').onclick = () => {
-            socket.emit('admin-live-stop', { workerId });
-            closePeer(workerId);
-          };
-
-          c.querySelector('.btn-screen-start').onclick = () => {
-            requested.set(workerId, Date.now());
-            socket.emit('admin-live-request', { workerId, mode: 'screen' });
-          };
-          c.querySelector('.btn-screen-stop').onclick = () => {
-            socket.emit('admin-live-stop', { workerId });
-            closePeer(workerId);
-          };
-
-          c.querySelector('.btn-timer-action').onclick = () => {
-            const current = workers.find(x => x.id === workerId);
-            if (!current) return;
-            const action = current.status === 'WORKING' ? 'pause' : current.status === 'PAUSED' ? 'resume' : 'start';
-            socket.emit('admin-timer-control', { workerId, action });
-          };
-
-          c.querySelector('.btn-timer-stop').onclick = () => socket.emit('admin-timer-control', { workerId, action: 'stop' });
-
-          c.querySelector('.btn-reset-time').onclick = () => {
-            const current = workers.find(x => x.id === workerId);
-            if (!current) return;
-            const elapsed = (current.accumulatedMs || 0) + (current.status === 'WORKING' && current.startedAt ? Date.now() - current.startedAt : 0);
-            openResetModal(workerId, current.name, fmt(elapsed));
-          };
-
-          c.querySelector('.btn-history').onclick = async () => {
-            try {
-              const d = await api('/api/work-sessions/' + workerId);
-              c.querySelector('.history').textContent = d.sessions.map(s =>
-                new Date(s.startedAt).toLocaleString() + ' | ' + (s.endedAt ? fmt(s.durationMs) : 'Active shift')
-              ).join('\n') || 'No completed shifts';
-            } catch (e) { c.querySelector('.history').textContent = e.message; }
-          };
-        }
-
-        c.querySelector('h2').textContent = w.name;
-        const connState = w.online ? 'Connected' : (w.status === 'WORKING' || w.status === 'PAUSED' ? 'Reconnecting...' : 'Offline');
-        c.querySelector('.state').textContent = w.status + ' · ' + connState;
-        const elapsedMs = (w.accumulatedMs || 0) + (w.status === 'WORKING' && w.startedAt ? Date.now() - w.startedAt : 0);
-        c.querySelector('.timer').textContent = fmt(elapsedMs);
-        c.querySelector('.est-pay').textContent = `Estimated Pay: $${calcPay(elapsedMs)}`;
-        c.querySelector('.ping-status').textContent = pingStatusMap.get(w.id) || (w.lastSeenAt ? `Last seen: ${formatLastSeen(w.lastSeenAt)}` : '');
-
-        const btnCamStart = c.querySelector('.btn-camera-start');
-        const btnCamStop = c.querySelector('.btn-camera-stop');
-        const btnScreenStart = c.querySelector('.btn-screen-start');
-        const btnScreenStop = c.querySelector('.btn-screen-stop');
-
-        btnCamStart.disabled = !w.online || !w.captureReady || w.liveMode === 'CAMERA';
-        btnCamStop.disabled = !w.online || (w.liveMode !== 'CAMERA' && w.liveMode !== 'CAMERA_PENDING');
-        btnScreenStart.disabled = !w.online || w.liveMode === 'SCREEN';
-        btnScreenStop.disabled = !w.online || (w.liveMode !== 'SCREEN' && w.liveMode !== 'SCREEN_PENDING');
-
-        const btnTimerAction = c.querySelector('.btn-timer-action');
-        btnTimerAction.textContent = w.status === 'WORKING' ? 'Pause Time' : w.status === 'PAUSED' ? 'Resume Time' : 'Start Time';
-        btnTimerAction.disabled = !w.online;
-        c.querySelector('.btn-timer-stop').disabled = !w.online || (w.status !== 'WORKING' && w.status !== 'PAUSED');
-
-        if (!w.online) closePeer(w.id);
-      }
-    }
-
-    document.getElementById('logout').onclick = async () => {
+    logoutBtn.onclick = async () => {
       await api('/api/logout', {});
       location.href = '/';
     };
 
-    (async () => {
-      const me = await api('/api/me');
-      if (me.user.role !== 'admin') { location.href = '/worker.html'; return; }
-      iceServers = (await api('/api/rtc-config')).iceServers;
-      socket = io();
-
-      socket.on('connect', () => {
-        document.getElementById('message').textContent = 'Connected 🌸';
-        for (const id of [...peers.keys()]) closePeer(id);
-        requested.clear();
-        update();
-      });
-
-      socket.on('workers-state', data => { workers = data; update(); });
-
-      // --- WAKE UP TOAST ALERT NOTIFICATION ---
-      socket.on('worker-wakeup', data => {
-        const toast = document.createElement('div');
-        toast.className = 'wakeup-toast';
-        toast.innerHTML = `
-          <span style="font-size: 28px;">🎀</span>
-          <div>
-            <strong style="color: var(--primary);">Wake-Up Triggered!</strong>
-            <p style="font-size: 13px; margin: 0;">Via <strong>${data.channel}</strong> (${data.sender}): "${data.message}"</p>
-          </div>
-        `;
-        document.body.appendChild(toast);
-        const sound = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
-        sound.play().catch(()=>{});
-        setTimeout(() => toast.remove(), 7000);
-      });
-
-      socket.on('worker-ping-result', p => {
-        pingStatusMap.set(p.workerId, p.ok ? 'Last response: Just now' : 'No response');
-        update();
-      });
-
-      socket.on('rtc-offer', async p => {
-        liveModes.set(p.workerId, p.mode === 'screen' ? 'SCREEN' : 'CAMERA');
-        closePeer(p.workerId);
-        const pc = new RTCPeerConnection({ iceServers });
-        peers.set(p.workerId, { pc, ice: [] });
-
-        pc.ontrack = e => {
-          const v = document.getElementById('video-' + p.workerId);
-          v.srcObject = e.streams[0] || new MediaStream([e.track]);
-          v.muted = !workerAudio.get(p.workerId);
-          v.play().catch(()=>{});
-        };
-        pc.onicecandidate = e => {
-          if (e.candidate) socket.emit('rtc-ice', { targetSocketId: p.workerSocketId, workerId: p.workerId, candidate: e.candidate });
-        };
-        await pc.setRemoteDescription(p.offer);
-        await pc.setLocalDescription(await pc.createAnswer());
-        socket.emit('rtc-answer', { targetSocketId: p.workerSocketId, workerId: p.workerId, answer: pc.localDescription });
-      });
-
-      socket.on('rtc-ice', async p => {
-        const entry = peers.get(p.workerId);
-        if (entry?.pc?.remoteDescription) await entry.pc.addIceCandidate(p.candidate);
-      });
-
-      socket.on('task:assigned', () => loadTasks());
-      socket.on('task:submitted', () => loadTasks());
-      socket.on('task:approved', () => loadTasks());
-      socket.on('task:returned', () => loadTasks());
-      socket.on('task:updated', () => loadTasks());
-      socket.on('chat:message', msg => { if (msg.workerId === activeChatWorkerId) loadChat(); });
-
-      loadTasks();
-      loadChat();
-
-      setInterval(() => {
-        for (const [id, at] of requested) if (Date.now() - at > 30000) requested.delete(id);
-        update();
-      }, 500);
-    })().catch(e => document.getElementById('message').textContent = e.message);
-
-    // Tasks Functions
     async function loadTasks() {
-      const filter = document.getElementById('filterTaskWorker')?.value || '';
       try {
-        const data = await api(filter ? `/api/tasks?workerId=${filter}` : '/api/tasks');
-        renderTasks(data.tasks || []);
+        const res = await api('/api/tasks');
+        const tasks = res.tasks || [];
+        adminTasksList.innerHTML = '';
+        if (tasks.length === 0) {
+          adminTasksList.innerHTML = '<p style="font-size:12px; color:var(--hk-muted);">No assigned tasks yet.</p>';
+          return;
+        }
+        tasks.forEach(t => {
+          const div = document.createElement('div');
+          div.style.background = '#ffffff';
+          div.style.border = '1.5px solid var(--hk-border)';
+          div.style.borderRadius = '14px';
+          div.style.padding = '8px 12px';
+          div.innerHTML = `
+            <div style="font-weight:800; font-size:13px; color:var(--hk-pink-dark);">[${t.status}] ${t.title}</div>
+            <div style="font-size:12px; color:var(--hk-muted);">${t.description || ''}</div>`;
+          adminTasksList.appendChild(div);
+        });
       } catch (e) {
-        document.getElementById('adminTaskList').innerHTML = `<p class="muted">Error: ${e.message}</p>`;
+        console.error('Error loading tasks:', e);
       }
-    }
-
-    function renderTasks(tasks) {
-      const container = document.getElementById('adminTaskList');
-      if (!container) return;
-      if (!tasks.length) { container.innerHTML = `<p class="muted">No tasks found.</p>`; return; }
-      container.innerHTML = tasks.slice().reverse().map(t => `
-        <div style="background: var(--panel-2); padding: 12px; border-radius: 12px; border: 1px solid var(--line);">
-          <div style="display: flex; justify-content: space-between;">
-            <strong>${t.title}</strong>
-            <span style="font-size: 11px; font-weight: 800; color: var(--primary);">${t.status}</span>
-          </div>
-          ${t.description ? `<p style="font-size: 13px; margin-top: 6px;">${t.description}</p>` : ''}
-          ${t.status === 'SUBMITTED' ? `
-            <div style="margin-top: 8px; display: flex; gap: 8px;">
-              <button class="btn btn-sm" onclick="approveTask('${t.taskId || t.id}')">Approve</button>
-              <button class="btn btn-sm secondary" onclick="returnTaskPrompt('${t.taskId || t.id}')">Return</button>
-            </div>
-          ` : ''}
-        </div>
-      `).join('');
     }
 
     async function assignTask() {
       const workerId = document.getElementById('taskWorkerId').value;
       const title = document.getElementById('taskTitle').value;
       const description = document.getElementById('taskDesc').value;
-      const dateVal = document.getElementById('taskDueDate').value;
-      const timeVal = document.getElementById('taskDueTime').value;
-      const dueAt = dateVal ? dateVal + (timeVal ? ' ' + timeVal : '') : null;
+      try {
+        await api('/api/tasks', { workerId, title, description });
+        alert('Task assigned successfully! 💕');
+        document.getElementById('taskTitle').value = '';
+        document.getElementById('taskDesc').value = '';
+        loadTasks();
+      } catch (e) {
+        alert('Failed assigning task: ' + e.message);
+      }
+    }
 
-      await api('/api/tasks', { workerId, title, description, dueAt });
-      document.getElementById('taskTitle').value = '';
-      document.getElementById('taskDesc').value = '';
+    (async () => {
+      const me = await api('/api/me');
+      if (me.user.role !== 'admin') {
+        location.href = '/worker.html';
+        return;
+      }
+      statusEl.textContent = 'Admin session active 🌸';
       loadTasks();
-    }
 
-    async function approveTask(id) { await api(`/api/tasks/${id}/approve`, {}); loadTasks(); }
-    async function returnTaskPrompt(id) {
-      const note = prompt('Admin note:');
-      if (note !== null) { await api(`/api/tasks/${id}/return`, { adminNote: note }); loadTasks(); }
-    }
-
-    // Chat Functions
-    let activeChatWorkerId = 'worker1';
-    function switchChatWorker(id) { activeChatWorkerId = id; loadChat(); }
-    async function loadChat() {
-      const d = await api(`/api/chat/${activeChatWorkerId}`);
-      const container = document.getElementById('adminChatContainer');
-      container.innerHTML = (d.messages || []).map(m => `
-        <div style="align-self: ${m.senderRole === 'ADMIN' ? 'flex-end' : 'flex-start'}; background: ${m.senderRole === 'ADMIN' ? 'var(--primary-soft)' : '#fff'}; border: 1px solid var(--line); padding: 8px 12px; border-radius: 12px; max-width: 75%;">
-          <div style="font-size: 11px; color: var(--muted);">${m.senderRole} · ${new Date(m.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>
-          <div style="font-size: 13px;">${m.message}</div>
-        </div>
-      `).join('');
-      container.scrollTop = container.scrollHeight;
-    }
-
-    async function sendAdminChat() {
-      const input = document.getElementById('adminChatInput');
-      const text = input.value.trim();
-      if (!text) return;
-      input.value = '';
-      await api(`/api/chat/${activeChatWorkerId}/messages`, { message: text });
-      loadChat();
-    }
+      socket = io();
+      socket.on('task:updated', () => loadTasks());
+    })();
   </script>
 </body>
 </html>

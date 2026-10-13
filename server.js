@@ -534,6 +534,52 @@ app.post('/api/login', loginRateLimit, (req, res) => {
   });
 });
 
+// --- Device / User Registration API ---
+app.post('/api/register', (req, res) => {
+  const { username, password, name, role } = req.body || {};
+  const cleanUsername = String(username || '').trim().toLowerCase();
+  const cleanPassword = String(password || '').trim();
+  const cleanName = String(name || '').trim() || cleanUsername;
+  const cleanRole = (role === 'admin') ? 'admin' : 'worker';
+
+  if (!cleanUsername || !cleanPassword) {
+    return res.status(400).json({ ok: false, error: 'Username and password are required' });
+  }
+
+  if (users.some(u => u.username.toLowerCase() === cleanUsername)) {
+    return res.status(400).json({ ok: false, error: 'Username already registered' });
+  }
+
+  const newId = cleanRole === 'worker' ? 'worker_' + Date.now().toString(36) : null;
+  const newUser = {
+    role: cleanRole,
+    id: newId,
+    username: cleanUsername,
+    password: cleanPassword,
+    name: cleanName
+  };
+
+  users.push(newUser);
+
+  if (cleanRole === 'worker') {
+    states.set(newId, initialWorkerState(newUser));
+    broadcastStates();
+  }
+
+  req.session.user = {
+    role: newUser.role,
+    id: newUser.id,
+    username: newUser.username,
+    name: newUser.name
+  };
+
+  res.json({
+    ok: true,
+    user: req.session.user,
+    redirect: newUser.role === 'admin' ? '/admin.html' : '/worker.html'
+  });
+});
+
 app.post('/api/logout', requireAuth, (req, res) => {
   const user = req.session.user;
 
