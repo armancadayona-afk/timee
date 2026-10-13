@@ -28,7 +28,7 @@
       </div>
       <div class="eyebrow">Kitty Work Timer</div>
       <h1 id="loginTitle">Welcome Back</h1>
-      <p class="muted">Administrator sign-in. Workers register through the Worker app using a Device ID.</p>
+      <p class="muted">Sign in with your assigned admin or worker account.</p>
       
       <form id="loginForm">
         <label>Username
@@ -57,9 +57,7 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: form.username.value, password: form.password.value })
       });
-      const contentType = response.headers.get('content-type') || '';
-       if (!contentType.includes('application/json')) throw new Error(`Login API returned HTTP ${response.status} instead of JSON. Check server deployment.`);
-       const data = await response.json();
+      const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Login failed');
       location.href = data.redirect;
     } catch (error) {

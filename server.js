@@ -72,13 +72,35 @@ const sessionMiddleware = session({
 app.use(sessionMiddleware);
 io.engine.use(sessionMiddleware);
 
-// Only administrators use password login. Workers enroll through Device ID approval.
-const users = [{
-  role: 'admin',
-  username: process.env.ADMIN_USERNAME || 'admin',
-  password: process.env.ADMIN_PASSWORD || 'admin123',
-  name: process.env.ADMIN_NAME || 'Administrator'
-}];
+const users = [
+  {
+    role: 'admin',
+    username: process.env.ADMIN_USERNAME || 'admin',
+    password: process.env.ADMIN_PASSWORD || 'admin123',
+    name: process.env.ADMIN_NAME || 'Administrator'
+  },
+  {
+    role: 'worker',
+    id: 'worker1',
+    username: process.env.WORKER1_USERNAME || 'john',
+    password: process.env.WORKER1_PASSWORD || 'john123',
+    name: process.env.WORKER1_NAME || 'Worker 1'
+  },
+  {
+    role: 'worker',
+    id: 'worker2',
+    username: process.env.WORKER2_USERNAME || 'mark',
+    password: process.env.WORKER2_PASSWORD || 'mark123',
+    name: process.env.WORKER2_NAME || 'Worker 2'
+  },
+  {
+    role: 'worker',
+    id: 'worker3',
+    username: process.env.WORKER3_USERNAME || 'anne',
+    password: process.env.WORKER3_PASSWORD || 'anne123',
+    name: process.env.WORKER3_NAME || 'Worker 3'
+  }
+];
 
 const LIVE_NONE = 'NONE';
 const LIVE_CAMERA_PENDING = 'CAMERA_PENDING';
@@ -98,7 +120,6 @@ function initialWorkerState(user) {
     socketId: null,
     sessionId: null,
     lastSeenAt: null,
-    connectedAt: null,
 
     liveMode: LIVE_NONE,
     desiredLiveMode: LIVE_NONE,
@@ -118,11 +139,34 @@ function readJson(file, fallback) {
 const persisted = readJson(STATE_FILE, {});
 const workSessions = readJson(SESSIONS_FILE, []);
 const states = new Map();
-// Approved device states are restored after existing worker state initialization.
 
+for (const worker of users.filter(user => user.role === 'worker')) {
+  const state = initialWorkerState(worker);
+  const old = persisted[worker.id];
 
-// Legacy fixed worker accounts are no longer loaded into the live dashboard.
-// Historical state/session/chat files remain untouched for backup purposes.
+  if (old) {
+    if (Number.isFinite(Number(old.lastSeenAt))) {
+      state.lastSeenAt = Number(old.lastSeenAt);
+    }
+    if (['WORKING', 'PAUSED', 'STOPPED', 'OFFLINE'].includes(old.status)) {
+      state.status = old.status;
+    }
+    if (old.startedAt != null) {
+      state.startedAt = Number(old.startedAt);
+    }
+    if (Number.isFinite(Number(old.accumulatedMs))) {
+      state.accumulatedMs = Number(old.accumulatedMs);
+    }
+    if (old.sessionId) {
+      state.sessionId = String(old.sessionId);
+    }
+    if (['NONE', 'CAMERA', 'SCREEN'].includes(old.desiredLiveMode)) {
+      state.desiredLiveMode = old.desiredLiveMode;
+    }
+  }
+
+  states.set(worker.id, state);
+}
 
 function writeJsonAtomic(file, value) {
   const temp = `${file}.tmp`;
@@ -140,7 +184,6 @@ function persistState() {
       accumulatedMs: state.accumulatedMs,
       sessionId: state.sessionId,
       lastSeenAt: state.lastSeenAt,
-    connectedAt: state.online ? state.connectedAt : null,
       desiredLiveMode: state.desiredLiveMode || LIVE_NONE
     };
   }
@@ -429,105 +472,11 @@ app.get('/', (_req, res) => {
   res.sendFile(indexPath);
 });
 
-// Device registration store. Render deployment MUST use persistent disk for DATA_DIR.
-const DEVICE_FILE = path.join(DATA_DIR, 'devices.json');
-const devices = readJson(DEVICE_FILE, {});
-function saveDevices() { fs.writeFileSync(DEVICE_FILE, JSON.stringify(devices, null, 2)); }
-for (const d of Object.values(devices)) if (d.status === 'approved' && d.workerId) ensureDeviceState(d);
-
-
-function hashSecret(s) { return crypto.createHash('sha256').update(String(s)).digest('hex'); }
-function deviceForToken(token) {
-  if (!token || typeof token !== 'string' || token.length < 32) return null;
-  const digest = hashSecret(token);
-  return Object.values(devices).find(d => d.status === 'approved' && d.tokenHash && secureEqual(d.tokenHash, digest)) || null;
-}
-function deviceUser(d) { return {role:'worker', id:d.workerId, name:d.workerName || 'Worker', deviceId:d.deviceId}; }
-function ensureDeviceState(d) {
-  if (!states.has(d.workerId)) {
-    const state = initialWorkerState({id:d.workerId, name:d.workerName || 'Worker'});
-    const old = persisted[d.workerId];
-    if (old) {
-      if (['WORKING','PAUSED','STOPPED','OFFLINE'].includes(old.status)) state.status=old.status;
-      if (Number.isFinite(Number(old.accumulatedMs))) state.accumulatedMs=Number(old.accumulatedMs);
-      if (Number.isFinite(Number(old.startedAt))) state.startedAt=Number(old.startedAt);
-      if (old.sessionId) state.sessionId=String(old.sessionId);
-      if (Number.isFinite(Number(old.lastSeenAt))) state.lastSeenAt=Number(old.lastSeenAt);
-    }
-    states.set(d.workerId,state); persistState();
-  }
-  const state = states.get(d.workerId); state.name = d.workerName || 'Worker';
-}
-function validDeviceRequest(body) {
-  return body && typeof body.deviceId === 'string' && /^[a-zA-Z0-9-]{20,100}$/.test(body.deviceId)
-    && typeof body.registrationSecret === 'string' && body.registrationSecret.length >= 32 && body.registrationSecret.length <= 256;
-}
-app.post('/api/device-registration/request', loginRateLimit, (req,res) => {
-  if (!validDeviceRequest(req.body)) return res.status(400).json({error:'Invalid registration request'});
-  const {deviceId,registrationSecret} = req.body;
-  const existing = devices[deviceId];
-  if (existing && !secureEqual(existing.secretHash,hashSecret(registrationSecret))) return res.status(403).json({error:'Device already registered'});
-  if (existing) return res.json({ok:true,status:existing.status});
-  devices[deviceId] = {deviceId,secretHash:hashSecret(registrationSecret),status:'pending',createdAt:Date.now(),label:String(req.body.label || 'Worker Device').slice(0,80)};
-  saveDevices(); io.to('admins').emit('devices:updated');
-  res.json({ok:true,status:'pending'});
-});
-app.post('/api/device-registration/status', loginRateLimit, (req,res) => {
-  if (!validDeviceRequest(req.body)) return res.status(400).json({error:'Invalid request'});
-  const d=devices[req.body.deviceId];
-  if (!d || !secureEqual(d.secretHash,hashSecret(req.body.registrationSecret))) return res.status(404).json({error:'Registration not found'});
-  const response={ok:true,status:d.status};
-  if (d.status==='approved') {
-    // Issue a fresh token, replacing the previous one on each successful pairing.
-    const token=crypto.randomBytes(32).toString('hex'); d.tokenHash=hashSecret(token); saveDevices(); response.deviceToken=token;
-  }
-  res.json(response);
-});
-app.use((req,res,next) => {
-  const match=/^Bearer ([a-f0-9]{64})$/.exec(req.get('authorization') || '');
-  if (match) { const d=deviceForToken(match[1]); if(d) {ensureDeviceState(d);req.session.user=deviceUser(d);} }
-  next();
-});
-app.use((req,res,next) => {
-  const u=req.session?.user;
-  if (u?.role==='worker') {
-    const d=u.deviceId && devices[u.deviceId];
-    if (!d || d.status!=='approved' || d.workerId!==u.id) return res.status(403).json({error:'Device approval required'});
-  }
-  next();
-});
-app.get('/api/device-registration/me',requireRole('worker'),(req,res)=>{
-  const d=devices[req.session.user.deviceId];
-  if (!d || d.status!=='approved') return res.status(403).json({error:'Device not approved'});
-  res.json({ok:true,status:'approved',workerName:d.workerName,workerId:d.workerId});
-});
-app.get('/api/admin/devices',requireRole('admin'),(_req,res)=>res.json({ok:true,devices:Object.values(devices).map(({secretHash,tokenHash,...d})=>d)}));
-app.post('/api/admin/devices/:id/decision',requireRole('admin'),(req,res)=>{
-  const d=devices[req.params.id]; if(!d) return res.status(404).json({error:'Device not found'});
-  const action=String(req.body.action || '');
-  if(!['approve','reject','revoke'].includes(action)) return res.status(400).json({error:'Invalid decision'});
-  if(action==='approve') {
-    d.workerId=d.workerId || 'device_'+crypto.randomBytes(9).toString('hex');
-    d.workerName=String(req.body.workerName || d.workerName || 'Worker').trim().slice(0,80);
-    d.status='approved'; ensureDeviceState(d);
-  } else {
-    d.status=action==='reject'?'rejected':'revoked'; d.tokenHash=null;
-    if (d.workerId) {
-      const state=states.get(d.workerId);
-      if (state?.socketId) io.sockets.sockets.get(state.socketId)?.disconnect(true);
-      if (state) {state.online=false; state.connectedAt=null; state.socketId=null; stopWorkerLive(state,'revoked',false);}
-      states.delete(d.workerId);
-      persistState();
-    }
-  }
-  saveDevices(); io.to('admins').emit('devices:updated'); broadcastStates(); res.json({ok:true,status:d.status});
-});
-
 app.get('/health', (_req, res) => {
   res.json({
     ok: true,
     service: 'worker-timer-monitor',
-    version: '3.4.0-device-workers'
+    version: '3.3.0-three-workers'
   });
 });
 
@@ -535,7 +484,7 @@ app.post('/api/login', loginRateLimit, (req, res) => {
   const username = String(req.body.username || '').trim();
   const password = String(req.body.password || '');
 
-  const user = users.filter(candidate => candidate.role === 'admin').find(
+  const user = users.find(
     candidate =>
       secureEqual(candidate.username, username) &&
       secureEqual(candidate.password, password)
@@ -1011,11 +960,9 @@ app.use(
 );
 
 io.on('connection', socket => {
-  const d = deviceForToken(socket.handshake.auth?.deviceToken);
-  if (d) { ensureDeviceState(d); socket.request.session.user = deviceUser(d); }
   const user = socket.request.session?.user;
 
-  if (!user || (user.role==='worker' && (!user.deviceId || devices[user.deviceId]?.status!=='approved' || devices[user.deviceId]?.workerId!==user.id))) {
+  if (!user) {
     return socket.disconnect(true);
   }
 
@@ -1045,8 +992,6 @@ io.on('connection', socket => {
 
     clearDisconnectTimer(state);
     state.online = true;
-    state.connectedAt = Date.now();
-    socket.emit('worker-connection-status', {connectedAt:state.connectedAt, serverNow:Date.now()});
     state.captureReady = false;
     state.socketId = socket.id;
     state.lastSeenAt = Date.now();
@@ -1661,7 +1606,6 @@ io.on('connection', socket => {
 
         resetLiveState(state);
         state.online = false;
-        state.connectedAt = null;
         state.captureReady = false;
         state.socketId = null;
         persistState();

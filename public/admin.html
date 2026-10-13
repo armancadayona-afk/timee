@@ -13,7 +13,6 @@
     .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; }
     .card { padding: 20px; }
     video { width: 100%; background: #000; border-radius: 16px; aspect-ratio: 4/3; border: 2px solid var(--line); }
-    .connection-clock{font-size:12px;color:var(--primary);margin:3px 0 8px;} .connection-duration{font-variant-numeric:tabular-nums;font-size:15px;}
     .timer { font-size: 38px; margin: 12px 0 2px; font-family: 'Fredoka', cursive; color: var(--primary); }
     .est-pay { font-size: 15px; font-weight: 800; color: var(--success); margin-bottom: 8px; }
     .history { white-space: pre-wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
@@ -64,7 +63,6 @@
     
     <section id="workers" class="grid"></section>
 
-    <section class="card" style="margin-top:24px;padding:20px"><h2>🎀 Device Registration Approvals</h2><p id="deviceMsg" class="muted">Loading devices…</p><div id="deviceList"></div></section>
     <!-- Tasks Management Section -->
     <section class="card" style="margin-top: 24px;">
       <h2>Tasks Management</h2>
@@ -76,7 +74,10 @@
           <form id="taskForm" onsubmit="event.preventDefault(); assignTask();">
             <label>Assign Task To:
               <select id="taskWorkerId" style="width: 100%; margin-top: 4px;">
-                </select>
+                <option value="worker1">Worker 1</option>
+                <option value="worker2">Worker 2</option>
+                <option value="worker3">Worker 3</option>
+              </select>
             </label>
 
             <label>Task Title:
@@ -105,7 +106,10 @@
             <h3>Task List</h3>
             <select id="filterTaskWorker" onchange="loadTasks()">
               <option value="">All Workers</option>
-              </select>
+              <option value="worker1">Worker 1</option>
+              <option value="worker2">Worker 2</option>
+              <option value="worker3">Worker 3</option>
+            </select>
           </div>
           <div id="adminTaskList" style="display: grid; gap: 12px; max-height: 480px; overflow-y: auto;">
             <p class="muted">Loading tasks…</p>
@@ -122,7 +126,10 @@
       <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 16px;">
         <label style="margin: 0;">Select Worker: </label>
         <select id="chatWorkerSelect" onchange="switchChatWorker(this.value)">
-          </select>
+          <option value="worker1">Worker 1</option>
+          <option value="worker2">Worker 2</option>
+          <option value="worker3">Worker 3</option>
+        </select>
       </div>
 
       <div id="adminChatContainer" style="background: var(--panel-2); border: 2px solid var(--line); border-radius: 12px; height: 320px; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px;"></div>
@@ -282,9 +289,6 @@
     };
 
     function update() {
-      for (const card of document.querySelectorAll('#workers > article')) {
-        if (!workers.some(w=>w.id===card.id)) {closePeer(card.id);card.remove();}
-      }
       for (const w of workers) {
         let c = document.getElementById(w.id);
         if (!c) {
@@ -295,7 +299,6 @@
             <h2></h2>
             <video autoplay playsinline muted></video>
             <div class="timer">00:00:00</div>
-            <div class="connection-clock">Server connection: <strong class="connection-duration">00:00:00</strong></div>
             <div class="est-pay">Estimated Pay: $0.00</div>
             <p class="state"></p>
             <p class="ping-status" style="font-size: 12px; color: var(--muted); margin: 2px 0 6px;"></p>
@@ -405,8 +408,6 @@
         c.querySelector('h2').textContent = w.name;
         const connState = w.online ? 'Connected' : (w.status === 'WORKING' || w.status === 'PAUSED' ? 'Reconnecting...' : 'Offline');
         c.querySelector('.state').textContent = w.status + ' · ' + connState;
-        const elapsedConnection = w.online && Number.isFinite(w.connectedAt) ? Math.max(0,Date.now() - w.connectedAt) : 0;
-        c.querySelector('.connection-duration').textContent = fmt(elapsedConnection);
         const elapsedMs = (w.accumulatedMs || 0) + (w.status === 'WORKING' && w.startedAt ? Date.now() - w.startedAt : 0);
         c.querySelector('.timer').textContent = fmt(elapsedMs);
         c.querySelector('.est-pay').textContent = `Estimated Pay: $${calcPay(elapsedMs)}`;
@@ -449,7 +450,7 @@
         update();
       });
 
-      socket.on('workers-state', data => { workers = data; update(); syncWorkerSelectors(); });
+      socket.on('workers-state', data => { workers = data; update(); });
 
       // --- WAKE UP TOAST ALERT NOTIFICATION ---
       socket.on('worker-wakeup', data => {
@@ -504,7 +505,6 @@
       socket.on('task:returned', () => loadTasks());
       socket.on('task:updated', () => loadTasks());
       socket.on('chat:message', msg => { if (msg.workerId === activeChatWorkerId) loadChat(); });
-      socket.on('devices:updated', async () => { await loadDevices(); });
 
       loadTasks();
       loadChat();
@@ -515,51 +515,6 @@
       }, 500);
     })().catch(e => document.getElementById('message').textContent = e.message);
 
-    async function loadDevices() {
-      try {
-        const r=await api('/api/admin/devices');
-        const box=document.getElementById('deviceList');box.replaceChildren();
-        document.getElementById('deviceMsg').textContent=r.devices.length ? '' : 'No device requests yet.';
-        for(const d of r.devices) {
-          const row=document.createElement('div');row.className='card';row.style.cssText='padding:12px;margin:10px 0';
-          const info=document.createElement('p');info.textContent=`${d.deviceId} — ${d.status} — ${d.workerName || d.label || ''}`;row.append(info);
-          if(d.status==='pending' || d.status==='rejected') {
-            const name=document.createElement('input');name.placeholder='Worker display name';name.value=d.workerName || '';row.append(name);
-            for(const action of ['approve','reject']) {const btn=document.createElement('button');btn.className='btn';btn.textContent=action==='approve'?'Approve':'Reject';btn.onclick=()=>decideDevice(d.deviceId,action,name.value);row.append(btn);}
-          }
-          if(d.status==='approved') {const btn=document.createElement('button');btn.className='btn danger';btn.textContent='Revoke';btn.onclick=()=>decideDevice(d.deviceId,'revoke','');row.append(btn);}
-          box.append(row);
-        }
-      } catch(e){document.getElementById('deviceMsg').textContent=e.message;}
-    }
-    async function decideDevice(id,action,workerName) {
-      if(action==='revoke' && !confirm('Revoke this device?')) return;
-      try {await api('/api/admin/devices/'+encodeURIComponent(id)+'/decision',{action,workerName});await loadDevices();}
-      catch(e){alert(e.message);}
-    }
-    loadDevices();setInterval(loadDevices,15000);
-    function syncWorkerSelectors() {
-      const available = workers.slice().sort((a,b)=>a.name.localeCompare(b.name));
-      const options = [
-        ['taskWorkerId', false], ['filterTaskWorker', true], ['chatWorkerSelect', false]
-      ];
-      for (const [id, includeAll] of options) {
-        const el=document.getElementById(id); if (!el) continue;
-        const previous=el.value;
-        el.replaceChildren();
-        if (includeAll) el.add(new Option('All Workers',''));
-        for (const w of available) el.add(new Option(`${w.name} (${w.id})`,w.id));
-        if ([...el.options].some(o=>o.value===previous)) el.value=previous;
-      }
-      const next=document.getElementById('chatWorkerSelect')?.value || '';
-      if (next!==activeChatWorkerId) {activeChatWorkerId=next;loadChat();}
-      const chatInput=document.getElementById('adminChatInput');
-      const send=document.querySelector('#adminChatForm button[type="submit"]');
-      if (chatInput) chatInput.disabled=!activeChatWorkerId;
-      if (send) send.disabled=!activeChatWorkerId;
-      const taskButton=document.querySelector('#taskForm button[type="submit"]');
-      if (taskButton) taskButton.disabled=!available.length;
-    }
     // Tasks Functions
     async function loadTasks() {
       const filter = document.getElementById('filterTaskWorker')?.value || '';
@@ -594,7 +549,6 @@
 
     async function assignTask() {
       const workerId = document.getElementById('taskWorkerId').value;
-      if (!workerId) { alert('Approve a worker device first.'); return; }
       const title = document.getElementById('taskTitle').value;
       const description = document.getElementById('taskDesc').value;
       const dateVal = document.getElementById('taskDueDate').value;
@@ -614,10 +568,9 @@
     }
 
     // Chat Functions
-    let activeChatWorkerId = ''; 
+    let activeChatWorkerId = 'worker1';
     function switchChatWorker(id) { activeChatWorkerId = id; loadChat(); }
     async function loadChat() {
-      if (!activeChatWorkerId) { document.getElementById('adminChatContainer').textContent='No approved devices yet. Approve a worker device to start chatting.'; return; }
       const d = await api(`/api/chat/${activeChatWorkerId}`);
       const container = document.getElementById('adminChatContainer');
       container.innerHTML = (d.messages || []).map(m => `
@@ -632,7 +585,7 @@
     async function sendAdminChat() {
       const input = document.getElementById('adminChatInput');
       const text = input.value.trim();
-      if (!text || !activeChatWorkerId) return;
+      if (!text) return;
       input.value = '';
       await api(`/api/chat/${activeChatWorkerId}/messages`, { message: text });
       loadChat();

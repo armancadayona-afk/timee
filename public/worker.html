@@ -9,126 +9,35 @@
   <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css">
   <style>
-    :root { --primary:#f72583; --primary-hover:#e91674; --line:#ffc3dd; --text:#a61957; --bg:#ffe4f0; }
-    body { min-height:100vh;display:grid;place-items:center;padding:24px 12px;background:radial-gradient(#ffc0d9 2px,transparent 2px) 0 0/38px 38px,linear-gradient(145deg,#ffe1ee,#fff1f7 50%,#ffd9e9); }
-    .card { position:relative;width:min(530px,96vw);min-height:720px;text-align:center;padding:36px 22px 100px;background:linear-gradient(155deg,#fffafd,#ffe6f1);border:3px solid #ffbcd6;border-radius:42px;box-shadow:0 20px 65px #f778ae33;overflow:hidden; }
-    .kitty-title {font-family:'Fredoka',sans-serif;font-size:clamp(26px,7vw,40px);font-weight:700;color:#f34c94;transform:rotate(-4deg);text-shadow:1px 2px white;margin:0 0 20px;text-align:left;}
-    .kitty-face {position:absolute;right:25px;top:22px;font-size:65px;line-height:1;}
-    .connection-clock {margin:12px auto 6px;max-width:245px;padding:9px 14px;border:2px solid #ffc5dd;border-radius:20px;background:#fff8fc;display:grid;gap:2px;color:#b22461;font-size:12px;} .connection-clock strong{font-family:Fredoka,sans-serif;font-size:22px;font-variant-numeric:tabular-nums;} .connection-clock small{color:#986b81;}
-    .worker-header {display:flex;justify-content:center;gap:7px;font-family:'Fredoka',sans-serif;color:#b22461;margin-bottom:12px;}
-    .timer {font-size:clamp(45px,11vw,68px);font-weight:800;font-family:'Fredoka',sans-serif;color:#c30c5c;margin:8px 0 20px;background:#fff9fc;border:2px dashed #ffc7df;border-radius:27px;padding:14px 0;letter-spacing:2px;}
-    .btn {border-radius:100px;background:linear-gradient(#ff8dc0,#f71979);border:2px solid #fb5aa1;box-shadow:0 7px 14px #e93c873b;color:white;font-family:'Fredoka',sans-serif;font-size:20px;padding:15px 28px;min-width:230px;}
-    .registration {margin:16px 0;padding:22px;border:2px solid #ffc5dd;border-radius:25px;background:#fff2f8;}
-    .registration code {display:block;overflow-wrap:anywhere;margin:12px 0;color:#a61957;}
-    .registration p {color:#a61957;}
-    .registration[hidden], .workspace[hidden] {display:none;}
-    #status {font-size:12px;color:#b36b8a;margin:7px 0;}
-    .tasks {margin-top:30px;text-align:left;border:2px solid #ffc5dd;background:#fff2f8;border-radius:30px;padding:20px;min-height:215px;}
-    .tasks h3 {color:#df2678;font-size:22px;margin:0 0 15px;}
-    .task-card {background:#fff;border:2px solid #ffd6e6;border-radius:22px;padding:20px;}
-    .priority {display:inline-block;background:#ffd8e9;color:#dc2674;border-radius:20px;font-weight:800;font-size:12px;padding:5px 12px;margin-bottom:10px;}
-    .task-card strong {display:block;color:#b3185a;font-size:17px;}
-    .task-card p {color:#936075;font-size:13px;margin-top:5px;}
-    .chat-launch {position:absolute;right:24px;bottom:22px;width:66px;height:66px;min-width:0;border-radius:50%;border:3px solid white;background:linear-gradient(#ff6cae,#f41778);font-size:30px;color:white;box-shadow:0 8px 15px #ed458a55;cursor:pointer;}
-    .message-overlay[hidden] {display:none;} .message-overlay {position:fixed;inset:0;z-index:50;background:#4c193e66;display:grid;place-items:center;padding:20px;}
-    .message-dialog {width:min(410px,95vw);max-height:80vh;overflow:auto;position:relative;background:radial-gradient(#ffd6e7 1px,transparent 1px) 0 0/26px 26px,#fff9fc;border:3px solid #ff99c5;border-radius:32px;padding:30px 24px;box-shadow:0 20px 80px #6b18466b;text-align:center;}
-    .message-dialog .cat {font-size:55px;} .message-dialog h2 {font-family:'Fredoka',sans-serif;font-size:32px;color:#c81765;margin:10px 0;} .message-dialog p {white-space:pre-wrap;overflow-wrap:anywhere;color:#803153;margin:12px 0 22px;}
-    .message-dialog .close {position:absolute;right:12px;top:10px;min-width:0;width:38px;height:38px;border-radius:50%;background:#f72583;color:white;border:0;font-size:24px;cursor:pointer;}
-    .message-dialog .btn {min-width:180px;} .kitty-footer {position:absolute;left:20px;bottom:18px;font-size:45px;opacity:.7;}
+    body { min-height: 100vh; display: grid; place-items: center; }
+    .card { width: min(420px, 92vw); text-align: center; padding: 28px; }
+    .timer { font-size: 58px; font-weight: 800; font-family: 'Fredoka', cursive, sans-serif; color: var(--primary); margin: 10px 0; }
+    button { min-width: 200px; }
+    video { width: 100%; border-radius: 16px; margin: 16px 0; border: 3px solid var(--line); background: #000; }
+    .worker-header { display: flex; align-items: center; justify-content: center; gap: 8px; font-family: 'Fredoka', cursive; font-size: 22px; color: var(--text); }
   </style>
 </head>
 <body>
   <main class="card">
-    <div class="kitty-face" aria-hidden="true">🐱🎀</div>
-    <div class="kitty-title">Hello Kitty ♥</div>
-    <section id="registration" class="registration">
-      <h2>🎀 Register this device</h2>
-      <p>Device ID</p><code id="deviceId">Generating…</code>
-      <p id="registrationStatus">Checking registration…</p>
-      <button class="btn" id="registerBtn" type="button">Request Admin Approval</button>
-      <button class="btn" id="checkBtn" type="button">Check Status</button>
-    </section>
-    <div id="workspace" class="workspace" hidden>
-    <div class="worker-header"><span>🎀</span><h2 id="name">Worker</h2></div>
-    <div id="timer" class="timer">00:00:00</div>
-    <button id="timerBtn" class="btn" disabled>▶ Start Timer</button>
-    <div class="connection-clock" aria-live="off"><span id="connectionLabel">● Offline</span><strong id="connectionDuration">00:00:00</strong><small>Time connected to server</small></div>
-    <section class="tasks" aria-label="Assigned Tasks">
-      <h3>🎀 Assigned Tasks</h3>
-      <div class="task-card"><span class="priority">♡ HIGH PRIORITY</span>
-        <strong>Review inventory &amp; packaging reports</strong>
-        <p>Ensure all shipment batches are logged with time tags.</p>
-      </div>
-    </section>
-
+    <div class="worker-header">
+      <span>🎀</span>
+      <h2 id="name">Worker</h2>
+    </div>
+    <video id="preview" autoplay playsinline muted></video>
     <p id="status" class="muted">Connecting…</p>
-    </div>
-    <div class="kitty-footer" aria-hidden="true">🎀 ♡</div>
-    <button class="chat-launch" id="chatLaunch" type="button" aria-label="Open messages">💬</button>
+    <div id="timer" class="timer">00:00:00</div>
+    <button id="timerBtn" class="btn" disabled>Start Time</button>
   </main>
-  <div class="message-overlay" id="messageOverlay" hidden>
-    <div class="message-dialog" role="dialog" aria-modal="true" aria-labelledby="messageTitle">
-      <button class="close" id="closeMessage" type="button" aria-label="Close message">×</button>
-      <div class="cat" aria-hidden="true">🐱🎀</div><h2 id="messageTitle">Message</h2>
-      <p id="messageText">No new messages yet.</p>
-      <button class="btn" id="okMessage" type="button">OK 🎀</button>
-    </div>
-  </div>
+
   <script src="/socket.io/socket.io.js"></script>
   <script>
-    const overlay = document.getElementById('messageOverlay');
-    const messageText = document.getElementById('messageText');
-    let lastMessage = 'No new messages yet.';
-    function showKittyMessage(message) { lastMessage = message; messageText.textContent = message; overlay.hidden = false; document.getElementById('okMessage').focus(); }
-    function closeKittyMessage() { overlay.hidden = true; document.getElementById('chatLaunch').focus(); }
-    document.getElementById('chatLaunch').onclick = () => showKittyMessage(lastMessage);
-    document.getElementById('closeMessage').onclick = closeKittyMessage;
-    document.getElementById('okMessage').onclick = closeKittyMessage;
-    overlay.addEventListener('click', e => { if(e.target === overlay) closeKittyMessage(); });
-    document.addEventListener('keydown', e => { if(e.key === 'Escape' && !overlay.hidden) closeKittyMessage(); });
     const button = document.getElementById('timerBtn'), statusEl = document.getElementById('status');
     let state, socket, stream, pc, adminId, pendingIce = [], iceServers = [], wakeLock = null;
-    let connectionStart = null;
-    function drawConnectionClock(){const online=!!socket?.connected && connectionStart!==null;document.getElementById('connectionLabel').textContent=online?'● Server connected':'● Offline';const sec=online?Math.floor(Math.max(0,Date.now()-connectionStart)/1000):0;document.getElementById('connectionDuration').textContent=[Math.floor(sec/3600),Math.floor(sec/60)%60,sec%60].map(n=>String(n).padStart(2,'0')).join(':');}
-    setInterval(drawConnectionClock,1000);
-    // The backend must validate the private registration secret and issue a device token.
-    const deviceId = localStorage.getItem('kittyDeviceId') || crypto.randomUUID();
-    const registrationSecret = localStorage.getItem('kittyRegistrationSecret') || (crypto.randomUUID() + crypto.randomUUID());
-    localStorage.setItem('kittyDeviceId', deviceId);
-    localStorage.setItem('kittyRegistrationSecret', registrationSecret);
-    document.getElementById('deviceId').textContent = deviceId;
-    let deviceToken = localStorage.getItem('kittyDeviceToken');
-    const regStatus = document.getElementById('registrationStatus');
-    async function registrationRequest(path, body) {
-      const response = await fetch(path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
-      const data = await response.json();
-      if (!response.ok) throw Error(data.error || 'Registration service unavailable');
-      return data;
-    }
-    async function checkRegistration() {
-      try {
-        const result = await registrationRequest('/api/device-registration/status', {deviceId, registrationSecret});
-        regStatus.textContent = 'Status: ' + result.status;
-        if (result.status === 'approved' && result.deviceToken) {
-          deviceToken = result.deviceToken;
-          localStorage.setItem('kittyDeviceToken', deviceToken);
-          await startWorker();
-        }
-      } catch (e) { regStatus.textContent = e.message; }
-    }
-    document.getElementById('registerBtn').onclick = async () => {
-      try {
-        const result = await registrationRequest('/api/device-registration/request', {deviceId, registrationSecret, label:'Kitty Worker Device'});
-        regStatus.textContent = 'Status: ' + result.status;
-      } catch (e) { regStatus.textContent = e.message; }
-    };
-    document.getElementById('checkBtn').onclick = checkRegistration;
-
 
     async function api(path, body) {
       const r = await fetch(path, {
         method: body ? 'POST' : 'GET',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (deviceToken || '') },
+        headers: { 'Content-Type': 'application/json' },
         body: body ? JSON.stringify(body) : undefined
       });
       const d = await r.json();
@@ -177,13 +86,10 @@
       }
     };
 
-    async function startWorker() {
-      if (!deviceToken || socket) return;
-      const me = await api('/api/device-registration/me');
-      if (me.status !== 'approved') throw Error('Device not approved');
-      document.getElementById('name').textContent = me.workerName || 'Worker';
-      document.getElementById('registration').hidden = true;
-      document.getElementById('workspace').hidden = false;
+    (async () => {
+      const me = await api('/api/me');
+      if (me.user.role !== 'worker') throw Error('Worker account required');
+      document.getElementById('name').textContent = me.user.name;
       state = (await api('/api/worker/state')).state;
       iceServers = (await api('/api/rtc-config')).iceServers;
 
@@ -191,18 +97,16 @@
         video: true,
         audio: { echoCancellation: true, noiseSuppression: true }
       });
+      document.getElementById('preview').srcObject = stream;
       statusEl.textContent = 'Camera and microphone active 🌸';
 
-      socket = io({auth:{deviceToken}});
+      socket = io();
       socket.on('connect', () => {
-        connectionStart = null; drawConnectionClock();
         closePeer();
         socket.emit('worker-capture-ready');
         socket.emit('worker-heartbeat');
       });
 
-      socket.on('worker-connection-status', p => { if(Number.isFinite(p?.connectedAt)) {connectionStart=Date.now()-Math.max(0,p.serverNow-p.connectedAt);drawConnectionClock();} });
-      socket.on('disconnect', () => {connectionStart=null;drawConnectionClock();});
       socket.on('worker-ping', p => socket.emit('worker-pong', { ...p, workerReceivedAt: Date.now() }));
       socket.on('timer-updated', p => { state = p; render(); });
       socket.on('timer-stopped', () => { state = { ...state, status: 'STOPPED', startedAt: null, accumulatedMs: 0 }; render(); });
@@ -211,7 +115,7 @@
       socket.on('worker-wakeup', data => {
         const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
         audio.play().catch(() => {});
-        showKittyMessage(`From ${data.sender || "Admin"}: ${data.message || "You have a new message."}`);
+        alert(`🎀 Wake-up signal received via ${data.channel}!\nSender: ${data.sender}\nMessage: "${data.message}"`);
       });
 
       socket.on('switch-camera', async p => {
@@ -234,7 +138,8 @@
           }
           if (track) track.stop();
           stream = newStream;
-            } catch (e) {
+          document.getElementById('preview').srcObject = stream;
+        } catch (e) {
           statusEl.textContent = 'Camera switch failed: ' + e.message;
         }
       });
@@ -279,7 +184,7 @@
           if (pc !== current) return;
           socket.emit('worker-live-started', { ...request });
           socket.emit('rtc-offer', { targetSocketId: adminId, workerId: state.id, mode: request.mode, offer: pc.localDescription });
-          statusEl.textContent = request.mode === 'screen' ? 'Screen sharing active' : 'Camera and microphone streaming';
+          statusEl.textContent = request.mode === 'screen' ? 'Screen Share Live' : 'Timer Live';
         } catch (e) {
           closePeer();
           socket.emit('worker-live-error', { ...request, message: e.message });
@@ -306,15 +211,9 @@
       setInterval(() => { if (socket.connected) socket.emit('worker-heartbeat'); }, 10000);
       render();
       setInterval(tick, 500);
-    }
-    if (deviceToken) startWorker().catch(e => {
-      localStorage.removeItem('kittyDeviceToken');
-      deviceToken = null;
-      document.getElementById('registration').hidden = false;
-      document.getElementById('workspace').hidden = true;
-      regStatus.textContent = e.message;
+    })().catch(e => {
+      statusEl.textContent = e.message + ' — sign in on the homepage.';
     });
-    else checkRegistration();
   </script>
 </body>
 </html>
