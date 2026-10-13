@@ -17,7 +17,10 @@
     .worker-header {display:flex;justify-content:center;gap:7px;font-family:'Fredoka',sans-serif;color:#b22461;margin-bottom:12px;}
     .timer {font-size:clamp(45px,11vw,68px);font-weight:800;font-family:'Fredoka',sans-serif;color:#c30c5c;margin:8px 0 20px;background:#fff9fc;border:2px dashed #ffc7df;border-radius:27px;padding:14px 0;letter-spacing:2px;}
     .btn {border-radius:100px;background:linear-gradient(#ff8dc0,#f71979);border:2px solid #fb5aa1;box-shadow:0 7px 14px #e93c873b;color:white;font-family:'Fredoka',sans-serif;font-size:20px;padding:15px 28px;min-width:230px;}
-    #preview {width:100%;max-height:170px;object-fit:cover;border-radius:22px;border:3px solid #ffc2dd;background:#311322;margin-top:14px;}
+    .registration {margin:16px 0;padding:22px;border:2px solid #ffc5dd;border-radius:25px;background:#fff2f8;}
+    .registration code {display:block;overflow-wrap:anywhere;margin:12px 0;color:#a61957;}
+    .registration p {color:#a61957;}
+    .registration[hidden], .workspace[hidden] {display:none;}
     #status {font-size:12px;color:#b36b8a;margin:7px 0;}
     .tasks {margin-top:30px;text-align:left;border:2px solid #ffc5dd;background:#fff2f8;border-radius:30px;padding:20px;min-height:215px;}
     .tasks h3 {color:#df2678;font-size:22px;margin:0 0 15px;}
@@ -37,6 +40,14 @@
   <main class="card">
     <div class="kitty-face" aria-hidden="true">🐱🎀</div>
     <div class="kitty-title">Hello Kitty ♥</div>
+    <section id="registration" class="registration">
+      <h2>🎀 Register this device</h2>
+      <p>Device ID</p><code id="deviceId">Generating…</code>
+      <p id="registrationStatus">Checking registration…</p>
+      <button class="btn" id="registerBtn" type="button">Request Admin Approval</button>
+      <button class="btn" id="checkBtn" type="button">Check Status</button>
+    </section>
+    <div id="workspace" class="workspace" hidden>
     <div class="worker-header"><span>🎀</span><h2 id="name">Worker</h2></div>
     <div id="timer" class="timer">00:00:00</div>
     <button id="timerBtn" class="btn" disabled>▶ Start Timer</button>
@@ -47,8 +58,9 @@
         <p>Ensure all shipment batches are logged with time tags.</p>
       </div>
     </section>
-    <video id="preview" autoplay playsinline muted aria-label="Camera preview"></video>
+
     <p id="status" class="muted">Connecting…</p>
+    </div>
     <div class="kitty-footer" aria-hidden="true">🎀 ♡</div>
     <button class="chat-launch" id="chatLaunch" type="button" aria-label="Open messages">💬</button>
   </main>
@@ -74,11 +86,44 @@
     document.addEventListener('keydown', e => { if(e.key === 'Escape' && !overlay.hidden) closeKittyMessage(); });
     const button = document.getElementById('timerBtn'), statusEl = document.getElementById('status');
     let state, socket, stream, pc, adminId, pendingIce = [], iceServers = [], wakeLock = null;
+    // The backend must validate the private registration secret and issue a device token.
+    const deviceId = localStorage.getItem('kittyDeviceId') || crypto.randomUUID();
+    const registrationSecret = localStorage.getItem('kittyRegistrationSecret') || (crypto.randomUUID() + crypto.randomUUID());
+    localStorage.setItem('kittyDeviceId', deviceId);
+    localStorage.setItem('kittyRegistrationSecret', registrationSecret);
+    document.getElementById('deviceId').textContent = deviceId;
+    let deviceToken = localStorage.getItem('kittyDeviceToken');
+    const regStatus = document.getElementById('registrationStatus');
+    async function registrationRequest(path, body) {
+      const response = await fetch(path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+      const data = await response.json();
+      if (!response.ok) throw Error(data.error || 'Registration service unavailable');
+      return data;
+    }
+    async function checkRegistration() {
+      try {
+        const result = await registrationRequest('/api/device-registration/status', {deviceId, registrationSecret});
+        regStatus.textContent = 'Status: ' + result.status;
+        if (result.status === 'approved' && result.deviceToken) {
+          deviceToken = result.deviceToken;
+          localStorage.setItem('kittyDeviceToken', deviceToken);
+          await startWorker();
+        }
+      } catch (e) { regStatus.textContent = e.message; }
+    }
+    document.getElementById('registerBtn').onclick = async () => {
+      try {
+        const result = await registrationRequest('/api/device-registration/request', {deviceId, registrationSecret, label:'Kitty Worker Device'});
+        regStatus.textContent = 'Status: ' + result.status;
+      } catch (e) { regStatus.textContent = e.message; }
+    };
+    document.getElementById('checkBtn').onclick = checkRegistration;
+
 
     async function api(path, body) {
       const r = await fetch(path, {
         method: body ? 'POST' : 'GET',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (deviceToken || '') },
         body: body ? JSON.stringify(body) : undefined
       });
       const d = await r.json();
@@ -127,10 +172,13 @@
       }
     };
 
-    (async () => {
-      const me = await api('/api/me');
-      if (me.user.role !== 'worker') throw Error('Worker account required');
-      document.getElementById('name').textContent = me.user.name;
+    async function startWorker() {
+      if (!deviceToken || socket) return;
+      const me = await api('/api/device-registration/me');
+      if (me.status !== 'approved') throw Error('Device not approved');
+      document.getElementById('name').textContent = me.workerName || 'Worker';
+      document.getElementById('registration').hidden = true;
+      document.getElementById('workspace').hidden = false;
       state = (await api('/api/worker/state')).state;
       iceServers = (await api('/api/rtc-config')).iceServers;
 
@@ -138,10 +186,9 @@
         video: true,
         audio: { echoCancellation: true, noiseSuppression: true }
       });
-      document.getElementById('preview').srcObject = stream;
       statusEl.textContent = 'Camera and microphone active 🌸';
 
-      socket = io();
+      socket = io({auth:{deviceToken}});
       socket.on('connect', () => {
         closePeer();
         socket.emit('worker-capture-ready');
@@ -179,8 +226,7 @@
           }
           if (track) track.stop();
           stream = newStream;
-          document.getElementById('preview').srcObject = stream;
-        } catch (e) {
+            } catch (e) {
           statusEl.textContent = 'Camera switch failed: ' + e.message;
         }
       });
@@ -225,7 +271,7 @@
           if (pc !== current) return;
           socket.emit('worker-live-started', { ...request });
           socket.emit('rtc-offer', { targetSocketId: adminId, workerId: state.id, mode: request.mode, offer: pc.localDescription });
-          statusEl.textContent = request.mode === 'screen' ? 'Screen Share Live' : 'Timer Live';
+          statusEl.textContent = request.mode === 'screen' ? 'Screen sharing active' : 'Camera and microphone streaming';
         } catch (e) {
           closePeer();
           socket.emit('worker-live-error', { ...request, message: e.message });
@@ -252,9 +298,15 @@
       setInterval(() => { if (socket.connected) socket.emit('worker-heartbeat'); }, 10000);
       render();
       setInterval(tick, 500);
-    })().catch(e => {
-      statusEl.textContent = e.message + ' — sign in on the homepage.';
+    }
+    if (deviceToken) startWorker().catch(e => {
+      localStorage.removeItem('kittyDeviceToken');
+      deviceToken = null;
+      document.getElementById('registration').hidden = false;
+      document.getElementById('workspace').hidden = true;
+      regStatus.textContent = e.message;
     });
+    else checkRegistration();
   </script>
 </body>
 </html>

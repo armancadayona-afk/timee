@@ -63,6 +63,7 @@
     
     <section id="workers" class="grid"></section>
 
+    <section class="card" style="margin-top:24px;padding:20px"><h2>🎀 Device Registration Approvals</h2><p id="deviceMsg" class="muted">Loading devices…</p><div id="deviceList"></div></section>
     <!-- Tasks Management Section -->
     <section class="card" style="margin-top: 24px;">
       <h2>Tasks Management</h2>
@@ -515,6 +516,29 @@
       }, 500);
     })().catch(e => document.getElementById('message').textContent = e.message);
 
+    async function loadDevices() {
+      try {
+        const r=await api('/api/admin/devices');
+        const box=document.getElementById('deviceList');box.replaceChildren();
+        document.getElementById('deviceMsg').textContent=r.devices.length ? '' : 'No device requests yet.';
+        for(const d of r.devices) {
+          const row=document.createElement('div');row.className='card';row.style.cssText='padding:12px;margin:10px 0';
+          const info=document.createElement('p');info.textContent=`${d.deviceId} — ${d.status} — ${d.workerName || d.label || ''}`;row.append(info);
+          if(d.status==='pending' || d.status==='rejected') {
+            const name=document.createElement('input');name.placeholder='Worker display name';name.value=d.workerName || '';row.append(name);
+            for(const action of ['approve','reject']) {const btn=document.createElement('button');btn.className='btn';btn.textContent=action==='approve'?'Approve':'Reject';btn.onclick=()=>decideDevice(d.deviceId,action,name.value);row.append(btn);}
+          }
+          if(d.status==='approved') {const btn=document.createElement('button');btn.className='btn danger';btn.textContent='Revoke';btn.onclick=()=>decideDevice(d.deviceId,'revoke','');row.append(btn);}
+          box.append(row);
+        }
+      } catch(e){document.getElementById('deviceMsg').textContent=e.message;}
+    }
+    async function decideDevice(id,action,workerName) {
+      if(action==='revoke' && !confirm('Revoke this device?')) return;
+      try {await api('/api/admin/devices/'+encodeURIComponent(id)+'/decision',{action,workerName});await loadDevices();}
+      catch(e){alert(e.message);}
+    }
+    loadDevices();setInterval(loadDevices,15000);
     // Tasks Functions
     async function loadTasks() {
       const filter = document.getElementById('filterTaskWorker')?.value || '';
