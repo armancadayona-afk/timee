@@ -139,6 +139,8 @@ function readJson(file, fallback) {
 const persisted = readJson(STATE_FILE, {});
 const workSessions = readJson(SESSIONS_FILE, []);
 const states = new Map();
+// Approved device states are restored after existing worker state initialization.
+
 
 for (const worker of users.filter(user => user.role === 'worker')) {
   const state = initialWorkerState(worker);
@@ -472,6 +474,72 @@ app.get('/', (_req, res) => {
   res.sendFile(indexPath);
 });
 
+// Device registration store. Render deployment MUST use persistent disk for DATA_DIR.
+const DEVICE_FILE = path.join(DATA_DIR, 'devices.json');
+const devices = readJson(DEVICE_FILE, {});
+function saveDevices() { fs.writeFileSync(DEVICE_FILE, JSON.stringify(devices, null, 2)); }
+for (const d of Object.values(devices)) if (d.status === 'approved' && d.workerId) ensureDeviceState(d);
+
+
+function hashSecret(s) { return crypto.createHash('sha256').update(String(s)).digest('hex'); }
+function deviceForToken(token) {
+  if (!token || typeof token !== 'string' || token.length < 32) return null;
+  const digest = hashSecret(token);
+  return Object.values(devices).find(d => d.status === 'approved' && d.tokenHash && secureEqual(d.tokenHash, digest)) || null;
+}
+function deviceUser(d) { return {role:'worker', id:d.workerId, name:d.workerName || 'Worker', deviceId:d.deviceId}; }
+function ensureDeviceState(d) {
+  if (!states.has(d.workerId)) { states.set(d.workerId, initialWorkerState({id:d.workerId, name:d.workerName || 'Worker'})); persistState(); }
+  const state = states.get(d.workerId); state.name = d.workerName || 'Worker';
+}
+function validDeviceRequest(body) {
+  return body && typeof body.deviceId === 'string' && /^[a-zA-Z0-9-]{20,100}$/.test(body.deviceId)
+    && typeof body.registrationSecret === 'string' && body.registrationSecret.length >= 32 && body.registrationSecret.length <= 256;
+}
+app.post('/api/device-registration/request', loginRateLimit, (req,res) => {
+  if (!validDeviceRequest(req.body)) return res.status(400).json({error:'Invalid registration request'});
+  const {deviceId,registrationSecret} = req.body;
+  const existing = devices[deviceId];
+  if (existing && !secureEqual(existing.secretHash,hashSecret(registrationSecret))) return res.status(403).json({error:'Device already registered'});
+  if (existing) return res.json({ok:true,status:existing.status});
+  devices[deviceId] = {deviceId,secretHash:hashSecret(registrationSecret),status:'pending',createdAt:Date.now(),label:String(req.body.label || 'Worker Device').slice(0,80)};
+  saveDevices(); io.to('admins').emit('devices:updated');
+  res.json({ok:true,status:'pending'});
+});
+app.post('/api/device-registration/status', loginRateLimit, (req,res) => {
+  if (!validDeviceRequest(req.body)) return res.status(400).json({error:'Invalid request'});
+  const d=devices[req.body.deviceId];
+  if (!d || !secureEqual(d.secretHash,hashSecret(req.body.registrationSecret))) return res.status(404).json({error:'Registration not found'});
+  const response={ok:true,status:d.status};
+  if (d.status==='approved') {
+    // Issue a fresh token, replacing the previous one on each successful pairing.
+    const token=crypto.randomBytes(32).toString('hex'); d.tokenHash=hashSecret(token); saveDevices(); response.deviceToken=token;
+  }
+  res.json(response);
+});
+app.use((req,res,next) => {
+  const match=/^Bearer ([a-f0-9]{64})$/.exec(req.get('authorization') || '');
+  if (match) { const d=deviceForToken(match[1]); if(d) {ensureDeviceState(d);req.session.user=deviceUser(d);} }
+  next();
+});
+app.get('/api/device-registration/me',requireRole('worker'),(req,res)=>{
+  const d=devices[req.session.user.deviceId];
+  if (!d || d.status!=='approved') return res.status(403).json({error:'Device not approved'});
+  res.json({ok:true,status:'approved',workerName:d.workerName,workerId:d.workerId});
+});
+app.get('/api/admin/devices',requireRole('admin'),(_req,res)=>res.json({ok:true,devices:Object.values(devices).map(({secretHash,tokenHash,...d})=>d)}));
+app.post('/api/admin/devices/:id/decision',requireRole('admin'),(req,res)=>{
+  const d=devices[req.params.id]; if(!d) return res.status(404).json({error:'Device not found'});
+  const action=String(req.body.action || '');
+  if(!['approve','reject','revoke'].includes(action)) return res.status(400).json({error:'Invalid decision'});
+  if(action==='approve') {
+    d.workerId=d.workerId || 'device_'+crypto.randomBytes(9).toString('hex');
+    d.workerName=String(req.body.workerName || d.workerName || 'Worker').trim().slice(0,80);
+    d.status='approved'; ensureDeviceState(d);
+  } else {d.status=action==='reject'?'rejected':'revoked'; d.tokenHash=null;}
+  saveDevices(); io.to('admins').emit('devices:updated'); broadcastStates(); res.json({ok:true,status:d.status});
+});
+
 app.get('/health', (_req, res) => {
   res.json({
     ok: true,
@@ -484,7 +552,7 @@ app.post('/api/login', loginRateLimit, (req, res) => {
   const username = String(req.body.username || '').trim();
   const password = String(req.body.password || '');
 
-  const user = users.find(
+  const user = users.filter(candidate => candidate.role === 'admin').find(
     candidate =>
       secureEqual(candidate.username, username) &&
       secureEqual(candidate.password, password)
@@ -960,6 +1028,8 @@ app.use(
 );
 
 io.on('connection', socket => {
+  const d = deviceForToken(socket.handshake.auth?.deviceToken);
+  if (d) { ensureDeviceState(d); socket.request.session.user = deviceUser(d); }
   const user = socket.request.session?.user;
 
   if (!user) {
