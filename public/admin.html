@@ -7,15 +7,14 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800&family=Pacifico&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="styles.css">
   <style>
     :root {
       --hk-bg: #ffe4ec;
-      --hk-card-bg: rgba(255, 255, 255, 0.9);
+      --hk-card-bg: rgba(255, 255, 255, 0.92);
       --hk-border: #ffa8c5;
       --hk-border-soft: #ffd0e0;
       --hk-pink-dark: #ff2a6d;
-      --hk-pink-mid: #ff5c8a;
       --hk-text: #5a2a3a;
       --hk-muted: #a06b7d;
       --hk-shadow: 0 10px 30px rgba(255, 92, 138, 0.2);
@@ -26,158 +25,58 @@
     body {
       min-height: 100vh;
       background-color: #ffd6e5;
-      background-image:
-        radial-gradient(#ff9ebb 1.5px, transparent 1.5px),
-        radial-gradient(#ff7599 1.5px, #ffd6e5 1.5px);
-      background-size: 30px 30px;
-      background-position: 0 0, 15px 15px;
       font-family: 'Nunito', system-ui, -apple-system, sans-serif;
       color: var(--hk-text);
-      padding: 20px 16px 60px;
+      padding: 20px 16px;
     }
 
-    .wrap {
-      width: min(1100px, 100%);
-      margin: 0 auto;
-      display: flex;
-      flex-direction: column;
-      gap: 20px;
-    }
+    .wrap { width: min(1100px, 100%); margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
 
     .hk-admin-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      flex-wrap: wrap;
-      gap: 12px;
-      background: var(--hk-card-bg);
-      backdrop-filter: blur(12px);
-      border: 3px solid #ffffff;
-      outline: 2px solid var(--hk-border);
-      border-radius: 24px;
-      padding: 16px 24px;
-      box-shadow: var(--hk-shadow);
+      display: flex; align-items: center; justify-content: space-between; background: var(--hk-card-bg); border: 3px solid #ffffff; outline: 2px solid var(--hk-border); border-radius: 24px; padding: 16px 24px; box-shadow: var(--hk-shadow);
     }
 
-    .hk-title {
-      font-family: 'Pacifico', cursive;
-      font-size: 32px;
-      color: var(--hk-pink-dark);
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
+    .hk-title { font-family: 'Pacifico', cursive; font-size: 32px; color: var(--hk-pink-dark); display: flex; align-items: center; gap: 8px; }
 
-    .hk-card {
-      background: var(--hk-card-bg);
-      backdrop-filter: blur(12px);
-      border: 3px solid #ffffff;
-      outline: 2px solid var(--hk-border);
-      border-radius: 24px;
-      padding: 20px;
-      box-shadow: var(--hk-shadow);
-    }
+    .hk-card { background: var(--hk-card-bg); border: 3px solid #ffffff; outline: 2px solid var(--hk-border); border-radius: 24px; padding: 20px; box-shadow: var(--hk-shadow); }
 
-    .hk-btn {
-      background: linear-gradient(180deg, #ff6b95 0%, #ff1f62 100%);
-      color: #ffffff;
-      border: 2px solid #ffffff;
-      border-radius: 18px;
-      padding: 8px 16px;
-      font-family: 'Fredoka', sans-serif;
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-      box-shadow: 0 4px 12px rgba(255, 31, 98, 0.25);
-      transition: all 0.2s;
-    }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
 
-    .hk-btn.secondary {
-      background: #ffffff;
-      color: var(--hk-pink-dark);
-      border: 2px solid var(--hk-border);
-    }
+    .worker-video-container { position: relative; background: #111; border-radius: 16px; overflow: hidden; border: 2px solid var(--hk-border); aspect-ratio: 4/3; }
+    video { width: 100%; height: 100%; object-fit: cover; }
 
-    .hk-btn.danger {
-      background: #dc2626;
-      color: #ffffff;
-      border: 2px solid #ffffff;
-    }
+    .hk-btn { background: linear-gradient(180deg, #ff6b95 0%, #ff1f62 100%); color: #ffffff; border: 2px solid #ffffff; border-radius: 18px; padding: 8px 14px; font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; cursor: pointer; }
+    .hk-btn.secondary { background: #ffffff; color: var(--hk-pink-dark); border: 2px solid var(--hk-border); }
+    .hk-btn.danger { background: #dc2626; color: #ffffff; border: 2px solid #ffffff; }
 
-    .hk-btn:hover {
-      transform: translateY(-1px);
-    }
+    .device-table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    .device-table th, .device-table td { padding: 10px 12px; text-align: left; border-bottom: 1.5px solid #ffd0e0; font-size: 13px; }
+    .device-table th { font-weight: 800; color: var(--hk-pink-dark); background: #fff0f5; }
 
-    input, select, textarea {
-      width: 100%;
-      padding: 8px 12px !important;
-      border-radius: 14px !important;
-      border: 2px solid var(--hk-border) !important;
-      background: #ffffff !important;
-      font-family: inherit;
-    }
-
-    .device-table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 12px;
-    }
-
-    .device-table th, .device-table td {
-      padding: 10px 12px;
-      text-align: left;
-      border-bottom: 1.5px solid var(--hk-border-soft);
-      font-size: 13px;
-    }
-
-    .device-table th {
-      font-weight: 800;
-      color: var(--hk-pink-dark);
-      background: #fff0f5;
-    }
-
-    .badge {
-      display: inline-block;
-      padding: 4px 10px;
-      border-radius: 12px;
-      font-weight: 800;
-      font-size: 11px;
-      text-transform: uppercase;
-    }
+    .badge { display: inline-block; padding: 4px 10px; border-radius: 12px; font-weight: 800; font-size: 11px; text-transform: uppercase; }
     .badge.pending { background: #fef08a; color: #854d0e; }
     .badge.approved { background: #dcfce7; color: #166534; }
     .badge.rejected { background: #fee2e2; color: #991b1b; }
     .badge.revoked { background: #f3f4f6; color: #374151; }
+    .badge.online { background: #10b981; color: #ffffff; }
+    .badge.offline { background: #9ca3af; color: #ffffff; }
   </style>
 </head>
 <body>
-
   <div class="wrap">
-    
-    <!-- Admin Header -->
     <header class="hk-admin-header">
-      <div class="hk-title">
-        <span>🎀</span> Hello Kitty Admin Console 💕
-      </div>
-      <button id="logoutBtn" class="hk-btn secondary">Log Out ➔</button>
+      <div class="hk-title">🎀 Hello Kitty Admin Console 💕</div>
+      <button class="hk-btn secondary" onclick="location.href='/'">Log Out ➔</button>
     </header>
 
-    <!-- Device Registration Approvals Section (Section 6) -->
+    <!-- Section 1: Device Approvals -->
     <section class="hk-card">
       <h2 style="font-family: 'Fredoka', cursive; color: var(--hk-pink-dark); margin-bottom: 4px;">Device Registration Approvals 📱🌸</h2>
       <p style="font-size: 13px; color: var(--hk-muted);">Approve, rename, or revoke worker Android device registrations.</p>
-
       <div style="overflow-x: auto;">
         <table class="device-table">
           <thead>
-            <tr>
-              <th>Device ID</th>
-              <th>Device Name</th>
-              <th>Worker Name</th>
-              <th>Registration Date</th>
-              <th>Status</th>
-              <th>Actions</th>
-            </tr>
+            <tr><th>Device ID</th><th>Device Name</th><th>Worker Name</th><th>Date</th><th>Status</th><th>Actions</th></tr>
           </thead>
           <tbody id="deviceTableBody">
             <tr><td colspan="6" style="text-align:center; color: var(--hk-muted);">Loading devices…</td></tr>
@@ -186,53 +85,21 @@
       </div>
     </section>
 
-    <!-- Tasks & Assign Console -->
-    <section class="hk-card">
-      <h2 style="font-family: 'Fredoka', cursive; color: var(--hk-pink-dark); margin-bottom: 12px;">Tasks & Assign Console 📋🎀</h2>
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;">
-        <div>
-          <form id="taskForm" onsubmit="event.preventDefault(); assignTask();" style="display: flex; flex-direction: column; gap: 10px;">
-            <label style="font-size: 13px; font-weight: 800;">Assign Task To:
-              <select id="taskWorkerId" aria-label="Worker Selection">
-                <option value="worker1">Worker 1</option>
-                <option value="worker2">Worker 2</option>
-                <option value="worker3">Worker 3</option>
-              </select>
-            </label>
-
-            <label style="font-size: 13px; font-weight: 800;">Task Title:
-              <input type="text" id="taskTitle" placeholder="e.g. Clean workspace" required aria-label="Task Title">
-            </label>
-
-            <label style="font-size: 13px; font-weight: 800;">Instructions:
-              <textarea id="taskDesc" rows="3" placeholder="Task details..." aria-label="Task Description"></textarea>
-            </label>
-
-            <button type="submit" class="hk-btn">Assign Task 🌸</button>
-          </form>
-        </div>
-        <div>
-          <h3 style="font-family: 'Fredoka', cursive; color: var(--hk-pink-dark); margin-bottom: 8px;">Active Worker Tasks</h3>
-          <div id="adminTasksList" style="max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;">
-            <p style="font-size: 12px; color: var(--hk-muted);">Loading tasks…</p>
-          </div>
-        </div>
+    <!-- Section 2: Live Worker Video Streams & Monitoring -->
+    <section>
+      <h2 style="font-family: 'Fredoka', cursive; color: var(--hk-pink-dark); margin-bottom: 12px;">Live Worker Monitoring & Feeds 📹🌸</h2>
+      <div id="workers" class="grid">
+        <p style="font-size: 13px; color: var(--hk-muted);">Loading live worker sessions…</p>
       </div>
     </section>
-
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script>
-    const logoutBtn = document.getElementById('logoutBtn');
-    const deviceTableBody = document.getElementById('deviceTableBody');
-    const adminTasksList = document.getElementById('adminTasksList');
+    let socket, pcMap = new Map(), iceServers = [], workerStates = {};
 
     async function api(path, method = 'GET', body = null) {
-      const options = {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-      };
+      const options = { method, headers: { 'Content-Type': 'application/json' } };
       if (body) options.body = JSON.stringify(body);
       const r = await fetch(path, options);
       const d = await r.json();
@@ -240,148 +107,111 @@
       return d;
     }
 
-    logoutBtn.onclick = async () => {
-      await api('/api/logout', 'POST', {});
-      location.href = '/';
-    };
-
     async function loadDevices() {
       try {
         const res = await api('/api/admin/devices');
         const devices = res.devices || [];
-        deviceTableBody.innerHTML = '';
+        const body = document.getElementById('deviceTableBody');
+        body.innerHTML = '';
         if (devices.length === 0) {
-          deviceTableBody.innerHTML = '<tr><td colspan="6" style="text-align:center; color: var(--hk-muted);">No devices registered yet. 🌸</td></tr>';
+          body.innerHTML = '<tr><td colspan="6" style="text-align:center;">No devices registered yet. 🌸</td></tr>';
           return;
         }
-
         devices.forEach(dev => {
           const tr = document.createElement('tr');
-          const dateStr = dev.registeredAt ? new Date(dev.registeredAt).toLocaleDateString() : 'N/A';
-          const statusClass = dev.status || 'pending';
-
-          let actionsHtml = '';
+          let actions = '';
           if (dev.status === 'pending') {
-            actionsHtml = `
-              <button class="hk-btn" style="padding:4px 10px; font-size:12px;" onclick="approveDev('${dev.deviceId}')">Approve 🌸</button>
-              <button class="hk-btn secondary" style="padding:4px 10px; font-size:12px;" onclick="rejectDev('${dev.deviceId}')">Reject ❌</button>`;
+            actions = `<button class="hk-btn" onclick="approveDev('${dev.deviceId}')">Approve 🌸</button> <button class="hk-btn secondary" onclick="rejectDev('${dev.deviceId}')">Reject ❌</button>`;
           } else if (dev.status === 'approved') {
-            actionsHtml = `
-              <button class="hk-btn secondary" style="padding:4px 10px; font-size:12px;" onclick="renameDev('${dev.deviceId}', '${dev.workerName || ''}')">Rename ✏️</button>
-              <button class="hk-btn danger" style="padding:4px 10px; font-size:12px;" onclick="revokeDev('${dev.deviceId}')">Revoke 🔒</button>`;
+            actions = `<button class="hk-btn secondary" onclick="renameDev('${dev.deviceId}', '${dev.workerName || ''}')">Rename ✏️</button> <button class="hk-btn danger" onclick="revokeDev('${dev.deviceId}')">Revoke 🔒</button>`;
           } else {
-            actionsHtml = `<button class="hk-btn secondary" style="padding:4px 10px; font-size:12px;" onclick="approveDev('${dev.deviceId}')">Re-Approve 🌸</button>`;
+            actions = `<button class="hk-btn secondary" onclick="approveDev('${dev.deviceId}')">Re-Approve 🌸</button>`;
           }
-
-          tr.innerHTML = `
-            <td style="font-family:monospace; font-weight:700;">${dev.deviceId}</td>
-            <td>${dev.deviceName || 'Android Device'}</td>
-            <td><b>${dev.workerName || dev.deviceName || 'Worker'}</b></td>
-            <td>${dateStr}</td>
-            <td><span class="badge ${statusClass}">${statusClass}</span></td>
-            <td><div style="display:flex; gap:6px;">${actionsHtml}</div></td>`;
-          deviceTableBody.appendChild(tr);
+          tr.innerHTML = `<td><b>${dev.deviceId}</b></td><td>${dev.deviceName || 'Android Device'}</td><td><b>${dev.workerName || dev.deviceName || 'Worker'}</b></td><td>${new Date(dev.registeredAt || Date.now()).toLocaleDateString()}</td><td><span class="badge ${dev.status}">${dev.status}</span></td><td>${actions}</td>`;
+          body.appendChild(tr);
         });
-      } catch (e) {
-        console.error('Error loading devices:', e);
-      }
+      } catch (e) { console.error(e); }
     }
 
     async function approveDev(deviceId) {
       const name = prompt('Enter assigned worker display name:', 'Worker ' + deviceId.substring(0, 4));
-      if (name === null) return;
-      try {
-        await api(`/api/admin/devices/${deviceId}/approve`, 'POST', { workerName: name });
-        alert('Device approved! 💕');
-        loadDevices();
-      } catch (e) {
-        alert('Approval failed: ' + e.message);
-      }
+      if (!name) return;
+      await api(`/api/admin/devices/${deviceId}/approve`, 'POST', { workerName: name });
+      loadDevices();
     }
 
     async function rejectDev(deviceId) {
-      if (!confirm('Reject device ' + deviceId + '?')) return;
-      try {
-        await api(`/api/admin/devices/${deviceId}/reject`, 'POST', {});
-        loadDevices();
-      } catch (e) {
-        alert('Rejection failed: ' + e.message);
-      }
+      await api(`/api/admin/devices/${deviceId}/reject`, 'POST');
+      loadDevices();
     }
 
     async function revokeDev(deviceId) {
-      if (!confirm('Revoke access for device ' + deviceId + '? This will immediately block worker access.')) return;
-      try {
-        await api(`/api/admin/devices/${deviceId}/revoke`, 'POST', {});
-        loadDevices();
-      } catch (e) {
-        alert('Revocation failed: ' + e.message);
-      }
+      if (!confirm('Revoke access for this device?')) return;
+      await api(`/api/admin/devices/${deviceId}/revoke`, 'POST');
+      loadDevices();
     }
 
     async function renameDev(deviceId, currentName) {
-      const newName = prompt('Enter new worker display name:', currentName);
-      if (!newName || newName === currentName) return;
-      try {
-        await api(`/api/admin/devices/${deviceId}`, 'PATCH', { workerName: newName });
+      const name = prompt('New worker display name:', currentName);
+      if (name) {
+        await api(`/api/admin/devices/${deviceId}`, 'PATCH', { workerName: name });
         loadDevices();
-      } catch (e) {
-        alert('Rename failed: ' + e.message);
       }
     }
 
-    async function loadTasks() {
-      try {
-        const res = await api('/api/tasks');
-        const tasks = res.tasks || [];
-        adminTasksList.innerHTML = '';
-        if (tasks.length === 0) {
-          adminTasksList.innerHTML = '<p style="font-size:12px; color:var(--hk-muted);">No assigned tasks yet.</p>';
-          return;
-        }
-        tasks.forEach(t => {
-          const div = document.createElement('div');
-          div.style.background = '#ffffff';
-          div.style.border = '1.5px solid var(--hk-border)';
-          div.style.borderRadius = '14px';
-          div.style.padding = '8px 12px';
-          div.innerHTML = `
-            <div style="font-weight:800; font-size:13px; color:var(--hk-pink-dark);">[${t.status}] ${t.title}</div>
-            <div style="font-size:12px; color:var(--hk-muted);">${t.description || ''}</div>`;
-          adminTasksList.appendChild(div);
-        });
-      } catch (e) {
-        console.error('Error loading tasks:', e);
-      }
+    function formatMs(ms) {
+      const t = Math.floor(ms / 1000);
+      return [Math.floor(t / 3600), Math.floor(t / 60) % 60, t % 60].map(v => String(v).padStart(2, '0')).join(':');
     }
 
-    async function assignTask() {
-      const workerId = document.getElementById('taskWorkerId').value;
-      const title = document.getElementById('taskTitle').value;
-      const description = document.getElementById('taskDesc').value;
-      try {
-        await api('/api/tasks', 'POST', { workerId, title, description });
-        alert('Task assigned successfully! 💕');
-        document.getElementById('taskTitle').value = '';
-        document.getElementById('taskDesc').value = '';
-        loadTasks();
-      } catch (e) {
-        alert('Failed assigning task: ' + e.message);
-      }
-    }
-
-    (async () => {
-      const me = await api('/api/me');
-      if (me.user.role !== 'admin') {
-        location.href = '/worker.html';
+    function renderWorkers(states) {
+      workerStates = states || {};
+      const container = document.getElementById('workers');
+      container.innerHTML = '';
+      const keys = Object.keys(workerStates);
+      if (keys.length === 0) {
+        container.innerHTML = '<p style="font-size:13px; color:var(--hk-muted);">No active worker sessions.</p>';
         return;
       }
-      loadDevices();
-      loadTasks();
+      keys.forEach(id => {
+        const w = workerStates[id];
+        const ms = (w.accumulatedMs || 0) + (w.status === 'WORKING' ? Math.max(0, Date.now() - w.startedAt) : 0);
 
-      const socket = io();
-      socket.on('device:requested', () => loadDevices());
-      socket.on('task:updated', () => loadTasks());
+        const card = document.createElement('div');
+        card.className = 'hk-card';
+        card.innerHTML = `
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <span style="font-weight:800; font-size:16px; color:var(--hk-pink-dark);">🌸 ${w.name || id}</span>
+            <span class="badge ${w.online ? 'online' : 'offline'}">${w.online ? '● ONLINE' : 'OFFLINE'}</span>
+          </div>
+          <div style="font-family:'Fredoka',cursive; font-size:28px; color:var(--hk-pink-dark); text-align:center; margin-bottom:8px;">${formatMs(ms)}</div>
+          <div class="worker-video-container"><video id="video-${id}" autoplay playsinline muted></video></div>
+          <div style="display:flex; gap:6px; margin-top:10px; flex-wrap:wrap;">
+            <button class="hk-btn" style="flex:1;" onclick="requestLive('${id}', 'camera')">📹 Camera</button>
+            <button class="hk-btn secondary" style="flex:1;" onclick="requestLive('${id}', 'screen')">🖥️ Screen</button>
+            <button class="hk-btn secondary" style="flex:1;" onclick="stopLive('${id}')">⏹️ Stop</button>
+          </div>
+          <div style="display:flex; gap:6px; margin-top:6px; flex-wrap:wrap;">
+            <button class="hk-btn secondary" style="flex:1;" onclick="switchCam('${id}')">🔄 Switch Cam</button>
+            <button class="hk-btn secondary" style="flex:1;" onclick="sendWakeup('${id}')">🔔 Kumusta!</button>
+          </div>`;
+        container.appendChild(card);
+      });
+    }
+
+    function requestLive(workerId, mode) { if (socket) socket.emit('admin-live-request', { workerId, mode }); }
+    function stopLive(workerId) { if (socket) socket.emit('admin-stop-live', { workerId }); }
+    function switchCam(workerId) { if (socket) socket.emit('admin-switch-camera', { workerId }); }
+    function sendWakeup(workerId) { if (socket) socket.emit('admin-wakeup-worker', { workerId, message: 'Kumusta!' }); alert('Wakeup signal sent!'); }
+
+    (async () => {
+      loadDevices();
+      try {
+        iceServers = (await api('/api/rtc-config')).iceServers;
+        socket = io();
+        socket.on('states', data => renderWorkers(data));
+        socket.on('device:requested', () => loadDevices());
+      } catch (e) { console.error(e); }
     })();
   </script>
 </body>
