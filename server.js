@@ -26,6 +26,8 @@ const STATE_FILE = path.join(DATA_DIR, 'state.json');
 const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
 const TASKS_FILE = path.join(DATA_DIR, 'tasks.json');
 const CHAT_FILE = path.join(DATA_DIR, 'chat.json');
+const USERS_FILE = path.join(DATA_DIR, 'users.json');
+const DEVICE_REQUESTS_FILE = path.join(DATA_DIR, 'device_requests.json');
 const HTTP_SESSION_DIR = path.join(DATA_DIR, 'http-sessions');
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -101,6 +103,13 @@ const users = [
     name: process.env.WORKER3_NAME || 'Worker 3'
   }
 ];
+
+const savedUsers = readJson(USERS_FILE, []);
+savedUsers.forEach(u => {
+  if (u.username && !users.some(x => x.username.toLowerCase() === u.username.toLowerCase())) {
+    users.push(u);
+  }
+});
 
 const LIVE_NONE = 'NONE';
 const LIVE_CAMERA_PENDING = 'CAMERA_PENDING';
@@ -193,6 +202,7 @@ function persistState() {
 
 const tasks = readJson(TASKS_FILE, []);
 const chatMessages = readJson(CHAT_FILE, []);
+const deviceRequests = readJson(DEVICE_REQUESTS_FILE, []);
 
 function persistSessions() {
   writeJsonAtomic(SESSIONS_FILE, workSessions.slice(-1000));
@@ -204,6 +214,15 @@ function persistTasks() {
 
 function persistChat() {
   writeJsonAtomic(CHAT_FILE, chatMessages);
+}
+
+function persistUsers() {
+  const dynamicUsers = users.filter(u => u.id && u.id.startsWith('worker_'));
+  writeJsonAtomic(USERS_FILE, dynamicUsers);
+}
+
+function persistDeviceRequests() {
+  writeJsonAtomic(DEVICE_REQUESTS_FILE, deviceRequests);
 }
 
 function safeWorkerState(state) {
@@ -560,6 +579,7 @@ app.post('/api/register', (req, res) => {
   };
 
   users.push(newUser);
+  persistUsers();
 
   if (cleanRole === 'worker') {
     states.set(newId, initialWorkerState(newUser));
@@ -578,6 +598,209 @@ app.post('/api/register', (req, res) => {
     user: req.session.user,
     redirect: newUser.role === 'admin' ? '/admin.html' : '/worker.html'
   });
+});
+
+// --- Device Registration & Approval System (Section 4, 5, 6) ---
+
+// POST /api/devices/register
+app.post('/api/devices/register', (req, res) => {
+  const { deviceId, deviceName, platform, appVersion, publicKey, workerName } = req.body || {};
+  const cleanDeviceId = String(deviceId || '').trim();
+  const cleanName = String(deviceName || workerName || 'Android Device').trim();
+
+  if (!cleanDeviceId) {
+    return res.status(400).json({ success: false, error: 'deviceId is required' });
+  }
+
+  let device = deviceRequests.find(d => d.deviceId === cleanDeviceId);
+  if (!device) {
+    device = {
+      deviceId: cleanDeviceId,
+      deviceName: cleanName,
+      platform: platform || 'android',
+      appVersion: appVersion || '1.0.0',
+      publicKey: publicKey || '',
+      status: 'pending',
+      registeredAt: Date.now(),
+      workerId: null,
+      workerName: cleanName
+    };
+    deviceRequests.push(device);
+  } else {
+    device.deviceName = cleanName;
+    device.publicKey = publicKey || device.publicKey;
+    if (device.status === 'rejected') {
+      device.status = 'pending';
+    }
+  }
+
+  persistDeviceRequests();
+  io.to('admins').emit('device:requested', device);
+
+  res.json({
+    success: true,
+    deviceId: device.deviceId,
+    status: device.status
+  });
+});
+
+// GET /api/devices/status & /api/device/status/:deviceId
+const handleDeviceStatus = (req, res) => {
+  const deviceId = req.params.deviceId || req.headers['x-device-id'] || req.query.deviceId;
+  if (!deviceId) {
+    return res.status(400).json({ error: 'Device ID required' });
+  }
+
+  const device = deviceRequests.find(d => d.deviceId === deviceId);
+  if (!device) {
+    const existingUser = users.find(u => u.deviceId === deviceId);
+    if (existingUser) {
+      return res.json({
+        deviceId,
+        status: 'approved',
+        workerId: existingUser.id,
+        workerName: existingUser.name
+      });
+    }
+    return res.json({
+      deviceId,
+      status: 'not_registered',
+      workerId: null
+    });
+  }
+
+  res.json({
+    deviceId: device.deviceId,
+    status: device.status,
+    workerId: device.workerId || ('worker_' + device.deviceId.substring(0, 8)),
+    workerName: device.workerName || device.deviceName
+  });
+};
+
+app.get('/api/devices/status', handleDeviceStatus);
+app.get('/api/devices/status/:deviceId', handleDeviceStatus);
+app.get('/api/device/status/:deviceId', handleDeviceStatus);
+  }
+
+  res.json({
+    deviceId: device.deviceId,
+    status: device.status,
+    workerId: device.workerId || ('worker_' + device.deviceId.substring(0, 8)),
+    workerName: device.workerName || device.deviceName
+  });
+});
+
+// GET /api/admin/devices
+app.get('/api/admin/devices', requireRole('admin'), (req, res) => {
+  res.json({ success: true, devices: deviceRequests });
+});
+
+// POST /api/admin/devices/:deviceId/approve
+app.post('/api/admin/devices/:deviceId/approve', requireRole('admin'), (req, res) => {
+  const deviceId = req.params.deviceId;
+  const { workerName } = req.body || {};
+  const device = deviceRequests.find(d => d.deviceId === deviceId);
+
+  if (!device) {
+    return res.status(404).json({ success: false, error: 'Device not found' });
+  }
+
+  const assignedWorkerId = device.workerId || ('worker_' + device.deviceId.substring(0, 10));
+  const assignedWorkerName = String(workerName || device.workerName || device.deviceName || 'Worker Device').trim();
+
+  device.status = 'approved';
+  device.workerId = assignedWorkerId;
+  device.workerName = assignedWorkerName;
+  device.approvedAt = Date.now();
+  persistDeviceRequests();
+
+  let user = users.find(u => u.deviceId === deviceId || u.id === assignedWorkerId);
+  if (!user) {
+    user = {
+      role: 'worker',
+      id: assignedWorkerId,
+      username: 'dev_' + deviceId.substring(0, 8),
+      password: 'dev_auth_token',
+      name: assignedWorkerName,
+      deviceId: deviceId
+    };
+    users.push(user);
+    persistUsers();
+  } else {
+    user.name = assignedWorkerName;
+  }
+
+  if (!states.has(assignedWorkerId)) {
+    states.set(assignedWorkerId, initialWorkerState(user));
+  } else {
+    states.get(assignedWorkerId).name = assignedWorkerName;
+  }
+  broadcastStates();
+
+  io.emit('device:approved', { deviceId: device.deviceId, workerId: assignedWorkerId, workerName: assignedWorkerName });
+  res.json({ success: true, device });
+});
+
+// POST /api/admin/devices/:deviceId/reject
+app.post('/api/admin/devices/:deviceId/reject', requireRole('admin'), (req, res) => {
+  const deviceId = req.params.deviceId;
+  const device = deviceRequests.find(d => d.deviceId === deviceId);
+
+  if (!device) {
+    return res.status(404).json({ success: false, error: 'Device not found' });
+  }
+
+  device.status = 'rejected';
+  persistDeviceRequests();
+
+  io.emit('device:rejected', { deviceId: device.deviceId });
+  res.json({ success: true, device });
+});
+
+// POST /api/admin/devices/:deviceId/revoke
+app.post('/api/admin/devices/:deviceId/revoke', requireRole('admin'), (req, res) => {
+  const deviceId = req.params.deviceId;
+  const device = deviceRequests.find(d => d.deviceId === deviceId);
+
+  if (!device) {
+    return res.status(404).json({ success: false, error: 'Device not found' });
+  }
+
+  device.status = 'revoked';
+  persistDeviceRequests();
+
+  const user = users.find(u => u.deviceId === deviceId);
+  if (user && user.id) {
+    const state = states.get(user.id);
+    if (state && state.socketId) {
+      io.to(state.socketId).emit('device:revoked');
+      io.sockets.sockets.get(state.socketId)?.disconnect(true);
+      state.socketId = null;
+      state.status = 'OFFLINE';
+      state.online = false;
+    }
+  }
+
+  io.emit('device:revoked', { deviceId: device.deviceId });
+  broadcastStates();
+  res.json({ success: true, device });
+});
+
+// PATCH /api/admin/devices/:deviceId
+app.patch('/api/admin/devices/:deviceId', requireRole('admin'), (req, res) => {
+  const deviceId = req.params.deviceId;
+  const { workerName, deviceName } = req.body || {};
+  const device = deviceRequests.find(d => d.deviceId === deviceId);
+
+  if (!device) {
+    return res.status(404).json({ success: false, error: 'Device not found' });
+  }
+
+  if (workerName) device.workerName = String(workerName).trim();
+  if (deviceName) device.deviceName = String(deviceName).trim();
+  persistDeviceRequests();
+
+  res.json({ success: true, device });
 });
 
 app.post('/api/logout', requireAuth, (req, res) => {

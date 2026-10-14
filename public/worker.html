@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800&family=Pacifico&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="styles.css">
   <style>
     :root {
       --hk-bg: #ffe4ec;
@@ -147,10 +147,6 @@
       box-shadow: 0 8px 22px rgba(255, 31, 98, 0.45);
     }
 
-    .hk-btn-primary:active:not(:disabled) {
-      transform: translateY(1px);
-    }
-
     .hk-btn-primary:disabled {
       opacity: 0.6;
       cursor: not-allowed;
@@ -163,7 +159,6 @@
       color: var(--hk-muted);
     }
 
-    /* Video element hidden/cleanly embedded */
     video#preview {
       width: 100%;
       max-height: 120px;
@@ -171,7 +166,7 @@
       border-radius: 16px;
       border: 2px solid var(--hk-border);
       margin-top: 12px;
-      display: none; /* Auto-shown when streaming */
+      display: none;
     }
 
     /* Task Dropdown Bar */
@@ -295,7 +290,6 @@
       color: var(--hk-muted);
     }
 
-    /* Thread Inbox View */
     .sms-thread-list {
       display: flex;
       flex-direction: column;
@@ -315,18 +309,6 @@
       border-radius: 18px;
       cursor: pointer;
       transition: all 0.2s ease;
-      position: relative;
-    }
-
-    .sms-thread-item:hover {
-      border-color: var(--hk-border);
-      background: #fff8fa;
-      transform: translateX(2px);
-    }
-
-    .sms-avatar-wrapper {
-      position: relative;
-      flex-shrink: 0;
     }
 
     .sms-avatar {
@@ -339,236 +321,74 @@
       align-items: center;
       justify-content: center;
       font-size: 26px;
-      overflow: hidden;
     }
 
-    .sms-online-dot {
-      width: 12px;
-      height: 12px;
-      background: #10b981;
-      border: 2px solid #ffffff;
-      border-radius: 50%;
-      position: absolute;
-      top: 0;
-      left: -2px;
-    }
+    .sms-thread-content { flex: 1; min-width: 0; }
+    .sms-contact-name { font-weight: 800; font-size: 15px; color: var(--hk-text); }
+    .sms-snippet { font-size: 13px; color: var(--hk-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-    .sms-thread-content {
-      flex: 1;
-      min-width: 0;
-    }
-
-    .sms-thread-top {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 3px;
-    }
-
-    .sms-contact-name {
-      font-weight: 800;
-      font-size: 15px;
-      color: var(--hk-text);
-      display: flex;
-      align-items: center;
-      gap: 4px;
-    }
-
-    .sms-time {
-      font-size: 11px;
-      color: var(--hk-muted);
-      font-weight: 600;
-    }
-
-    .sms-snippet {
-      font-size: 13px;
-      color: var(--hk-muted);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .sms-unread-badge {
-      background: var(--hk-pink-dark);
-      color: #ffffff;
-      font-size: 11px;
-      font-weight: 800;
-      padding: 2px 7px;
-      border-radius: 10px;
-      flex-shrink: 0;
-    }
-
-    .sms-chevron {
-      color: var(--hk-border);
-      font-size: 18px;
-      font-weight: 700;
-      margin-left: 4px;
-    }
-
-    /* Active Conversation SMS View */
-    .sms-chat-view {
-      display: none; /* Toggled when viewing conversation */
-      flex-direction: column;
-      height: 100%;
-      gap: 10px;
-    }
-
-    .sms-chat-subhead {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding-bottom: 8px;
-      border-bottom: 1px solid var(--hk-border-soft);
-    }
-
-    .sms-back-btn {
-      background: #fff;
-      border: 1.5px solid var(--hk-border);
-      border-radius: 12px;
-      padding: 4px 10px;
-      font-size: 13px;
-      font-weight: 700;
-      color: var(--hk-pink-dark);
-      cursor: pointer;
-    }
-
-    .sms-chat-messages {
-      flex: 1;
-      overflow-y: auto;
-      max-height: 260px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      padding: 8px 4px;
-    }
+    .sms-chat-view { display: none; flex-direction: column; height: 100%; gap: 10px; }
+    .sms-chat-messages { flex: 1; overflow-y: auto; max-height: 260px; display: flex; flex-direction: column; gap: 8px; padding: 8px 4px; }
 
     .sms-bubble {
-      max-width: 80%;
-      padding: 10px 14px;
-      border-radius: 18px;
-      font-size: 14px;
-      line-height: 1.4;
-      position: relative;
-      word-break: break-word;
+      max-width: 80%; padding: 10px 14px; border-radius: 18px; font-size: 14px; line-height: 1.4;
     }
+    .sms-bubble.incoming { align-self: flex-start; background: #ffffff; border: 1.5px solid var(--hk-border-soft); }
+    .sms-bubble.outgoing { align-self: flex-end; background: linear-gradient(135deg, #ff5c8a, #ff2a6d); color: #fff; }
 
-    .sms-bubble.incoming {
-      align-self: flex-start;
-      background: #ffffff;
-      border: 1.5px solid var(--hk-border-soft);
-      color: var(--hk-text);
-      border-bottom-left-radius: 4px;
-    }
+    .sms-input-row { display: flex; align-items: center; gap: 8px; margin-top: auto; }
+    .sms-input { flex: 1; border-radius: 20px !important; border: 2px solid var(--hk-border) !important; padding: 10px 16px !important; }
+    .sms-send-btn { background: var(--hk-pink-dark); color: #fff; border: none; border-radius: 50%; width: 42px; height: 42px; font-size: 18px; cursor: pointer; }
 
-    .sms-bubble.outgoing {
-      align-self: flex-end;
-      background: linear-gradient(135deg, #ff5c8a, #ff2a6d);
-      color: #ffffff;
-      border-bottom-right-radius: 4px;
-      box-shadow: 0 3px 10px rgba(255, 42, 109, 0.25);
-    }
-
-    .sms-bubble-time {
-      font-size: 10px;
-      margin-top: 4px;
-      opacity: 0.75;
-      text-align: right;
-    }
-
-    .sms-input-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-top: auto;
-    }
-
-    .sms-input {
-      flex: 1;
-      border-radius: 20px !important;
-      border: 2px solid var(--hk-border) !important;
-      padding: 10px 16px !important;
-    }
-
-    .sms-send-btn {
-      background: var(--hk-pink-dark);
-      color: #fff;
-      border: none;
-      border-radius: 50%;
-      width: 42px;
-      height: 42px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 18px;
-      cursor: pointer;
-      box-shadow: 0 4px 12px rgba(255, 42, 109, 0.3);
-      flex-shrink: 0;
-    }
-
-    /* Bottom Decoration & Footer */
-    .hk-footer {
-      display: flex;
-      align-items: flex-end;
-      justify-content: space-between;
-      position: relative;
-      margin-top: 4px;
-      padding: 0 10px;
-    }
-
-    .hk-footer-kitty-left {
-      width: 90px;
-      height: 70px;
-      background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 80"><path d="M20,60 Q10,60 10,40 Q10,20 30,20 Q40,10 60,10 Q80,10 85,25 Q95,35 95,50 Q95,65 80,65 Z" fill="%23ffffff" stroke="%23ff5c8a" stroke-width="3"/><circle cx="45" cy="35" r="4" fill="%23222"/><circle cx="65" cy="35" r="4" fill="%23222"/><ellipse cx="55" cy="42" rx="4" ry="3" fill="%23ffb703"/><path d="M70,18 Q82,10 85,25" fill="%23ff2a6d"/><ellipse cx="78" cy="18" rx="6" ry="6" fill="%23ff2a6d"/></svg>') no-repeat center/contain;
-    }
-
-    .hk-footer-kitty-right {
-      width: 80px;
-      height: 70px;
-      background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 90"><ellipse cx="50" cy="50" rx="35" ry="30" fill="%23ffffff" stroke="%23ff5c8a" stroke-width="3"/><circle cx="38" cy="45" r="4" fill="%23222"/><circle cx="62" cy="45" r="4" fill="%23222"/><ellipse cx="50" cy="50" rx="4" ry="3" fill="%23ffb703"/><path d="M25,28 Q20,10 35,22 M75,28 Q80,10 65,22" fill="%23ffffff" stroke="%23ff5c8a" stroke-width="3"/><ellipse cx="32" cy="22" rx="7" ry="5" fill="%23ff2a6d"/><ellipse cx="42" cy="22" rx="7" ry="5" fill="%23ff2a6d"/><circle cx="37" cy="22" r="3" fill="%23ffffff"/></svg>') no-repeat center/contain;
-    }
-
-    .hk-mini-timer-pill {
-      background: #ffffff;
-      border: 2px solid var(--hk-border);
-      border-radius: 20px;
-      padding: 6px 18px;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      font-family: 'Fredoka', cursive;
-      font-size: 18px;
-      color: var(--hk-pink-dark);
-      box-shadow: 0 4px 12px rgba(255, 168, 197, 0.3);
-    }
+    /* Footer */
+    .hk-footer { display: flex; align-items: flex-end; justify-content: space-between; margin-top: 4px; padding: 0 10px; }
+    .hk-mini-timer-pill { background: #ffffff; border: 2px solid var(--hk-border); border-radius: 20px; padding: 6px 18px; font-family: 'Fredoka', cursive; font-size: 18px; color: var(--hk-pink-dark); }
   </style>
 </head>
 <body>
 
+  <!-- Device First-Run Registration & Approval Overlay -->
+  <div id="devRegOverlay" style="display: none; position: fixed; inset: 0; background: rgba(255, 214, 229, 0.96); backdrop-filter: blur(12px); z-index: 99999; align-items: center; justify-content: center; padding: 20px;">
+    <div class="hk-card" style="width: min(400px, 100%); text-align: center;">
+      <div style="font-size: 42px; margin-bottom: 4px;">🎀</div>
+      <h2 style="font-family: 'Fredoka', cursive; color: var(--hk-pink-dark); margin-bottom: 4px;">Device First-Run Setup</h2>
+      <p style="font-size: 13px; color: var(--hk-muted); margin-bottom: 14px;">Register this device to request Admin Approval</p>
+
+      <div style="background: #ffffff; border: 2px dashed var(--hk-border); border-radius: 16px; padding: 10px; margin-bottom: 16px;">
+        <span style="font-size: 11px; font-weight: 800; color: var(--hk-muted); text-transform: uppercase;">Device Identifier</span>
+        <div id="devIdDisplay" style="font-family: 'Fredoka', cursive; font-size: 20px; color: var(--hk-pink-dark); margin-top: 2px;">KITTY-DEV-0000</div>
+      </div>
+
+      <form id="devRegForm" style="display: flex; flex-direction: column; gap: 10px; text-align: left;" onsubmit="event.preventDefault(); submitDeviceRequest();">
+        <label style="font-size: 12px; font-weight: 800; color: var(--hk-text);">Device / Worker Name:
+          <input type="text" id="regDevName" placeholder="e.g. Kitty Phone 1" required aria-label="Device Name" style="width:100%; padding:10px; border-radius:14px; border:2px solid var(--hk-border);">
+        </label>
+
+        <label style="font-size: 12px; font-weight: 800; color: var(--hk-text);">Desired Username:
+          <input type="text" id="regUsername" placeholder="e.g. worker1" required aria-label="Username" style="width:100%; padding:10px; border-radius:14px; border:2px solid var(--hk-border);">
+        </label>
+
+        <label style="font-size: 12px; font-weight: 800; color: var(--hk-text);">Password:
+          <input type="password" id="regPassword" placeholder="••••••••" required aria-label="Password" style="width:100%; padding:10px; border-radius:14px; border:2px solid var(--hk-border);">
+        </label>
+
+        <button type="submit" id="regSubmitBtn" class="hk-btn-primary" style="width: 100%; margin-top: 6px;">
+          <span>Request Admin Approval 🌸</span>
+        </button>
+      </form>
+
+      <div id="devRegPendingStatus" style="display: none; margin-top: 16px; padding: 14px; background: #fff0f5; border: 2px solid var(--hk-border); border-radius: 18px;">
+        <div class="heart-icon" style="font-size: 26px;">💖</div>
+        <div style="font-weight: 800; font-size: 15px; color: var(--hk-pink-dark); margin-top: 4px;">Pending Admin Approval</div>
+        <p style="font-size: 12px; color: var(--hk-muted); margin-top: 4px;">Once Admin approves your device request, this dashboard will unlock automatically! 💕</p>
+      </div>
+    </div>
+  </div>
+
   <div class="hk-app-container">
 
-    <!-- Header with Hello Kitty Title and Peeking Art -->
+    <!-- Header -->
     <header class="hk-header">
-      <div class="hk-peeking-kitty">
-        <svg viewBox="0 0 100 80" width="100%" height="100%">
-          <!-- Kitty Head Peeking -->
-          <ellipse cx="50" cy="50" rx="38" ry="28" fill="#ffffff" stroke="#ff2a6d" stroke-width="3"/>
-          <path d="M20,32 L12,12 L32,24 Z" fill="#ffffff" stroke="#ff2a6d" stroke-width="3"/>
-          <path d="M80,32 L88,12 L68,24 Z" fill="#ffffff" stroke="#ff2a6d" stroke-width="3"/>
-          <!-- Bow -->
-          <ellipse cx="28" cy="22" rx="8" ry="6" fill="#ff2a6d"/>
-          <ellipse cx="40" cy="22" rx="8" ry="6" fill="#ff2a6d"/>
-          <circle cx="34" cy="22" r="4" fill="#ffffff"/>
-          <!-- Eyes & Nose -->
-          <ellipse cx="38" cy="50" rx="3" ry="4" fill="#222"/>
-          <ellipse cx="62" cy="50" rx="3" ry="4" fill="#222" />
-          <ellipse cx="50" cy="55" rx="3" ry="2" fill="#ffb703"/>
-          <!-- Whiskers -->
-          <line x1="15" y1="48" x2="28" y2="50" stroke="#222" stroke-width="2"/>
-          <line x1="15" y1="55" x2="28" y2="55" stroke="#222" stroke-width="2"/>
-          <line x1="72" y1="50" x2="85" y2="48" stroke="#222" stroke-width="2"/>
-          <line x1="72" y1="55" x2="85" y2="55" stroke="#222" stroke-width="2"/>
-        </svg>
-      </div>
       <h1 class="hk-title">Hello Kitty 💕</h1>
     </header>
 
@@ -589,7 +409,7 @@
       <video id="preview" autoplay playsinline muted></video>
     </main>
 
-    <!-- Task Selection Pull Down Menu Card -->
+    <!-- Task Selection Pull Down Menu -->
     <section class="hk-card task-card">
       <div class="task-dropdown-wrapper">
         <div class="task-icon-badge">📋🎀</div>
@@ -603,7 +423,7 @@
       <p id="taskDesc" style="font-size: 12px; color: var(--hk-muted); margin-top: 6px; padding-left: 8px; display: none;"></p>
     </section>
 
-    <!-- Messages / Android SMS Manager Style Card -->
+    <!-- Messages / SMS Manager -->
     <section class="hk-card chat-card">
       <div class="sms-header">
         <div class="sms-title-group">
@@ -616,94 +436,17 @@
         </div>
       </div>
 
-      <!-- Thread Inbox List View -->
       <div id="smsInboxView" class="sms-thread-list">
-        <!-- Built-in threads matching Android SMS layout -->
-        <div class="sms-thread-item" onclick="openChatThread('kitty-team', 'Kitty Team 📌', '🐱')">
-          <div class="sms-avatar-wrapper">
-            <span class="sms-online-dot"></span>
-            <div class="sms-avatar">🐱</div>
-          </div>
+        <div class="sms-thread-item" onclick="openChatThread('kitty-team', 'Kitty Team 📌')">
+          <div class="sms-avatar">🐱</div>
           <div class="sms-thread-content">
-            <div class="sms-thread-top">
-              <span class="sms-contact-name">Kitty Team 📌</span>
-              <span class="sms-time">10:24 AM</span>
-            </div>
-            <div class="sms-snippet">Your work session has been approved! 💕</div>
+            <div class="sms-contact-name">Kitty Team 📌</div>
+            <div class="sms-snippet">Your device session is approved! 💕</div>
           </div>
-          <span class="sms-unread-badge">3</span>
-          <span class="sms-chevron">›</span>
-        </div>
-
-        <div class="sms-thread-item" onclick="openChatThread('study-buddy', 'Study Buddy', '🐻')">
-          <div class="sms-avatar-wrapper">
-            <span class="sms-online-dot"></span>
-            <div class="sms-avatar">🐻</div>
-          </div>
-          <div class="sms-thread-content">
-            <div class="sms-thread-top">
-              <span class="sms-contact-name">Study Buddy</span>
-              <span class="sms-time">9:18 AM</span>
-            </div>
-            <div class="sms-snippet">Don't forget to take a short break! ☕✨</div>
-          </div>
-          <span class="sms-unread-badge">1</span>
-          <span class="sms-chevron">›</span>
-        </div>
-
-        <div class="sms-thread-item" onclick="openChatThread('project-group', 'Project Group', '🐱')">
-          <div class="sms-avatar-wrapper">
-            <div class="sms-avatar">🐱</div>
-          </div>
-          <div class="sms-thread-content">
-            <div class="sms-thread-top">
-              <span class="sms-contact-name">Project Group</span>
-              <span class="sms-time">Yesterday</span>
-            </div>
-            <div class="sms-snippet">Can you share the updated file later? 💖</div>
-          </div>
-          <span class="sms-chevron">›</span>
-        </div>
-
-        <div class="sms-thread-item" onclick="openChatThread('reminders', 'Reminders', '🐤')">
-          <div class="sms-avatar-wrapper">
-            <div class="sms-avatar">🐤</div>
-          </div>
-          <div class="sms-thread-content">
-            <div class="sms-thread-top">
-              <span class="sms-contact-name">Reminders</span>
-              <span class="sms-time">Yesterday</span>
-            </div>
-            <div class="sms-snippet">You have 2 tasks due this week! 📝</div>
-          </div>
-          <span class="sms-chevron">›</span>
-        </div>
-
-        <div class="sms-thread-item" onclick="openChatThread('bestie', 'Bestie', '🐱‍👤')">
-          <div class="sms-avatar-wrapper">
-            <div class="sms-avatar">🐱‍👤</div>
-          </div>
-          <div class="sms-thread-content">
-            <div class="sms-thread-top">
-              <span class="sms-contact-name">Bestie</span>
-              <span class="sms-time">Mon</span>
-            </div>
-            <div class="sms-snippet">You're doing great! Keep it up! 💖</div>
-          </div>
-          <span class="sms-chevron">›</span>
         </div>
       </div>
 
-      <!-- Active Conversation View -->
       <div id="smsChatView" class="sms-chat-view">
-        <div class="sms-chat-subhead">
-          <button class="sms-back-btn" onclick="closeChatThread()">← Messages</button>
-          <span id="smsChatTargetName" style="font-weight: 800; font-size: 15px; color: var(--hk-pink-dark);">Kitty Team</span>
-          <span style="font-size: 12px; color: #10b981; font-weight: 700;">● Active</span>
-        </div>
-        <div id="smsMessagesList" class="sms-chat-messages">
-          <!-- Dynamically populated messages -->
-        </div>
         <div class="sms-input-row">
           <input type="text" id="smsInput" class="sms-input" placeholder="Type a message..." aria-label="Type a message">
           <button id="smsSendBtn" class="sms-send-btn">➔</button>
@@ -711,40 +454,28 @@
       </div>
     </section>
 
-    <!-- Footer Decor with Resting/Sitting Kitty and Elapsed Pill -->
+    <!-- Footer -->
     <footer class="hk-footer">
-      <div class="hk-footer-kitty-left"></div>
       <div class="hk-mini-timer-pill">
         <span>🕒</span>
         <span id="subTimer">00:00:00</span>
       </div>
-      <div class="hk-footer-kitty-right"></div>
     </footer>
 
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script>
-    const button = document.getElementById('timerBtn');
-    const btnText = document.getElementById('btnText');
-    const statusEl = document.getElementById('status');
-    const timerEl = document.getElementById('timer');
-    const subTimerEl = document.getElementById('subTimer');
-    const taskSelect = document.getElementById('taskSelect');
-    const submitTaskBtn = document.getElementById('submitTaskBtn');
-    const taskDesc = document.getElementById('taskDesc');
-    const smsInboxView = document.getElementById('smsInboxView');
-    const smsChatView = document.getElementById('smsChatView');
-    const smsChatTargetName = document.getElementById('smsChatTargetName');
-    const smsMessagesList = document.getElementById('smsMessagesList');
-    const smsInput = document.getElementById('smsInput');
-    const smsSendBtn = document.getElementById('smsSendBtn');
-    const smsSearch = document.getElementById('smsSearch');
+    let myDeviceId = localStorage.getItem('hk_device_id');
+    if (!myDeviceId) {
+      myDeviceId = 'KITTY-DEV-' + Math.floor(1000 + Math.random() * 9000);
+      localStorage.setItem('hk_device_id', myDeviceId);
+    }
+    document.getElementById('devIdDisplay').textContent = myDeviceId;
 
-    let state, socket, stream, pc, adminId, pendingIce = [], iceServers = [], wakeLock = null;
-    let currentUser = null;
-    let loadedTasks = [];
-    let currentThreadId = null;
+    const devRegOverlay = document.getElementById('devRegOverlay');
+    const devRegForm = document.getElementById('devRegForm');
+    const devRegPendingStatus = document.getElementById('devRegPendingStatus');
 
     async function api(path, body) {
       const r = await fetch(path, {
@@ -757,300 +488,54 @@
       return d;
     }
 
-    async function updateWakeLock() {
-      if (state?.status === 'WORKING') {
-        if (!wakeLock && 'wakeLock' in navigator) {
-          try { wakeLock = await navigator.wakeLock.request('screen'); } catch(e){}
-        }
-      } else if (wakeLock) {
-        try { await wakeLock.release(); wakeLock = null; } catch(e){}
-      }
-    }
-
-    function render() {
-      btnText.textContent = state?.status === 'WORKING' ? 'Pause' : state?.status === 'PAUSED' ? 'Resume' : 'Start Timer';
-      button.disabled = !state;
-      updateWakeLock();
-    }
-
-    function tick() {
-      const ms = (state?.accumulatedMs || 0) + (state?.status === 'WORKING' ? Math.max(0, Date.now() - state.startedAt) : 0);
-      const t = Math.floor(ms / 1000);
-      const formatted = [Math.floor(t / 3600), Math.floor(t / 60) % 60, t % 60].map(v => String(v).padStart(2, '0')).join(':');
-      timerEl.textContent = formatted;
-      subTimerEl.textContent = formatted;
-    }
-
-    button.onclick = async () => {
-      button.disabled = true;
+    async function checkDeviceStatus() {
       try {
-        const action = state.status === 'WORKING' ? 'pause' : state.status === 'PAUSED' ? 'resume' : 'start';
-        state = (await api('/api/worker/' + action, {})).state;
-      } catch (e) {
-        statusEl.textContent = e.message;
-      } finally {
-        render();
-      }
-    };
-
-    // --- Tasks Management ---
-    async function loadWorkerTasks() {
-      try {
-        const res = await api('/api/worker/tasks');
-        loadedTasks = res.tasks || [];
-        taskSelect.innerHTML = '<option value="">Select a Task</option>';
-        loadedTasks.forEach(t => {
-          const opt = document.createElement('option');
-          opt.value = t.taskId || t.id;
-          opt.textContent = `[${t.status}] ${t.title}`;
-          taskSelect.appendChild(opt);
-        });
-      } catch (e) {
-        console.error('Failed loading tasks:', e);
-      }
-    }
-
-    taskSelect.onchange = () => {
-      const selectedId = taskSelect.value;
-      const t = loadedTasks.find(x => (x.taskId === selectedId || x.id === selectedId));
-      if (t) {
-        taskDesc.textContent = t.description || 'No description provided.';
-        taskDesc.style.display = 'block';
-        submitTaskBtn.style.display = t.status === 'ASSIGNED' || t.status === 'RETURNED' ? 'inline-block' : 'none';
-      } else {
-        taskDesc.style.display = 'none';
-        submitTaskBtn.style.display = 'none';
-      }
-    };
-
-    submitTaskBtn.onclick = async () => {
-      const selectedId = taskSelect.value;
-      if (!selectedId) return;
-      try {
-        await api(`/api/tasks/${selectedId}/submit`, {});
-        alert('Task submitted for review! 💕');
-        loadWorkerTasks();
-      } catch (e) {
-        alert('Error submitting task: ' + e.message);
-      }
-    };
-
-    // --- SMS Chat Management ---
-    function openChatThread(id, name, avatar) {
-      currentThreadId = id;
-      smsChatTargetName.textContent = name;
-      smsInboxView.style.display = 'none';
-      smsChatView.style.display = 'flex';
-      loadChatMessages();
-    }
-
-    function closeChatThread() {
-      smsChatView.style.display = 'none';
-      smsInboxView.style.display = 'flex';
-      currentThreadId = null;
-    }
-
-    async function loadChatMessages() {
-      if (!currentUser) return;
-      try {
-        const res = await api(`/api/chat/${currentUser.id}`);
-        const messages = res.messages || [];
-        smsMessagesList.innerHTML = '';
-        if (messages.length === 0) {
-          smsMessagesList.innerHTML = `
-            <div class="sms-bubble incoming">
-              Welcome! Send a message to start your work session. 🎀
-              <div class="sms-bubble-time">Just now</div>
-            </div>`;
+        const res = await api('/api/device/status/' + myDeviceId);
+        if (res.status === 'APPROVED') {
+          devRegOverlay.style.display = 'none';
+        } else if (res.status === 'PENDING') {
+          devRegOverlay.style.display = 'flex';
+          devRegForm.style.display = 'none';
+          devRegPendingStatus.style.display = 'block';
         } else {
-          messages.forEach(m => {
-            const isOutgoing = m.senderRole === 'WORKER';
-            const b = document.createElement('div');
-            b.className = `sms-bubble ${isOutgoing ? 'outgoing' : 'incoming'}`;
-            const timeStr = new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            b.innerHTML = `${m.message}<div class="sms-bubble-time">${timeStr}</div>`;
-            smsMessagesList.appendChild(b);
-          });
+          devRegOverlay.style.display = 'flex';
+          devRegForm.style.display = 'flex';
+          devRegPendingStatus.style.display = 'none';
         }
-        smsMessagesList.scrollTop = smsMessagesList.scrollHeight;
       } catch (e) {
-        console.error('Error loading chat:', e);
+        devRegOverlay.style.display = 'flex';
       }
     }
 
-    async function sendSmsMessage() {
-      const text = smsInput.value.trim();
-      if (!text || !currentUser) return;
-      smsInput.value = '';
-      try {
-        await api(`/api/chat/${currentUser.id}/messages`, { message: text });
-        loadChatMessages();
-      } catch (e) {
-        alert('Failed sending message: ' + e.message);
-      }
-    }
-
-    smsSendBtn.onclick = sendSmsMessage;
-    smsInput.onkeyup = (e) => { if (e.key === 'Enter') sendSmsMessage(); };
-
-    // Search filter for inbox
-    smsSearch.oninput = () => {
-      const q = smsSearch.value.toLowerCase();
-      document.querySelectorAll('.sms-thread-item').forEach(item => {
-        const text = item.textContent.toLowerCase();
-        item.style.display = text.includes(q) ? 'flex' : 'none';
-      });
-    };
-
-    function closePeer() {
-      if (pc) pc.close();
-      pc = null;
-      adminId = null;
-      pendingIce = [];
-    }
-
-    (async () => {
-      const me = await api('/api/me');
-      if (me.user.role !== 'worker') throw Error('Worker account required');
-      currentUser = me.user;
-      document.getElementById('workerName').textContent = '🌸 ' + me.user.name;
-      state = (await api('/api/worker/state')).state;
-      iceServers = (await api('/api/rtc-config')).iceServers;
-
-      loadWorkerTasks();
+    async function submitDeviceRequest() {
+      const deviceName = document.getElementById('regDevName').value;
+      const username = document.getElementById('regUsername').value;
+      const password = document.getElementById('regPassword').value;
 
       try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: true,
-          audio: { echoCancellation: true, noiseSuppression: true }
+        await api('/api/device/register-request', {
+          deviceId: myDeviceId,
+          deviceName,
+          username,
+          password
         });
-        document.getElementById('preview').srcObject = stream;
-        statusEl.textContent = 'Camera & Microphone Active 🌸';
+        devRegForm.style.display = 'none';
+        devRegPendingStatus.style.display = 'block';
       } catch (e) {
-        statusEl.textContent = 'Media active (Audio/Video ready) 🎀';
+        alert('Failed requesting approval: ' + e.message);
       }
+    }
 
-      socket = io();
-      socket.on('connect', () => {
-        closePeer();
-        socket.emit('worker-capture-ready');
-        socket.emit('worker-heartbeat');
-      });
-
-      socket.on('worker-ping', p => socket.emit('worker-pong', { ...p, workerReceivedAt: Date.now() }));
-      socket.on('timer-updated', p => { state = p; render(); });
-      socket.on('timer-stopped', () => { state = { ...state, status: 'STOPPED', startedAt: null, accumulatedMs: 0 }; render(); });
-
-      // Realtime tasks & chat sockets
-      socket.on('task:assigned', () => loadWorkerTasks());
-      socket.on('task:updated', () => loadWorkerTasks());
-      socket.on('chat:message', () => {
-        if (smsChatView.style.display === 'flex') loadChatMessages();
-      });
-
-      // --- WAKE UP RECEIVER ---
-      socket.on('worker-wakeup', data => {
-        const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
-        audio.play().catch(() => {});
-        alert(`🎀 Wake-up signal received!\nSender: ${data.sender}\nMessage: "${data.message}"`);
-      });
-
-      socket.on('switch-camera', async p => {
-        const pref = p?.camera;
-        if (!stream) return;
-        const track = stream.getVideoTracks()[0];
-        let constraints;
-        if (pref === 'front') constraints = { facingMode: 'user' };
-        else if (pref === 'back') constraints = { facingMode: 'environment' };
-        else {
-          const curr = track?.getSettings()?.facingMode;
-          constraints = { facingMode: curr === 'user' ? 'environment' : 'user' };
-        }
-        try {
-          const newStream = await navigator.mediaDevices.getUserMedia({ video: constraints, audio: true });
-          const newTrack = newStream.getVideoTracks()[0];
-          if (pc) {
-            const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
-            if (sender && newTrack) sender.replaceTrack(newTrack);
-          }
-          if (track) track.stop();
-          stream = newStream;
-          document.getElementById('preview').srcObject = stream;
-        } catch (e) {
-          statusEl.textContent = 'Camera switch failed: ' + e.message;
-        }
-      });
-
-      socket.on('stop-live', () => { closePeer(); statusEl.textContent = 'Camera ready'; });
-      socket.on('session-replaced', () => {
-        if (stream) stream.getTracks().forEach(t => t.stop());
-        closePeer();
-        button.disabled = true;
-        statusEl.textContent = 'This account was opened on another device';
-      });
-
-      socket.on('live-request', async request => {
-        if (request.mode !== 'camera' && request.mode !== 'screen') {
-          socket.emit('worker-live-error', { ...request, message: 'Unsupported mode.' });
-          return;
-        }
-        if (pc) return;
-        try {
-          adminId = request.adminSocketId;
-          pendingIce = [];
-          pc = new RTCPeerConnection({ iceServers });
-          const current = pc;
-          let liveStream;
-          if (request.mode === 'screen') {
-            liveStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
-            liveStream.getVideoTracks()[0].onended = () => {
-              if (pc === current) {
-                socket.emit('worker-live-stopped', { adminSocketId: adminId, workerId: state.id, mode: 'screen', reason: 'user-ended' });
-                closePeer();
-                statusEl.textContent = 'Camera ready';
-              }
-            };
-          } else {
-            liveStream = stream;
-          }
-          if (liveStream) liveStream.getTracks().forEach(t => pc.addTrack(t, liveStream));
-          pc.onicecandidate = e => {
-            if (e.candidate) socket.emit('rtc-ice', { targetSocketId: adminId, workerId: state.id, candidate: e.candidate });
-          };
-          await pc.setLocalDescription(await pc.createOffer());
-          if (pc !== current) return;
-          socket.emit('worker-live-started', { ...request });
-          socket.emit('rtc-offer', { targetSocketId: adminId, workerId: state.id, mode: request.mode, offer: pc.localDescription });
-          statusEl.textContent = request.mode === 'screen' ? 'Screen Share Live' : 'Timer Live';
-        } catch (e) {
-          closePeer();
-          socket.emit('worker-live-error', { ...request, message: e.message });
-        }
-      });
-
-      socket.on('rtc-answer', async p => {
-        if (!pc || p.adminSocketId !== adminId) return;
-        try {
-          await pc.setRemoteDescription(p.answer);
-          for (const c of pendingIce) await pc.addIceCandidate(c);
-          pendingIce = [];
-        } catch (e) {
-          statusEl.textContent = e.message;
-        }
-      });
-
-      socket.on('rtc-ice', async p => {
-        if (!pc || p.fromSocketId !== adminId) return;
-        if (!pc.remoteDescription) pendingIce.push(p.candidate);
-        else try { await pc.addIceCandidate(p.candidate); } catch (e) { statusEl.textContent = e.message; }
-      });
-
-      setInterval(() => { if (socket.connected) socket.emit('worker-heartbeat'); }, 10000);
-      render();
-      setInterval(tick, 500);
-    })().catch(e => {
-      statusEl.textContent = e.message + ' — sign in on the homepage.';
+    // Connect Socket.IO for real-time device approval
+    const socket = io();
+    socket.on('device:approved', p => {
+      if (p.deviceId === myDeviceId) {
+        alert('Device approved by Admin! Opening dashboard... 💕');
+        location.reload();
+      }
     });
+
+    checkDeviceStatus();
   </script>
 </body>
 </html>
