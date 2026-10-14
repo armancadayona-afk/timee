@@ -495,7 +495,7 @@
       const selector=document.getElementById('monitorWorkerSelect');
       const previous=selector.value;
       selector.replaceChildren();
-      for(const w of workers) selector.add(new Option(w.name,w.id));
+      for(const w of workers) selector.add(new Option(`${w.name} — ${w.online ? "🟢 Active" : "⚪ Inactive"}`,w.id));
       if(workers.some(w=>w.id===previous)) selector.value=previous;
       for(const card of document.querySelectorAll('#workers > article')) card.hidden = card.id !== selector.value;
     }
@@ -618,7 +618,7 @@
         const previous=el.value;
         el.replaceChildren();
         if (includeAll) el.add(new Option('All Workers',''));
-        for (const w of available) el.add(new Option(`${w.name} (${w.id})`,w.id));
+        for (const w of available) el.add(new Option(`${w.name} — ${w.online ? "🟢 Active" : "⚪ Inactive"}`,w.id));
         if ([...el.options].some(o=>o.value===previous)) el.value=previous;
       }
       const next=document.getElementById('chatWorkerSelect')?.value || '';

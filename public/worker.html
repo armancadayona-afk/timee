@@ -483,17 +483,20 @@
         headers: { 'Content-Type': 'application/json' },
         body: body ? JSON.stringify(body) : undefined
       });
-      const d = await r.json();
-      if (!r.ok) throw Error(d.error || 'Request failed');
+      const raw = await r.text();
+      let d;
+      try { d = JSON.parse(raw); }
+      catch (_) { throw Error('Server returned HTML instead of JSON (HTTP ' + r.status + '). Deploy the updated server on Render and retry.'); }
+      if (!r.ok) throw Error(d.error || 'Request failed (HTTP ' + r.status + ')');
       return d;
     }
 
     async function checkDeviceStatus() {
       try {
         const res = await api('/api/device/status/' + myDeviceId);
-        if (res.status === 'APPROVED') {
+        if (String(res.status).toLowerCase() === 'approved') {
           devRegOverlay.style.display = 'none';
-        } else if (res.status === 'PENDING') {
+        } else if (String(res.status).toLowerCase() === 'pending') {
           devRegOverlay.style.display = 'flex';
           devRegForm.style.display = 'none';
           devRegPendingStatus.style.display = 'block';
@@ -504,6 +507,7 @@
         }
       } catch (e) {
         devRegOverlay.style.display = 'flex';
+        console.warn('Device status check failed:', e.message);
       }
     }
 
@@ -513,11 +517,10 @@
       const password = document.getElementById('regPassword').value;
 
       try {
-        await api('/api/device/register-request', {
+        await api('/api/devices/register', {
           deviceId: myDeviceId,
           deviceName,
-          username,
-          password
+          workerName: username
         });
         devRegForm.style.display = 'none';
         devRegPendingStatus.style.display = 'block';
@@ -536,6 +539,7 @@
     });
 
     checkDeviceStatus();
+    setInterval(checkDeviceStatus, 10000);
   </script>
 </body>
 </html>
