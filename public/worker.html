@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Hello Kitty Timer & SMS Manager | Worker</title>
+  <title>Kitty Timer | Assigned Worker Dashboard</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800&family=Pacifico&display=swap" rel="stylesheet">
@@ -347,44 +347,6 @@
 </head>
 <body>
 
-  <!-- Device First-Run Registration & Approval Overlay -->
-  <div id="devRegOverlay" style="display: none; position: fixed; inset: 0; background: rgba(255, 214, 229, 0.96); backdrop-filter: blur(12px); z-index: 99999; align-items: center; justify-content: center; padding: 20px;">
-    <div class="hk-card" style="width: min(400px, 100%); text-align: center;">
-      <div style="font-size: 42px; margin-bottom: 4px;">🎀</div>
-      <h2 style="font-family: 'Fredoka', cursive; color: var(--hk-pink-dark); margin-bottom: 4px;">Device First-Run Setup</h2>
-      <p style="font-size: 13px; color: var(--hk-muted); margin-bottom: 14px;">Register this device to request Admin Approval</p>
-
-      <div style="background: #ffffff; border: 2px dashed var(--hk-border); border-radius: 16px; padding: 10px; margin-bottom: 16px;">
-        <span style="font-size: 11px; font-weight: 800; color: var(--hk-muted); text-transform: uppercase;">Device Identifier</span>
-        <div id="devIdDisplay" style="font-family: 'Fredoka', cursive; font-size: 20px; color: var(--hk-pink-dark); margin-top: 2px;">KITTY-DEV-0000</div>
-      </div>
-
-      <form id="devRegForm" style="display: flex; flex-direction: column; gap: 10px; text-align: left;" onsubmit="event.preventDefault(); submitDeviceRequest();">
-        <label style="font-size: 12px; font-weight: 800; color: var(--hk-text);">Device / Worker Name:
-          <input type="text" id="regDevName" placeholder="e.g. Kitty Phone 1" required aria-label="Device Name" style="width:100%; padding:10px; border-radius:14px; border:2px solid var(--hk-border);">
-        </label>
-
-        <label style="font-size: 12px; font-weight: 800; color: var(--hk-text);">Desired Username:
-          <input type="text" id="regUsername" placeholder="e.g. worker1" required aria-label="Username" style="width:100%; padding:10px; border-radius:14px; border:2px solid var(--hk-border);">
-        </label>
-
-        <label style="font-size: 12px; font-weight: 800; color: var(--hk-text);">Password:
-          <input type="password" id="regPassword" placeholder="••••••••" required aria-label="Password" style="width:100%; padding:10px; border-radius:14px; border:2px solid var(--hk-border);">
-        </label>
-
-        <button type="submit" id="regSubmitBtn" class="hk-btn-primary" style="width: 100%; margin-top: 6px;">
-          <span>Request Admin Approval 🌸</span>
-        </button>
-      </form>
-
-      <div id="devRegPendingStatus" style="display: none; margin-top: 16px; padding: 14px; background: #fff0f5; border: 2px solid var(--hk-border); border-radius: 18px;">
-        <div class="heart-icon" style="font-size: 26px;">💖</div>
-        <div style="font-weight: 800; font-size: 15px; color: var(--hk-pink-dark); margin-top: 4px;">Pending Admin Approval</div>
-        <p style="font-size: 12px; color: var(--hk-muted); margin-top: 4px;">Once Admin approves your device request, this dashboard will unlock automatically! 💕</p>
-      </div>
-    </div>
-  </div>
-
   <div class="hk-app-container">
 
     <!-- Header -->
@@ -466,80 +428,61 @@
 
   <script src="/socket.io/socket.io.js"></script>
   <script>
-    let myDeviceId = localStorage.getItem('hk_device_id');
-    if (!myDeviceId) {
-      myDeviceId = 'KITTY-DEV-' + Math.floor(1000 + Math.random() * 9000);
-      localStorage.setItem('hk_device_id', myDeviceId);
-    }
-    document.getElementById('devIdDisplay').textContent = myDeviceId;
-
-    const devRegOverlay = document.getElementById('devRegOverlay');
-    const devRegForm = document.getElementById('devRegForm');
-    const devRegPendingStatus = document.getElementById('devRegPendingStatus');
-
+    const $ = id => document.getElementById(id);
+    let currentState = null, myTasks = [], currentWorker = null;
+    const socket = io({ autoConnect: false });
     async function api(path, body) {
-      const r = await fetch(path, {
-        method: body ? 'POST' : 'GET',
-        headers: { 'Content-Type': 'application/json' },
-        body: body ? JSON.stringify(body) : undefined
-      });
-      const raw = await r.text();
-      let d;
-      try { d = JSON.parse(raw); }
-      catch (_) { throw Error('Server returned HTML instead of JSON (HTTP ' + r.status + '). Deploy the updated server on Render and retry.'); }
-      if (!r.ok) throw Error(d.error || 'Request failed (HTTP ' + r.status + ')');
-      return d;
+      const response = await fetch(path, {method: body === undefined ? 'GET' : 'POST', credentials:'same-origin', headers: {'Content-Type':'application/json'}, body:body === undefined?undefined:JSON.stringify(body)});
+      const raw = await response.text();
+      let data; try {data=JSON.parse(raw);} catch {throw Error('Server returned a page instead of JSON (HTTP '+response.status+'). Check deployed server version.');}
+      if (!response.ok) throw Error(data.error || 'HTTP '+response.status);
+      return data;
     }
-
-    async function checkDeviceStatus() {
-      try {
-        const res = await api('/api/device/status/' + myDeviceId);
-        if (String(res.status).toLowerCase() === 'approved') {
-          devRegOverlay.style.display = 'none';
-        } else if (String(res.status).toLowerCase() === 'pending') {
-          devRegOverlay.style.display = 'flex';
-          devRegForm.style.display = 'none';
-          devRegPendingStatus.style.display = 'block';
-        } else {
-          devRegOverlay.style.display = 'flex';
-          devRegForm.style.display = 'flex';
-          devRegPendingStatus.style.display = 'none';
-        }
-      } catch (e) {
-        devRegOverlay.style.display = 'flex';
-        console.warn('Device status check failed:', e.message);
-      }
+    function fmt(ms) { const t=Math.floor(Math.max(0,ms)/1000); return [Math.floor(t/3600),Math.floor(t/60)%60,t%60].map(v=>String(v).padStart(2,'0')).join(':'); }
+    function draw() {
+      if (!currentState) return;
+      const t = (currentState.accumulatedMs||0) + (currentState.status==='WORKING' && currentState.startedAt ? Math.max(0,Date.now()-currentState.startedAt):0);
+      $('timer').textContent=fmt(t); $('subTimer').textContent=fmt(t);
+      const running=currentState.status==='WORKING';
+      $('btnText').textContent=running?'Pause Timer':currentState.status==='PAUSED'?'Resume Timer':'Start Timer';
+      $('status').textContent=(currentState.online?'Online • ':'')+currentState.status;
+      $('timerBtn').disabled=false;
     }
-
-    async function submitDeviceRequest() {
-      const deviceName = document.getElementById('regDevName').value;
-      const username = document.getElementById('regUsername').value;
-      const password = document.getElementById('regPassword').value;
-
-      try {
-        await api('/api/devices/register', {
-          deviceId: myDeviceId,
-          deviceName,
-          workerName: username
-        });
-        devRegForm.style.display = 'none';
-        devRegPendingStatus.style.display = 'block';
-      } catch (e) {
-        alert('Failed requesting approval: ' + e.message);
-      }
+    async function refreshState() {const d=await api('/api/worker/state');currentState=d.state;draw();}
+    async function refreshTasks() {
+      const data=await api('/api/worker/tasks');myTasks=data.tasks||[];
+      const sel=$('taskSelect');const chosen=sel.value;
+      sel.replaceChildren(new Option('Select a Task',''));
+      myTasks.forEach(t=>sel.add(new Option((t.title||'Task')+' — '+(t.status||'ASSIGNED'),t.id)));
+      sel.value=chosen;
     }
-
-    // Connect Socket.IO for real-time device approval
-    const socket = io();
-    socket.on('device:approved', p => {
-      if (p.deviceId === myDeviceId) {
-        alert('Device approved by Admin! Opening dashboard... 💕');
-        location.reload();
-      }
-    });
-
-    checkDeviceStatus();
-    setInterval(checkDeviceStatus, 10000);
+    async function toggleTimer() {
+      try {const action=currentState?.status==='WORKING'?'pause':currentState?.status==='PAUSED'?'resume':'start'; const d=await api('/api/worker/'+action,{});currentState=d.state;draw();}
+      catch(e){$('status').textContent=e.message;}
+    }
+    $('timerBtn').addEventListener('click',toggleTimer);
+    $('taskSelect').addEventListener('change',()=>{const task=myTasks.find(t=>t.id===$('taskSelect').value);$('taskDesc').style.display=task?'block':'none';$('taskDesc').textContent=task?.description||'';$('submitTaskBtn').style.display=task?'block':'none';});
+    $('submitTaskBtn').addEventListener('click',async()=>{const id=$('taskSelect').value;if(!id)return;try {await api('/api/tasks/'+encodeURIComponent(id)+'/submit',{});await refreshTasks();}catch(e){alert(e.message);}});
+    const inbox=$('smsInboxView'), chat=$('smsChatView');
+    function addMessage(m) {const b=document.createElement('div');b.className='sms-bubble '+(m.senderRole==='WORKER'?'outgoing':'incoming');b.textContent=m.message||''; chat.insertBefore(b,chat.querySelector('.sms-input-row'));chat.scrollTop=chat.scrollHeight;}
+    window.openChatThread=async()=>{inbox.style.display='none';chat.style.display='flex';chat.querySelectorAll('.sms-bubble').forEach(n=>n.remove());try{const d=await api('/api/chat/'+encodeURIComponent(currentWorker.id));(d.messages||[]).forEach(addMessage);}catch(e){console.warn(e);}};
+    $('smsSendBtn').addEventListener('click',()=>{const msg=$('smsInput').value.trim();if(!msg)return;socket.emit('chat:message',{message:msg});$('smsInput').value='';});
+    socket.on('chat:message',addMessage);
+    socket.on('workers-state',states=>{const s=states.find(x=>x.id===currentWorker?.id);if(s){currentState=s;draw();}});
+    socket.on('worker-ping',data=>socket.emit('worker-pong',{...data,workerReceivedAt:Date.now()}));
+    socket.on('connect',()=>socket.emit('worker-heartbeat'));
+    socket.on('session-replaced',()=>{$('status').textContent='Session opened elsewhere';});
+    async function init(){
+      try{
+        const data=await api('/api/me');currentWorker=data.user;
+        if(currentWorker?.role!=='worker')throw Error('Worker login required');
+        $('workerName').textContent=currentWorker.name||'Worker';
+        await refreshState();await refreshTasks();socket.connect();
+        setInterval(()=>{if(socket.connected)socket.emit('worker-heartbeat');},15000);
+        setInterval(draw,500);setInterval(()=>refreshTasks().catch(()=>{}),20000);
+      }catch(e){$('status').textContent='Please sign in to assigned Worker account. '+e.message;$('timerBtn').disabled=true;}
+    }
+    init();
   </script>
 </body>
 </html>
