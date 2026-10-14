@@ -453,7 +453,12 @@
       const data=await api('/api/worker/tasks');myTasks=data.tasks||[];
       const sel=$('taskSelect');const chosen=sel.value;
       sel.replaceChildren(new Option('Select a Task',''));
-      myTasks.forEach(t=>sel.add(new Option((t.title||'Task')+' — '+(t.status||'ASSIGNED'),t.id)));
+      myTasks.filter(t=>t.workerId===currentWorker.id).forEach(t=>sel.add(new Option((t.title||'Task')+' — '+(t.status||'ASSIGNED')+' — $'+Number(t.price||0).toFixed(2),t.id)));
+      const avail=$('availableTasks');if(avail){avail.replaceChildren();myTasks.filter(t=>['AVAILABLE','ASSIGNED'].includes(t.status)).forEach(t=>{
+        const box=document.createElement('div');box.style.cssText='background:#fff;border:1px solid #ffc1d5;border-radius:12px;padding:10px;font-size:13px';
+        const label=document.createElement('div');label.textContent=`${t.title} · $${Number(t.price||0).toFixed(2)} · ${t.allowConcurrent?'Concurrent':'Regular'}`;box.appendChild(label);
+        const btn=document.createElement('button');btn.className='hk-btn-primary';btn.style.cssText='font-size:13px;padding:7px;margin-top:8px;width:auto';btn.textContent='Accept Task';btn.onclick=async()=>{try{await api('/api/tasks/'+encodeURIComponent(t.id)+'/accept',{});await refreshTasks();}catch(e){alert(e.message)}};box.appendChild(btn);avail.appendChild(box);
+      });if(!avail.childNodes.length)avail.textContent='No available tasks';}
       sel.value=chosen;
     }
     async function toggleTimer() {
@@ -461,25 +466,104 @@
       catch(e){$('status').textContent=e.message;}
     }
     $('timerBtn').addEventListener('click',toggleTimer);
-    $('taskSelect').addEventListener('change',()=>{const task=myTasks.find(t=>t.id===$('taskSelect').value);$('taskDesc').style.display=task?'block':'none';$('taskDesc').textContent=task?.description||'';$('submitTaskBtn').style.display=task?'block':'none';});
-    $('submitTaskBtn').addEventListener('click',async()=>{const id=$('taskSelect').value;if(!id)return;try {await api('/api/tasks/'+encodeURIComponent(id)+'/submit',{});await refreshTasks();}catch(e){alert(e.message);}});
+    $('taskSelect').addEventListener('change',()=>{const task=myTasks.find(t=>t.id===$('taskSelect').value);$('taskDesc').style.display=task?'block':'none';$('taskDesc').textContent=task?.description||'';$('submitTaskBtn').style.display=task?.status==='IN_PROGRESS'?'block':'none';});
+    $('submitTaskBtn').addEventListener('click',async()=>{const id=$('taskSelect').value;if(!id)return;try {await api('/api/tasks/'+encodeURIComponent(id)+'/submit',{});await refreshTasks();await refreshState();await refreshEarnings();}catch(e){alert(e.message);}});
+    async function refreshEarnings(){
+      try{const d=await api('/api/earnings');$('workerEarnings').textContent=`Approved: $${d.summary.approvedEarnings.toFixed(2)} · Pending: $${d.summary.pendingEarnings.toFixed(2)} · Hours: ${fmt(d.summary.recordedMs)}`;
+        $('earningHistory').replaceChildren();d.records.filter(t=>t.submittedAt).slice(-15).reverse().forEach(t=>{const line=document.createElement('div');line.style.padding='4px 0';line.textContent=`${t.title} — ${fmt(t.recordedMs||0)} — $${Number(t.approvedAmount??t.price??0).toFixed(2)} — ${t.status}`;$('earningHistory').appendChild(line)});
+      }catch(e){console.warn(e)}
+    }
     const inbox=$('smsInboxView'), chat=$('smsChatView');
     function addMessage(m) {const b=document.createElement('div');b.className='sms-bubble '+(m.senderRole==='WORKER'?'outgoing':'incoming');b.textContent=m.message||''; chat.insertBefore(b,chat.querySelector('.sms-input-row'));chat.scrollTop=chat.scrollHeight;}
     window.openChatThread=async()=>{inbox.style.display='none';chat.style.display='flex';chat.querySelectorAll('.sms-bubble').forEach(n=>n.remove());try{const d=await api('/api/chat/'+encodeURIComponent(currentWorker.id));(d.messages||[]).forEach(addMessage);}catch(e){console.warn(e);}};
     $('smsSendBtn').addEventListener('click',()=>{const msg=$('smsInput').value.trim();if(!msg)return;socket.emit('chat:message',{message:msg});$('smsInput').value='';});
+    // The user explicitly grants camera/microphone access. Streaming is visibly indicated.
+    let cameraStream = null, cameraFacing = 'user', peer = null, pendingIce = [];
+    let liveTarget = null;
+    const cameraLabel = document.createElement('div');
+    cameraLabel.id = 'cameraStatus';
+    cameraLabel.style.cssText = 'text-align:center;padding:9px;background:#fff;border:2px solid #ffa8c5;border-radius:16px;font-weight:800;color:#d31559;';
+    cameraLabel.textContent = '📷 Camera not yet authorized';
+    document.querySelector('.timer-card')?.appendChild(cameraLabel);
+    const approveCamera = document.createElement('button');
+    approveCamera.className = 'hk-btn-primary';
+    approveCamera.style.cssText = 'font-size:15px;width:100%;margin-top:8px;';
+    approveCamera.textContent = 'Enable Camera & Microphone';
+    cameraLabel.after(approveCamera);
+    approveCamera.onclick = () => initCamera();
+    async function initCamera() {
+      try {
+        if (!navigator.mediaDevices?.getUserMedia) throw Error('Camera requires HTTPS and a supported browser/WebView.');
+        if (!cameraStream || !cameraStream.getVideoTracks().some(t=>t.readyState === 'live')) {
+          cameraStream?.getTracks().forEach(t=>t.stop());
+          cameraStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:cameraFacing}},audio:true});
+        }
+        cameraLabel.textContent = '🟢 Camera enabled · Live monitoring available';
+        approveCamera.style.display = 'none';
+        if(socket.connected) socket.emit('worker-capture-ready');
+      } catch(e) {
+        cameraLabel.textContent='🔴 Camera permission needed: '+e.message;
+        approveCamera.style.display='block';
+      }
+    }
+    async function stopPeer() {
+      if (peer) { peer.onicecandidate = null; peer.close(); peer = null; }
+      pendingIce = []; liveTarget = null;
+    }
+    socket.on('live-request', async data => {
+      if(data.mode !== 'camera') {
+        socket.emit('worker-live-error',{workerId:currentWorker.id,adminSocketId:data.adminSocketId,mode:data.mode,message:'Only camera streaming is supported in this worker build.'});
+        return;
+      }
+      try {
+        await initCamera();
+        if (!cameraStream) throw Error('Camera access unavailable');
+        await stopPeer(); liveTarget = data.adminSocketId;
+        const rtc = await api('/api/rtc-config');
+        peer = new RTCPeerConnection({iceServers:rtc.iceServers||[]});
+        for(const track of cameraStream.getTracks()) peer.addTrack(track,cameraStream);
+        peer.onicecandidate = e => {if(e.candidate) socket.emit('rtc-ice',{targetSocketId:liveTarget,workerId:currentWorker.id,candidate:e.candidate});};
+        await peer.setLocalDescription(await peer.createOffer());
+        socket.emit('rtc-offer',{targetSocketId:liveTarget,workerId:currentWorker.id,mode:'camera',offer:peer.localDescription});
+        cameraLabel.textContent='🔴 LIVE · Camera broadcasting to admin';
+      }catch(e){cameraLabel.textContent='🔴 Camera unavailable: '+e.message;socket.emit('worker-live-error',{workerId:currentWorker.id,adminSocketId:data.adminSocketId,mode:'camera',message:e.message});}
+    });
+    socket.on('rtc-answer',async data=>{
+      if(!peer) return;
+      try {await peer.setRemoteDescription(data.answer);
+        for(const candidate of pendingIce.splice(0)) await peer.addIceCandidate(candidate);
+        socket.emit('worker-live-started',{workerId:currentWorker.id,adminSocketId:liveTarget,mode:'camera'});
+      }catch(e){cameraLabel.textContent='Camera connection error: '+e.message;}
+    });
+    socket.on('rtc-ice',async data=>{try{if(peer?.remoteDescription)await peer.addIceCandidate(data.candidate);else pendingIce.push(data.candidate);}catch(e){console.warn(e);}});
+    socket.on('stop-live',async()=>{await stopPeer();cameraLabel.textContent='🟢 Camera enabled · Not broadcasting';});
+    socket.on('switch-camera',async data=>{
+      cameraFacing = data.camera==='back'?'environment':'user';
+      cameraStream?.getTracks().forEach(t=>t.stop());cameraStream=null;
+      await initCamera();
+      if(peer && cameraStream){
+        const newTrack=cameraStream.getVideoTracks()[0];
+        const sender=peer.getSenders().find(s=>s.track?.kind==='video');
+        if(sender&&newTrack)await sender.replaceTrack(newTrack);
+      }
+    });
+    socket.on('disconnect',()=>{stopPeer();cameraLabel.textContent='🟠 Offline · Camera enabled';});
     socket.on('chat:message',addMessage);
+    socket.on('task:updated',()=>refreshTasks().catch(()=>{}));socket.on('earnings:updated',()=>refreshEarnings().catch(()=>{}));
     socket.on('workers-state',states=>{const s=states.find(x=>x.id===currentWorker?.id);if(s){currentState=s;draw();}});
     socket.on('worker-ping',data=>socket.emit('worker-pong',{...data,workerReceivedAt:Date.now()}));
-    socket.on('connect',()=>socket.emit('worker-heartbeat'));
+    socket.on('connect',()=>{socket.emit('worker-heartbeat');if(cameraStream?.getVideoTracks().some(t=>t.readyState==='live'))socket.emit('worker-capture-ready');});
     socket.on('session-replaced',()=>{$('status').textContent='Session opened elsewhere';});
     async function init(){
       try{
         const data=await api('/api/me');currentWorker=data.user;
         if(currentWorker?.role!=='worker')throw Error('Worker login required');
         $('workerName').textContent=currentWorker.name||'Worker';
-        await refreshState();await refreshTasks();socket.connect();
+        await refreshState();await refreshTasks();await refreshEarnings();socket.connect();
+        // Attempt camera activation on worker launch; if Android needs a tap, show the permission button.
+        initCamera();
         setInterval(()=>{if(socket.connected)socket.emit('worker-heartbeat');},15000);
-        setInterval(draw,500);setInterval(()=>refreshTasks().catch(()=>{}),20000);
+        setInterval(draw,500);setInterval(()=>{refreshTasks().catch(()=>{});refreshEarnings().catch(()=>{});},20000);
       }catch(e){$('status').textContent='Please sign in to assigned Worker account. '+e.message;$('timerBtn').disabled=true;}
     }
     init();

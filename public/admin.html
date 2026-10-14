@@ -112,7 +112,7 @@
           <h3>Assign New Task</h3>
           <form id="taskForm" onsubmit="event.preventDefault(); assignTask();">
             <label>Assign Task To:
-              <select id="taskWorkerId" style="width: 100%; margin-top: 4px;">
+              <select id="taskWorkerId" style="width: 100%; margin-top: 4px;"><option value="OPEN">🌎 Open to Everyone</option>
                 </select>
             </label>
 
@@ -120,6 +120,8 @@
               <input type="text" id="taskTitle" placeholder="e.g. Update listing photos" required style="width: 100%;">
             </label>
 
+            <label>Task Price (USD): <input id="taskPrice" type="number" min="0" step="0.01" value="0" required style="width:100%"></label>
+            <label style="display:flex;gap:8px;align-items:center;color:var(--text)"><input type="checkbox" id="taskConcurrent"> Allow Concurrent Work</label>
             <label>Task Description:
               <textarea id="taskDesc" rows="3" placeholder="Enter task instructions..." style="width: 100%;"></textarea>
             </label>
@@ -357,6 +359,7 @@
             </div>
             <div class="controls-group">
               <button class="btn btn-sm btn-record" style="background: var(--success); border-color: var(--success);">● RECORD</button>
+              <button class="btn btn-sm secondary btn-screenshot">📷 Screenshot</button>
             </div>
             <div class="controls-group">
               <button class="btn btn-sm btn-timer-action" style="flex:2;">Start Time</button>
@@ -416,6 +419,29 @@
           c.querySelector('.btn-record').onclick = () => {
             const current = workers.find(x => x.id === workerId);
             if (current) toggleRecord(workerId, current.name);
+          };
+
+          c.querySelector('.btn-screenshot').onclick = () => {
+            const video = document.getElementById('video-' + workerId);
+            if (!video?.srcObject || !video.videoWidth || !video.videoHeight || video.readyState < 2) {
+              alert('No live camera frame available. Wait for the worker camera to connect.');
+              return;
+            }
+            try {
+              const canvas = document.createElement('canvas');
+              canvas.width = video.videoWidth;
+              canvas.height = video.videoHeight;
+              canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+              canvas.toBlob(blob => {
+                if (!blob) { alert('Unable to capture this frame.'); return; }
+                const name = (workers.find(x => x.id === workerId)?.name || workerId).replace(/[^a-zA-Z0-9_-]/g, '_');
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url; link.download = `KittyTimer_${name}_${new Date().toISOString().replace(/[:.]/g, '-')}.png`;
+                document.body.appendChild(link); link.click(); link.remove();
+                setTimeout(() => URL.revokeObjectURL(url), 2000);
+              }, 'image/png');
+            } catch (error) { alert('Screenshot failed: ' + error.message); }
           };
 
           c.querySelector('.btn-camera-start').onclick = () => {
@@ -519,7 +545,24 @@
         update();
       });
 
-      socket.on('workers-state', data => { workers = data; update(); syncWorkerSelectors(); syncMonitorSelector(); });
+      const autoRequested = new Set();
+      socket.on('workers-state', data => {
+        workers = data; update(); syncWorkerSelectors(); syncMonitorSelector();
+        for (const w of workers) {
+          if (!w.online || !w.captureReady) { autoRequested.delete(w.id); continue; }
+          if (w.liveMode === 'CAMERA' || w.liveMode === 'CAMERA_PENDING') continue;
+          if (w.liveMode !== 'NONE') continue;
+          if (autoRequested.has(w.id)) continue;
+          autoRequested.add(w.id);
+          socket.emit('admin-live-request', { workerId: w.id, mode: 'camera' });
+        }
+      });
+      socket.on('live-error', ({workerId, message}) => {
+        if (workerId) autoRequested.delete(workerId);
+        const card = workerId && document.getElementById(workerId);
+        if (card) card.querySelector('.live').textContent = message || 'Camera unavailable';
+      });
+
 
       // --- WAKE UP TOAST ALERT NOTIFICATION ---
       socket.on('worker-wakeup', data => {
@@ -618,6 +661,7 @@
         const previous=el.value;
         el.replaceChildren();
         if (includeAll) el.add(new Option('All Workers',''));
+        if (el.id==='taskWorkerId') el.add(new Option('🌎 Open to Everyone','OPEN'));
         for (const w of available) el.add(new Option(`${w.name} — ${w.online ? "🟢 Active" : "⚪ Inactive"}`,w.id));
         if ([...el.options].some(o=>o.value===previous)) el.value=previous;
       }
@@ -628,8 +672,9 @@
       if (chatInput) chatInput.disabled=!activeChatWorkerId;
       if (send) send.disabled=!activeChatWorkerId;
       const taskButton=document.querySelector('#taskForm button[type="submit"]');
-      if (taskButton) taskButton.disabled=!available.length;
+      if (taskButton) taskButton.disabled=false;
     }
+    setTimeout(refreshEarnings,900);setInterval(refreshEarnings,20000);
     // Tasks Functions
     async function loadTasks() {
       const filter = document.getElementById('filterTaskWorker')?.value || '';
@@ -652,8 +697,9 @@
             <strong>${escapeHtml(t.title)}</strong>
             <span style="font-size: 11px; font-weight: 800; color: var(--primary);">${escapeHtml(t.status)}</span>
           </div>
+          <div style="font-size:13px">${t.workerId ? escapeHtml(t.workerId) : 'Open Task'} · $${Number(t.price||0).toFixed(2)} · ${t.recordedMs==null?'Not submitted':fmt(t.recordedMs)} ${t.allowConcurrent?'· Concurrent':''}</div>
           ${t.description ? `<p style="font-size: 13px; margin-top: 6px;">${escapeHtml(t.description)}</p>` : ''}
-          ${t.status === 'SUBMITTED' ? `
+          ${['SUBMITTED','PENDING_APPROVAL'].includes(t.status) ? `
             <div style="margin-top: 8px; display: flex; gap: 8px;">
               <button class="btn btn-sm" onclick="approveTask('${t.taskId || t.id}')">Approve</button>
               <button class="btn btn-sm secondary" onclick="returnTaskPrompt('${t.taskId || t.id}')">Return</button>
@@ -665,20 +711,35 @@
 
     async function assignTask() {
       const workerId = document.getElementById('taskWorkerId').value;
-      if (!workerId) { alert('Approve a worker device first.'); return; }
+      if (!workerId) { alert('Select a worker or Open to Everyone.'); return; }
       const title = document.getElementById('taskTitle').value;
       const description = document.getElementById('taskDesc').value;
       const dateVal = document.getElementById('taskDueDate').value;
       const timeVal = document.getElementById('taskDueTime').value;
       const dueAt = dateVal ? dateVal + (timeVal ? ' ' + timeVal : '') : null;
 
-      await api('/api/tasks', { workerId, title, description, dueAt });
+      await api('/api/tasks', {workerId,assignmentType:workerId==='OPEN'?'OPEN':'ASSIGNED',title,description,dueAt,price:Number(document.getElementById('taskPrice').value),allowConcurrent:document.getElementById('taskConcurrent').checked});
       document.getElementById('taskTitle').value = '';
       document.getElementById('taskDesc').value = '';
       loadTasks();
     }
 
-    async function approveTask(id) { await api(`/api/tasks/${id}/approve`, {}); loadTasks(); }
+    async function approveTask(id) {
+      const amount=prompt('Final approved payment in USD (leave blank to use task price):','');
+      if(amount===null)return;
+      try{await api(`/api/tasks/${id}/approve`,amount.trim()?{amount:Number(amount)}:{});loadTasks();refreshEarnings();}
+      catch(e){alert(e.message)}
+    }
+    async function refreshEarnings(){
+      try{const d=await api('/api/earnings');const el=document.getElementById('earningsSummary');if(el)el.textContent=`Approved: $${d.summary.approvedEarnings.toFixed(2)} · Pending: $${d.summary.pendingEarnings.toFixed(2)} · ${d.summary.approvedTasks} approved tasks · ${fmt(d.summary.recordedMs)} submitted hours`;}
+      catch(e){console.warn(e)}
+    }
+    async function addEarningsAdjustment(){
+      const wid=prompt('Worker ID (e.g., worker1):');if(!wid)return;
+      const val=prompt('Adjustment in USD (use a negative amount for deduction):');if(val===null)return;
+      const reason=prompt('Reason for adjustment:');if(!reason)return;
+      try{await api('/api/admin/earnings/adjust',{workerId:wid,amount:Number(val),reason});refreshEarnings();}catch(e){alert(e.message)}
+    }
     async function returnTaskPrompt(id) {
       const note = prompt('Admin note:');
       if (note !== null) { await api(`/api/tasks/${id}/return`, { adminNote: note }); loadTasks(); }

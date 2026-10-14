@@ -1028,101 +1028,103 @@ app.get('/api/rtc-config', requireAuth, (_req, res) => {
   });
 });
 
-// Tasks API
-app.get('/api/tasks', requireAuth, (req, res) => {
-  const user = req.session.user;
-  if (user.role === 'worker') {
-    const workerTasks = tasks.filter(t => t.workerId === user.id);
-    return res.json({ ok: true, tasks: workerTasks });
-  } else if (user.role === 'admin') {
-    const workerId = req.query.workerId;
-    const filtered = workerId ? tasks.filter(t => t.workerId === workerId) : tasks;
-    return res.json({ ok: true, tasks: filtered });
-  }
-  res.status(403).json({ ok: false, error: 'Forbidden' });
+// Task and earnings API: server-authoritative records, no hourly-rate calculation.
+const LEDGER_FILE = path.join(DATA_DIR, 'earnings.json');
+const earningsLedger = readJson(LEDGER_FILE, []);
+function saveLedger(){writeJsonAtomic(LEDGER_FILE,earningsLedger);}
+function money(x){const v=Number(x);return Number.isFinite(v)&&v>=0?Math.round(v*100)/100:null;}
+function taskIdOf(t){return t.taskId||t.id;}
+function notifyTask(t,event='task:updated'){
+  io.to('admins').emit(event,t);
+  if(t.workerId)io.to(`worker:${t.workerId}`).emit(event,t);
+  io.to('admins').emit('earnings:updated',{workerId:t.workerId});
+  if(t.workerId)io.to(`worker:${t.workerId}`).emit('earnings:updated',{});
+}
+function visibleTasks(user){
+  return user.role==='admin'?tasks:tasks.filter(t=>t.workerId===user.id || (t.assignmentType==='OPEN'&&t.status==='AVAILABLE'));
+}
+function publicTask(t){return t;}
+app.get('/api/tasks',requireAuth,(req,res)=>{
+ let list=visibleTasks(req.session.user);
+ if(req.session.user.role==='admin'&&req.query.workerId)list=list.filter(t=>t.workerId===req.query.workerId);
+ res.json({ok:true,tasks:list.map(publicTask)});
 });
-
-app.get('/api/worker/tasks', requireRole('worker'), (req, res) => {
-  const workerTasks = tasks.filter(t => t.workerId === req.session.user.id);
-  res.json({ ok: true, tasks: workerTasks });
+app.get('/api/worker/tasks',requireRole('worker'),(req,res)=>res.json({ok:true,tasks:visibleTasks(req.session.user)}));
+app.post('/api/tasks',requireRole('admin'),(req,res)=>{
+ const {workerId,title,description,dueAt,assignmentType,allowConcurrent}=req.body||{};
+ const type=assignmentType==='OPEN'||workerId==='OPEN'?'OPEN':'ASSIGNED';
+ if(!String(title||'').trim()||(type==='ASSIGNED'&&!states.has(workerId)))return res.status(400).json({ok:false,error:'Valid title and worker required'});
+ const price=money(req.body.price??0);
+ if(price===null)return res.status(400).json({ok:false,error:'Invalid task price'});
+ const id=crypto.randomUUID();
+ const task={id,taskId:id,title:String(title).trim().slice(0,200),description:String(description||'').slice(0,3000),price,
+   assignmentType:type,workerId:type==='OPEN'?null:workerId,allowConcurrent:allowConcurrent===true,
+   status:type==='OPEN'?'AVAILABLE':'ASSIGNED',createdAt:Date.now(),assignedAt:type==='ASSIGNED'?Date.now():null,dueAt:dueAt||null,
+   acceptedAt:null,submittedAt:null,completedAt:null,recordedMs:null,approvedAmount:null,adminNote:''};
+ tasks.push(task);persistTasks();notifyTask(task,'task:assigned');io.to('workers').emit('task:updated',task);
+ res.json({ok:true,task});
 });
-
-app.post('/api/tasks', requireRole('admin'), (req, res) => {
-  const { workerId, title, description, dueAt } = req.body || {};
-  if (!workerId || !title) {
-    return res.status(400).json({ ok: false, error: 'workerId and title are required' });
-  }
-  const idStr = 'task_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
-  const newTask = {
-    taskId: idStr,
-    id: idStr,
-    workerId,
-    title: String(title).trim(),
-    description: String(description || '').trim(),
-    status: 'ASSIGNED',
-    assignedAt: Date.now(),
-    assignedBy: req.session.user.name || 'Admin',
-    dueAt: dueAt || null,
-    submittedAt: null,
-    completedAt: null,
-    adminNote: ''
-  };
-  tasks.push(newTask);
-  persistTasks();
-
-  io.to(`worker:${workerId}`).to('admins').emit('task:assigned', newTask);
-  io.to(`worker:${workerId}`).to('admins').emit('task:updated', newTask);
-
-  res.json({ ok: true, task: newTask });
+app.post('/api/tasks/:taskId/accept',requireRole('worker'),(req,res)=>{
+ const t=tasks.find(x=>taskIdOf(x)===req.params.taskId);const wid=req.session.user.id;
+ if(!t)return res.status(404).json({ok:false,error:'Task not found'});
+ if(t.status!=='AVAILABLE'&&t.status!=='ASSIGNED')return res.status(409).json({ok:false,error:'Task already claimed or submitted'});
+ if(t.assignmentType!=='OPEN'&&t.workerId!==wid)return res.status(403).json({ok:false,error:'Not assigned to this worker'});
+ if(!t.allowConcurrent&&tasks.some(x=>x.workerId===wid&&x.status==='IN_PROGRESS'&&!x.allowConcurrent))
+   return res.status(409).json({ok:false,error:'Submit your current regular task first'});
+ // Lock synchronously before any asynchronous operations: prevents double claim.
+ t.workerId=wid;t.status='IN_PROGRESS';t.acceptedAt=Date.now();t.assignedAt??=Date.now();persistTasks();notifyTask(t);io.to('workers').emit('task:updated',t);
+ res.json({ok:true,task:t});
 });
-
-app.post('/api/tasks/:taskId/submit', requireRole('worker'), (req, res) => {
-  const taskId = req.params.taskId;
-  const task = tasks.find(t => t.taskId === taskId || t.id === taskId);
-  if (!task) return res.status(404).json({ ok: false, error: 'Task not found' });
-  if (task.workerId !== req.session.user.id) {
-    return res.status(403).json({ ok: false, error: 'Cannot submit task assigned to another worker' });
-  }
-
-  task.status = 'SUBMITTED';
-  task.submittedAt = Date.now();
-  persistTasks();
-
-  io.to(`worker:${task.workerId}`).to('admins').emit('task:submitted', task);
-  io.to(`worker:${task.workerId}`).to('admins').emit('task:updated', task);
-
-  res.json({ ok: true, task });
+app.post('/api/tasks/:taskId/submit',requireRole('worker'),(req,res)=>{
+ const t=tasks.find(x=>taskIdOf(x)===req.params.taskId);const wid=req.session.user.id;
+ if(!t)return res.status(404).json({ok:false,error:'Task not found'});
+ if(t.workerId!==wid)return res.status(403).json({ok:false,error:'Not your task'});
+ if(t.status!=='IN_PROGRESS')return res.status(409).json({ok:false,error:'Task is not in progress; submission already recorded or task not accepted'});
+ const state=states.get(wid);
+ if(!state)return res.status(404).json({ok:false,error:'Worker timer unavailable'});
+ const duration=timerState.elapsed(state);
+ if(duration<0||!Number.isFinite(duration))return res.status(422).json({ok:false,error:'Invalid timer duration'});
+ // Capture time first, persist submission before resetting timer.
+ const now=Date.now();const record={taskId:taskIdOf(t),workerId:wid,recordedMs:duration,submittedAt:now,status:'PENDING_APPROVAL'};
+ t.recordedMs=duration;t.submittedAt=now;t.status='PENDING_APPROVAL';t.submissionId=crypto.randomUUID();
+ try{persistTasks();}catch(e){Object.assign(t,{status:'IN_PROGRESS',recordedMs:null,submittedAt:null,submissionId:null});return res.status(500).json({ok:false,error:'Unable to save submission; timer preserved'});}
+ // New timer segment begins at zero; previous clock history is part of the task record.
+ state.accumulatedMs=0;
+ if(state.status==='WORKING')state.startedAt=Date.now();
+ else state.startedAt=null;
+ persistState();broadcastStates();notifyTask(t,'task:submitted');
+ res.json({ok:true,task:t,submission:record,state:safeWorkerState(state)});
 });
-
-app.post('/api/tasks/:taskId/approve', requireRole('admin'), (req, res) => {
-  const taskId = req.params.taskId;
-  const task = tasks.find(t => t.taskId === taskId || t.id === taskId);
-  if (!task) return res.status(404).json({ ok: false, error: 'Task not found' });
-
-  task.status = 'COMPLETED';
-  task.completedAt = Date.now();
-  persistTasks();
-
-  io.to(`worker:${task.workerId}`).to('admins').emit('task:approved', task);
-  io.to(`worker:${task.workerId}`).to('admins').emit('task:updated', task);
-
-  res.json({ ok: true, task });
+app.post('/api/tasks/:taskId/approve',requireRole('admin'),(req,res)=>{
+ const t=tasks.find(x=>taskIdOf(x)===req.params.taskId);
+ if(!t)return res.status(404).json({ok:false,error:'Task not found'});
+ if(t.status!=='PENDING_APPROVAL'&&t.status!=='SUBMITTED')return res.status(409).json({ok:false,error:'Task is not pending approval'});
+ const payment=money(req.body.amount??t.price??0);
+ if(payment===null)return res.status(400).json({ok:false,error:'Invalid payment amount'});
+ if(earningsLedger.some(x=>x.taskId===taskIdOf(t)&&x.type==='TASK_APPROVED'))return res.status(409).json({ok:false,error:'Already credited'});
+ const entry={id:crypto.randomUUID(),workerId:t.workerId,taskId:taskIdOf(t),type:'TASK_APPROVED',amount:payment,createdAt:Date.now(),reason:String(req.body.note||'Task approved').slice(0,500),admin:req.session.user.username};
+ earningsLedger.push(entry);saveLedger();t.status='APPROVED';t.approvedAmount=payment;t.completedAt=Date.now();t.adminNote=entry.reason;persistTasks();notifyTask(t,'task:approved');res.json({ok:true,task:t,entry});
 });
-
-app.post('/api/tasks/:taskId/return', requireRole('admin'), (req, res) => {
-  const taskId = req.params.taskId;
-  const { adminNote } = req.body || {};
-  const task = tasks.find(t => t.taskId === taskId || t.id === taskId);
-  if (!task) return res.status(404).json({ ok: false, error: 'Task not found' });
-
-  task.status = 'RETURNED';
-  task.adminNote = String(adminNote || '').trim();
-  persistTasks();
-
-  io.to(`worker:${task.workerId}`).to('admins').emit('task:returned', task);
-  io.to(`worker:${task.workerId}`).to('admins').emit('task:updated', task);
-
-  res.json({ ok: true, task });
+app.post('/api/tasks/:taskId/return',requireRole('admin'),(req,res)=>{
+ const t=tasks.find(x=>taskIdOf(x)===req.params.taskId);
+ if(!t)return res.status(404).json({ok:false,error:'Task not found'});
+ if(t.status!=='PENDING_APPROVAL'&&t.status!=='SUBMITTED')return res.status(409).json({ok:false,error:'Task is not pending approval'});
+ t.status='REJECTED';t.adminNote=String(req.body.adminNote||'').slice(0,1000);persistTasks();notifyTask(t,'task:returned');res.json({ok:true,task:t});
+});
+app.post('/api/admin/earnings/adjust',requireRole('admin'),(req,res)=>{
+ const {workerId,amount,reason}=req.body||{};const val=Number(amount);
+ if(!states.has(workerId)||!Number.isFinite(val)||val===0||!String(reason||'').trim())return res.status(400).json({ok:false,error:'Worker, nonzero amount and reason are required'});
+ const entry={id:crypto.randomUUID(),workerId,type:'ADJUSTMENT',amount:Math.round(val*100)/100,reason:String(reason).slice(0,500),createdAt:Date.now(),admin:req.session.user.username};
+ earningsLedger.push(entry);saveLedger();io.to('admins').to(`worker:${workerId}`).emit('earnings:updated',{workerId});res.json({ok:true,entry});
+});
+app.get('/api/earnings',requireAuth,(req,res)=>{
+ const me=req.session.user;
+ const workerId=me.role==='admin'?(req.query.workerId||null):me.id;
+ const records=tasks.filter(t=>!workerId||t.workerId===workerId);
+ const ledger=earningsLedger.filter(e=>!workerId||e.workerId===workerId);
+ const approved=ledger.reduce((total,e)=>total+e.amount,0);
+ const pending=records.filter(t=>t.status==='PENDING_APPROVAL').reduce((total,t)=>total+Number(t.price||0),0);
+ res.json({ok:true,workerId,records,transactions:ledger,summary:{submitted:records.filter(t=>t.submittedAt).length,approvedTasks:records.filter(t=>t.status==='APPROVED').length,recordedMs:records.reduce((sum,t)=>sum+(t.recordedMs||0),0),approvedEarnings:Math.round(approved*100)/100,pendingEarnings:Math.round(pending*100)/100}});
 });
 
 // Chat API
