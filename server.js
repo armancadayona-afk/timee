@@ -680,15 +680,6 @@ const handleDeviceStatus = (req, res) => {
 app.get('/api/devices/status', handleDeviceStatus);
 app.get('/api/devices/status/:deviceId', handleDeviceStatus);
 app.get('/api/device/status/:deviceId', handleDeviceStatus);
-  }
-
-  res.json({
-    deviceId: device.deviceId,
-    status: device.status,
-    workerId: device.workerId || ('worker_' + device.deviceId.substring(0, 8)),
-    workerName: device.workerName || device.deviceName
-  });
-});
 
 // GET /api/admin/devices
 app.get('/api/admin/devices', requireRole('admin'), (req, res) => {
