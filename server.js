@@ -32,6 +32,21 @@ const HTTP_SESSION_DIR = path.join(DATA_DIR, 'http-sessions');
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
 fs.mkdirSync(HTTP_SESSION_DIR, { recursive: true });
+// One-time clean-start migration. Old registrations, worker accounts, session
+// history, tasks, chats and HTTP sessions are intentionally deleted.
+// Keeping the marker prevents future deployments/restarts from clearing new data.
+const CLEAN_RESET_MARKER = path.join(DATA_DIR, '.fresh-registration-reset-v1');
+if (!fs.existsSync(CLEAN_RESET_MARKER)) {
+  for (const file of [STATE_FILE, SESSIONS_FILE, TASKS_FILE, CHAT_FILE, USERS_FILE, DEVICE_REQUESTS_FILE]) {
+    try { fs.rmSync(file, { force: true }); } catch (err) { console.error('Reset failed:', file, err); throw err; }
+  }
+  for (const entry of fs.readdirSync(HTTP_SESSION_DIR)) {
+    fs.rmSync(path.join(HTTP_SESSION_DIR, entry), { force: true, recursive: true });
+  }
+  fs.writeFileSync(CLEAN_RESET_MARKER, new Date().toISOString());
+  console.log('One-time clean worker registration reset applied.');
+}
+
 
 if (IS_PRODUCTION) app.set('trust proxy', 1);
 
@@ -74,35 +89,13 @@ const sessionMiddleware = session({
 app.use(sessionMiddleware);
 io.engine.use(sessionMiddleware);
 
-const users = [
-  {
-    role: 'admin',
-    username: process.env.ADMIN_USERNAME || 'admin',
-    password: process.env.ADMIN_PASSWORD || 'admin123',
-    name: process.env.ADMIN_NAME || 'Administrator'
-  },
-  {
-    role: 'worker',
-    id: 'worker1',
-    username: process.env.WORKER1_USERNAME || 'john',
-    password: process.env.WORKER1_PASSWORD || 'john123',
-    name: process.env.WORKER1_NAME || 'Worker 1'
-  },
-  {
-    role: 'worker',
-    id: 'worker2',
-    username: process.env.WORKER2_USERNAME || 'mark',
-    password: process.env.WORKER2_PASSWORD || 'mark123',
-    name: process.env.WORKER2_NAME || 'Worker 2'
-  },
-  {
-    role: 'worker',
-    id: 'worker3',
-    username: process.env.WORKER3_USERNAME || 'anne',
-    password: process.env.WORKER3_PASSWORD || 'anne123',
-    name: process.env.WORKER3_NAME || 'Worker 3'
-  }
-];
+// Workers are created only after a fresh device registration and admin approval.
+const users = [{
+  role: 'admin',
+  username: process.env.ADMIN_USERNAME || 'admin',
+  password: process.env.ADMIN_PASSWORD || 'admin123',
+  name: process.env.ADMIN_NAME || 'Administrator'
+}];
 
 const savedUsers = readJson(USERS_FILE, []);
 savedUsers.forEach(u => {
