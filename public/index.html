@@ -3,243 +3,68 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Hello Kitty | Device Registration & Sign In</title>
+  <title>Kitty Timer | Sign in</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800&family=Pacifico&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css">
   <style>
-    :root {
-      --hk-bg: #ffe4ec;
-      --hk-card-bg: rgba(255, 255, 255, 0.92);
-      --hk-border: #ffa8c5;
-      --hk-pink-dark: #ff2a6d;
-      --hk-pink-mid: #ff5c8a;
-      --hk-text: #5a2a3a;
-      --hk-muted: #a06b7d;
-      --hk-shadow: 0 10px 30px rgba(255, 92, 138, 0.2);
-    }
-
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-
-    body {
-      min-height: 100vh;
-      background-color: #ffd6e5;
-      background-image:
-        radial-gradient(#ff9ebb 1.5px, transparent 1.5px),
-        radial-gradient(#ff7599 1.5px, #ffd6e5 1.5px);
-      background-size: 30px 30px;
-      background-position: 0 0, 15px 15px;
-      font-family: 'Nunito', system-ui, -apple-system, sans-serif;
-      color: var(--hk-text);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 20px;
-    }
-
-    .login-card {
-      width: min(420px, 100%);
-      background: var(--hk-card-bg);
-      backdrop-filter: blur(12px);
-      border: 3px solid #ffffff;
-      outline: 2px solid var(--hk-border);
-      border-radius: 28px;
-      box-shadow: var(--hk-shadow);
-      padding: 28px 24px;
-      text-align: center;
-      position: relative;
-    }
-
-    .hk-brand-header {
-      margin-bottom: 16px;
-    }
-
-    .hk-title {
-      font-family: 'Pacifico', cursive;
-      font-size: 34px;
-      color: var(--hk-pink-dark);
-      text-shadow: 2px 2px 0px #ffffff;
-    }
-
-    .mode-tabs {
-      display: flex;
-      background: #ffe8f0;
-      border: 1.5px solid var(--hk-border);
-      border-radius: 20px;
-      padding: 4px;
-      margin-bottom: 20px;
-      gap: 4px;
-    }
-
-    .tab-btn {
-      flex: 1;
-      padding: 8px 12px;
-      border: none;
-      background: transparent;
-      font-family: 'Fredoka', sans-serif;
-      font-weight: 600;
-      font-size: 14px;
-      color: var(--hk-muted);
-      border-radius: 16px;
-      cursor: pointer;
-      transition: all 0.2s ease;
-    }
-
-    .tab-btn.active {
-      background: #ffffff;
-      color: var(--hk-pink-dark);
-      box-shadow: 0 2px 8px rgba(255, 42, 109, 0.15);
-    }
-
-    form {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      text-align: left;
-    }
-
-    label {
-      font-size: 13px;
-      font-weight: 800;
-      color: var(--hk-text);
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-
-    input, select {
-      width: 100%;
-      padding: 10px 14px !important;
-      border-radius: 16px !important;
-      border: 2px solid var(--hk-border) !important;
-      font-family: inherit;
-      font-size: 14px;
-      outline: none;
-      background: #ffffff !important;
-    }
-
-    input:focus, select:focus {
-      border-color: var(--hk-pink-dark) !important;
-      box-shadow: 0 0 0 3px rgba(255, 42, 109, 0.15);
-    }
-
-    .hk-btn-submit {
-      background: linear-gradient(180deg, #ff6b95 0%, #ff1f62 100%);
-      color: #ffffff;
-      border: 2px solid #ffffff;
-      border-radius: 24px;
-      padding: 12px;
-      font-family: 'Fredoka', sans-serif;
-      font-size: 17px;
-      font-weight: 600;
-      cursor: pointer;
-      box-shadow: 0 6px 16px rgba(255, 31, 98, 0.3);
-      margin-top: 8px;
-    }
-
-    .hk-btn-submit:hover:not(:disabled) {
-      transform: translateY(-1px);
+    h1 { font-family: 'Fredoka', cursive, sans-serif; color: var(--primary); }
+    .brand-bow {
+      width: 44px;
+      height: 30px;
     }
   </style>
 </head>
 <body>
-
-  <main class="login-card">
-    <div class="hk-brand-header">
-      <div style="font-size: 38px; margin-bottom: 4px;">🎀</div>
-      <h1 class="hk-title">Hello Kitty 💕</h1>
-      <p style="font-size: 13px; color: var(--hk-muted); font-weight: 700;">Sign in or register a new device account</p>
-    </div>
-
-    <!-- Toggle between Sign In and Device Registration -->
-    <div class="mode-tabs">
-      <button type="button" id="tabSignIn" class="tab-btn active" onclick="switchMode('signin')">Sign In 🌸</button>
-      <button type="button" id="tabRegister" class="tab-btn" onclick="switchMode('register')">Register Device 📱</button>
-    </div>
-
-    <form id="authForm">
-      <!-- Registration Name Field (hidden for signin) -->
-      <label id="nameGroup" style="display: none;">Display Name / Device Name
-        <input id="name" name="name" type="text" placeholder="e.g. Kitty Phone 1" aria-label="Display Name">
-      </label>
-
-      <label>Username
-        <input id="username" name="username" type="text" placeholder="Enter username" required aria-label="Username" value="">
-      </label>
-
-      <label>Password
-        <input id="password" name="password" type="password" placeholder="Enter password" required aria-label="Password" value="">
-      </label>
-
-      <!-- Registration Role Field (hidden for signin) -->
-      <label id="roleGroup" style="display: none;">Account Role
-        <select id="role" name="role" aria-label="Account Role">
-          <option value="worker">Worker App Device</option>
-          <option value="admin">Admin Console</option>
-        </select>
-      </label>
-
-      <button id="submitBtn" class="hk-btn-submit" type="submit">Sign In 🎀</button>
-      <p id="message" style="font-size: 12px; font-weight: 700; color: var(--hk-pink-dark); margin-top: 8px; text-align: center;"></p>
-    </form>
+  <main class="login-shell">
+    <section class="card login-card" aria-labelledby="loginTitle">
+      <div class="brand-mark">
+        <svg class="brand-bow" viewBox="0 0 100 60">
+          <path d="M50 30 C30 10, 10 20, 20 40 C30 60, 50 40, 50 30 Z" fill="#ff4d6d"/>
+          <path d="M50 30 C70 10, 90 20, 80 40 C70 60, 50 40, 50 30 Z" fill="#ff4d6d"/>
+          <circle cx="50" cy="30" r="10" fill="#ffffff" stroke="#ff4d6d" stroke-width="3"/>
+        </svg>
+      </div>
+      <div class="eyebrow">Kitty Work Timer</div>
+      <h1 id="loginTitle">Welcome Back</h1>
+      <p class="muted">Sign in with your assigned admin or worker account.</p>
+      
+      <form id="loginForm">
+        <label>Username
+          <input id="username" name="username" autocomplete="username" placeholder="Username" required autofocus>
+        </label>
+        <label>Password
+          <input id="password" name="password" type="password" autocomplete="current-password" placeholder="••••••••" required>
+        </label>
+        <button id="loginBtn" class="btn" type="submit">Sign In 🎀</button>
+        <p id="message" class="small muted" style="margin-top: 10px;" aria-live="polite"></p>
+      </form>
+    </section>
   </main>
 
-  <script>
-    let currentMode = 'signin';
-    const form = document.getElementById('authForm');
-    const submitBtn = document.getElementById('submitBtn');
-    const message = document.getElementById('message');
-    const nameGroup = document.getElementById('nameGroup');
-    const roleGroup = document.getElementById('roleGroup');
-    const tabSignIn = document.getElementById('tabSignIn');
-    const tabRegister = document.getElementById('tabRegister');
-
-    function switchMode(mode) {
-      currentMode = mode;
-      message.textContent = '';
-      if (mode === 'signin') {
-        tabSignIn.classList.add('active');
-        tabRegister.classList.remove('active');
-        nameGroup.style.display = 'none';
-        roleGroup.style.display = 'none';
-        submitBtn.textContent = 'Sign In 🎀';
-      } else {
-        tabRegister.classList.add('active');
-        tabSignIn.classList.remove('active');
-        nameGroup.style.display = 'flex';
-        roleGroup.style.display = 'flex';
-        submitBtn.textContent = 'Register Device 📱';
-      }
+<script>
+  const form = document.getElementById('loginForm');
+  const button = document.getElementById('loginBtn');
+  const message = document.getElementById('message');
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    button.disabled = true;
+    message.textContent = 'Signing in…';
+    try {
+      const response = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: form.username.value, password: form.password.value })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Login failed');
+      location.href = data.redirect;
+    } catch (error) {
+      message.textContent = error.message;
+      button.disabled = false;
     }
-
-    form.addEventListener('submit', async event => {
-      event.preventDefault();
-      submitBtn.disabled = true;
-      message.textContent = currentMode === 'signin' ? 'Signing in…' : 'Registering device…';
-
-      const endpoint = currentMode === 'signin' ? '/api/login' : '/api/register';
-      const bodyPayload = {
-        username: form.username.value,
-        password: form.password.value,
-        name: form.name.value,
-        role: form.role.value
-      };
-
-      try {
-        const response = await fetch(endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(bodyPayload)
-        });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error || 'Operation failed');
-        location.href = data.redirect;
-      } catch (error) {
-        message.textContent = error.message;
-        submitBtn.disabled = false;
-      }
-    });
-  </script>
+  });
+</script>
 </body>
 </html>
