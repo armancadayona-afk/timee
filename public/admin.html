@@ -381,7 +381,8 @@
 
       selectedWorkerId = workerSelect.value;
       updateSelectedWorkerDetails();
-      if (currentView !== "dashboard") renderView();
+      // Preserve active forms and chat while worker heartbeat/state updates arrive.
+      // A view is re-rendered only when the administrator navigates to it.
     }
 
     function updateSelectedWorkerDetails() {
@@ -413,7 +414,7 @@
       // Update chat worker badge & chat history
       document.getElementById('chat-worker-badge').textContent = `Chat with ${worker.name}`;
       if (socket?.connected && lastChatWorker !== worker.id) { lastChatWorker = worker.id; loadChatHistory(worker.id); }
-      renderChatForWorker(worker.id);
+      // Chat bubbles update from incoming messages/history; never replace the chat DOM on each timer tick.
     }
 
     // Functional sidebar panels. Camera controls and WebRTC signaling are unchanged.
@@ -444,7 +445,7 @@
       } else if (currentView === 'tasks') {
         content.innerHTML = `<form id="task-form" class="view-form"><input name="title" required maxlength="160" placeholder="Task title"><textarea name="description" placeholder="Task details" maxlength="2000"></textarea><select name="workerId"><option value="">Open to everyone</option>${workers.map(w=>`<option value="${escapeHtml(w.id)}">${escapeHtml(w.name)}</option>`).join('')}</select><button class="btn-pink" type="submit">Create task</button></form><p id="tasks-notice"></p><div id="tasks-table">Loading tasks…</div>`;
         content.querySelector('#task-form').onsubmit=async e=>{e.preventDefault();const data=Object.fromEntries(new FormData(e.target));try{await api('/api/admin/tasks',data);renderView()}catch(err){content.querySelector('#tasks-notice').textContent=err.message;}};
-        api('/api/admin/tasks').then(d=>{if(currentView!=='tasks')return;document.getElementById('tasks-table').innerHTML=d.tasks.length?d.tasks.map(t=>`<div class="view-tile"><strong>${escapeHtml(t.title)}</strong> · ${escapeHtml(t.status)}<p>${escapeHtml(t.description||'')}<br>Assigned: ${escapeHtml(workers.find(w=>w.id===t.workerId)?.name||'Everyone')}</p><button class="btn-outline" data-task="${escapeHtml(t.id)}">${t.status==='completed'?'Reopen':'Mark completed'}</button></div>`).join(''):'No tasks yet.';document.querySelectorAll('[data-task]').forEach(b=>b.onclick=async()=>{const t=d.tasks.find(t=>t.id===b.dataset.task);await api('/api/admin/tasks/status',{id:t.id,status:t.status==='completed'?'open':'completed'});renderView()})}).catch(err=>{document.getElementById('tasks-table').textContent=err.message});
+        api('/api/admin/tasks').then(d=>{if(currentView!=='tasks'||!document.getElementById('tasks-table'))return;document.getElementById('tasks-table').innerHTML=d.tasks.length?d.tasks.map(t=>`<div class="view-tile"><strong>${escapeHtml(t.title)}</strong> · ${escapeHtml(t.status)}<p>${escapeHtml(t.description||'')}<br>Assigned: ${escapeHtml(workers.find(w=>w.id===t.workerId)?.name||'Everyone')}</p><button class="btn-outline" data-task="${escapeHtml(t.id)}">${t.status==='completed'?'Reopen':'Mark completed'}</button></div>`).join(''):'No tasks yet.';document.querySelectorAll('[data-task]').forEach(b=>b.onclick=async()=>{const t=d.tasks.find(t=>t.id===b.dataset.task);await api('/api/admin/tasks/status',{id:t.id,status:t.status==='completed'?'open':'completed'});renderView()})}).catch(err=>{document.getElementById('tasks-table').textContent=err.message});
       } else if (currentView === 'devices') {
         content.innerHTML = `<div class="view-form">${workerPicker()}<p>Select a worker, then run a supported command in the dashboard terminal. Commands query the actual connected worker browser, not an Android shell.</p><button class="btn-pink" id="open-terminal">Open terminal</button></div>`;
         content.querySelector('#open-terminal').onclick=()=>{selectedWorkerId=content.querySelector('#panel-worker').value;document.getElementById('worker-select').value=selectedWorkerId;document.getElementById('control-worker-select').value=selectedWorkerId;showView('dashboard');document.getElementById('terminal-command').focus();};

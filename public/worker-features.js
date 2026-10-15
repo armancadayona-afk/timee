@@ -5,7 +5,13 @@
  async function tasks(){try{const d=await api('/api/worker/tasks');taskList.replaceChildren();if(!d.tasks.length){taskList.textContent='No tasks assigned yet.';return}for(const task of d.tasks){const entry=document.createElement('div');entry.className='task-entry';const title=document.createElement('strong');title.textContent=task.title;entry.append(title);const desc=document.createElement('p');desc.textContent=task.description||'';entry.append(desc);const st=document.createElement('p');st.textContent='Status: '+task.status;entry.append(st);if(task.status==='open'||task.status==='in_progress'&&task.assignedWorkerId){const b=document.createElement('button');b.textContent=task.status==='open'?'Accept Task':'Submit Task';b.onclick=async()=>{b.disabled=true;try{await api('/api/worker/tasks/'+encodeURIComponent(task.id)+'/'+(task.status==='open'?'accept':'submit'),{});say('Task updated');await tasks()}catch(e){say(e.message);b.disabled=false}};entry.append(b)}taskList.append(entry)}}catch(e){say(e.message)}}
  const chatLog=document.getElementById('chat-log');let seen=new Set();function showMessage(m){if(seen.has(m.id))return;seen.add(m.id);const el=document.createElement('p');el.textContent=(m.senderName||m.senderRole||'User')+': '+m.text;chatLog.append(el);chatLog.scrollTop=chatLog.scrollHeight}
  async function chat(){try{const me=await api('/api/me');const d=await api('/api/chat/'+encodeURIComponent(me.user.id));d.messages.forEach(showMessage)}catch(e){say(e.message)}}
+ // Incoming server events are displayed immediately, without requiring a tab refresh.
+ // Uses the same authenticated Socket.IO session as the worker timer.
+ const chatSocket=io();
+ chatSocket.on('connect',()=>chat());
+ chatSocket.on('chat-message',m=>{if(m && m.text)showMessage(m)});
  document.getElementById('chat-form').onsubmit=async e=>{e.preventDefault();const input=document.getElementById('chat-input');const message=input.value.trim();if(!message)return;try{await api('/api/chat/send',{text:message});input.value='';await chat()}catch(err){say(err.message)}};
  document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-tab]').forEach(x=>x.classList.toggle('active',x===b));for(const name of ['tasks','earnings','chat'])document.getElementById('worker-'+name).hidden=b.dataset.tab!==name;if(b.dataset.tab==='tasks')tasks();if(b.dataset.tab==='chat')chat()});
- setInterval(()=>{if(!document.getElementById('worker-tasks').hidden)tasks();if(!document.getElementById('worker-chat').hidden)chat()},12000);
+ // Poll task status only; leave form inputs and chat display untouched.
+ setInterval(()=>{if(!document.getElementById('worker-tasks').hidden)tasks()},12000);
 })();
