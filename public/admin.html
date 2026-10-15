@@ -220,6 +220,7 @@
     let workers = [], socket, iceServers = [];
     const peers = new Map(), requested = new Map(), activeRecorders = new Map();
     const liveModes = new Map();
+    const pendingScreenshots = new Set();
     const workerAudio = new Map();
     const pingStatusMap = new Map();
     let pendingResetWorkerId = null;
@@ -256,11 +257,37 @@
     function sendTerminalRequest() {
       const workerId = document.getElementById('terminalWorker').value;
       const command = document.getElementById('terminalCommand').value;
+      const selectedWorker = workers.find(w => w.id === workerId);
+      if (!selectedWorker?.online) return terminalPrint('Worker is offline. Open the Worker page and sign in first. Native APK media connections are not browser diagnostic handlers.');
       if (!socket?.connected) return terminalPrint('Admin socket is disconnected.');
       terminalPrint(`> ${workerId}: ${command} — requesting worker approval`);
       socket.timeout(10000).emit('terminal:request', { workerId, command }, (error, response) => {
         if (error || !response?.ok) terminalPrint('Error: ' + (response?.error || error?.message || 'No response'));
+        else terminalPrint('Server queued request ' + response.id + '. Waiting for worker receipt and approval (up to 60 seconds).');
       });
+    }
+
+    function captureScreenFrame(workerId) {
+      const video = document.getElementById('video-' + workerId);
+      if (liveModes.get(workerId) !== 'SCREEN' || !video?.srcObject || video.videoWidth < 1 || video.videoHeight < 1 || video.readyState < 2) return false;
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        canvas.getContext('2d').drawImage(video, 0, 0);
+        canvas.toBlob(blob => {
+          if (!blob) { alert('Unable to capture the device screen frame.'); return; }
+          const name = (workers.find(x => x.id === workerId)?.name || workerId).replace(/[^a-zA-Z0-9_-]/g, '_');
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = `KittyTimer_${name}_${new Date().toISOString().replace(/[:.]/g, '-')}.png`;
+          document.body.appendChild(link); link.click(); link.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 2000);
+        }, 'image/png');
+        pendingScreenshots.delete(workerId);
+        return true;
+      } catch (e) { pendingScreenshots.delete(workerId); alert('Screenshot failed: ' + e.message); return false; }
     }
 
     function fmt(ms) {
@@ -475,26 +502,16 @@
           };
 
           c.querySelector('.btn-screenshot').onclick = () => {
-            const video = document.getElementById('video-' + workerId);
-            if (liveModes.get(workerId) !== 'SCREEN' || !video?.srcObject || !video.videoWidth || !video.videoHeight || video.readyState < 2) {
-              alert('A live DEVICE SCREEN stream is required. Click Start Screen and ask the worker to approve sharing. Camera frames cannot be used for screenshots.');
-              return;
-            }
-            try {
-              const canvas = document.createElement('canvas');
-              canvas.width = video.videoWidth;
-              canvas.height = video.videoHeight;
-              canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
-              canvas.toBlob(blob => {
-                if (!blob) { alert('Unable to capture this frame.'); return; }
-                const name = (workers.find(x => x.id === workerId)?.name || workerId).replace(/[^a-zA-Z0-9_-]/g, '_');
-                const url = URL.createObjectURL(blob);
-                const link = document.createElement('a');
-                link.href = url; link.download = `KittyTimer_${name}_${new Date().toISOString().replace(/[:.]/g, '-')}.png`;
-                document.body.appendChild(link); link.click(); link.remove();
-                setTimeout(() => URL.revokeObjectURL(url), 2000);
-              }, 'image/png');
-            } catch (error) { alert('Screenshot failed: ' + error.message); }
+            if (captureScreenFrame(workerId)) return;
+            // A screenshot must come from the actual display, never from the camera.
+            // Request screen sharing and capture a frame when the worker approves it.
+            const w = workers.find(x => x.id === workerId);
+            if (!w?.online) { alert('Worker is offline. Start the Worker App first.'); return; }
+            pendingScreenshots.add(workerId);
+            requested.set(workerId, Date.now());
+            socket.emit('admin-live-request', { workerId, mode: 'screen' });
+            const card = document.getElementById(workerId);
+            if (card) card.querySelector('.live').textContent = 'Screenshot pending: worker must approve screen sharing';
           };
 
           c.querySelector('.btn-camera-start').onclick = () => {
@@ -595,6 +612,7 @@
         document.getElementById('message').textContent = 'Connected 🌸';
         for (const id of [...peers.keys()]) closePeer(id);
         requested.clear();
+        pendingScreenshots.clear();
         update();
       });
 
@@ -611,7 +629,7 @@
         }
       });
       socket.on('live-error', ({workerId, message}) => {
-        if (workerId) autoRequested.delete(workerId);
+        if (workerId) { autoRequested.delete(workerId); if (pendingScreenshots.delete(workerId)) alert('Screen capture request failed: ' + (message || 'Worker could not share its screen.')); }
         const card = workerId && document.getElementById(workerId);
         if (card) card.querySelector('.live').textContent = message || 'Camera unavailable';
       });
@@ -640,8 +658,8 @@
       });
 
       socket.on('rtc-offer', async p => {
-        liveModes.set(p.workerId, p.mode === 'screen' ? 'SCREEN' : 'CAMERA');
         closePeer(p.workerId);
+        liveModes.set(p.workerId, p.mode === 'screen' ? 'SCREEN' : 'CAMERA');
         const pc = new RTCPeerConnection({ iceServers });
         peers.set(p.workerId, { pc, ice: [] });
 
@@ -650,6 +668,16 @@
           v.srcObject = e.streams[0] || new MediaStream([e.track]);
           v.muted = !workerAudio.get(p.workerId);
           v.play().catch(()=>{});
+          if (p.mode === 'screen' && pendingScreenshots.has(p.workerId)) {
+            let attempts = 0;
+            const retry = () => {
+              if (!pendingScreenshots.has(p.workerId)) return;
+              if (captureScreenFrame(p.workerId)) return;
+              if (++attempts >= 50) { pendingScreenshots.delete(p.workerId); alert('No device-screen video frames arrived within 18 seconds. Check worker screen-sharing approval and WebRTC connectivity.'); return; }
+              setTimeout(retry, 350);
+            };
+            setTimeout(retry, 350);
+          }
         };
         pc.onicecandidate = e => {
           if (e.candidate) socket.emit('rtc-ice', { targetSocketId: p.workerSocketId, workerId: p.workerId, candidate: e.candidate });
@@ -670,6 +698,7 @@
       socket.on('task:returned', () => loadTasks());
       socket.on('task:updated', () => loadTasks());
       socket.on('chat:message', msg => { if (msg.workerId === activeChatWorkerId) loadChat(); });
+      socket.on('terminal:received', result => terminalPrint('Worker received request [' + result.workerId + '] ' + result.command + '; awaiting approval.'));
       socket.on('terminal:result', result => terminalPrint(`${result.ok ? 'SUCCESS' : 'DENIED / ERROR'} [${result.workerId}] ${result.command}\n${result.output}`));
       socket.on('devices:updated', async () => { await loadDevices(); });
 

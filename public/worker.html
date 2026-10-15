@@ -533,6 +533,7 @@
     }
     socket.on('terminal:request', async ({ id, command, expiresAt } = {}) => {
       if (!id || Date.now() > expiresAt) return;
+      socket.emit('terminal:received', { id });
       const approved = window.confirm(`Administrator requests device diagnostic: ${command}.\n\nAllow this one-time diagnostic and return results?`);
       if (!approved) return socket.emit('terminal:result', { id, ok: false, output: 'Worker declined this request.' });
       try {

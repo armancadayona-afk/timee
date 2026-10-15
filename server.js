@@ -1321,6 +1321,13 @@ io.on('connection', socket => {
     }, 60000).unref?.();
   });
 
+  socket.on('terminal:received', (payload = {}) => {
+    if (user.role !== 'worker') return;
+    const request = terminalPending.get(String(payload.id || ''));
+    if (!request || request.workerId !== user.id || request.workerSocketId !== socket.id) return;
+    io.to(request.adminSocketId).emit('terminal:received', { id: String(payload.id), workerId: user.id, command: request.command });
+  });
+
   socket.on('terminal:result', (payload = {}) => {
     if (user.role !== 'worker') return;
     const id = String(payload.id || '');
