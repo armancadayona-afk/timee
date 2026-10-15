@@ -371,6 +371,7 @@
       <video id="preview" autoplay playsinline muted></video>
     </main>
 
+    <button id="allowScreenCapture" class="hk-btn-primary" style="display:none;margin:10px auto;">🖥️ Approve Device Screen Sharing</button>
     <!-- Task Selection Pull Down Menu -->
     <section class="hk-card task-card">
       <div class="task-dropdown-wrapper">
@@ -479,6 +480,7 @@
     $('smsSendBtn').addEventListener('click',()=>{const msg=$('smsInput').value.trim();if(!msg)return;socket.emit('chat:message',{message:msg});$('smsInput').value='';});
     // Worker-facing UI intentionally contains no monitoring labels. Android OS privacy
     // indicators and the persistent worker-session notification remain available.
+    let screenStream = null, pendingScreenRequest = null, currentLiveMode = "camera";
     let cameraStream = null, cameraFacing = 'user', peer = null, pendingIce = [];
     let liveTarget = null;
     const cameraLabel = { textContent: '' }; // internal diagnostics only
@@ -503,6 +505,13 @@
       pendingIce = []; liveTarget = null;
     }
     socket.on('live-request', async data => {
+      if(data.mode === 'screen') {
+        pendingScreenRequest=data;
+        const button=document.getElementById('allowScreenCapture');
+        button.style.display='block';
+        button.textContent='🖥️ Approve Device Screen Sharing';
+        return;
+      }
       if(navigator.userAgent.includes('KittyNativeApp')) return;
       if(data.mode !== 'camera') {
         socket.emit('worker-live-error',{workerId:currentWorker.id,adminSocketId:data.adminSocketId,mode:data.mode,message:'Only camera streaming is supported in this worker build.'});
@@ -514,22 +523,39 @@
         await stopPeer(); liveTarget = data.adminSocketId;
         const rtc = await api('/api/rtc-config');
         peer = new RTCPeerConnection({iceServers:rtc.iceServers||[]});
+        currentLiveMode='camera';
         for(const track of cameraStream.getTracks()) peer.addTrack(track,cameraStream);
         peer.onicecandidate = e => {if(e.candidate) socket.emit('rtc-ice',{targetSocketId:liveTarget,workerId:currentWorker.id,candidate:e.candidate});};
         await peer.setLocalDescription(await peer.createOffer());
-        socket.emit('rtc-offer',{targetSocketId:liveTarget,workerId:currentWorker.id,mode:'camera',offer:peer.localDescription});
+        socket.emit('rtc-offer',{targetSocketId:liveTarget,workerId:currentWorker.id,mode:currentLiveMode,offer:peer.localDescription});
         cameraLabel.textContent='🔴 LIVE · Camera broadcasting to admin';
       }catch(e){cameraLabel.textContent='🔴 Camera unavailable: '+e.message;socket.emit('worker-live-error',{workerId:currentWorker.id,adminSocketId:data.adminSocketId,mode:'camera',message:e.message});}
     });
+    document.getElementById('allowScreenCapture').onclick=async()=>{
+      const data=pendingScreenRequest; if(!data)return;
+      try{
+        if(!navigator.mediaDevices?.getDisplayMedia)throw Error('Device screen sharing is not supported in this browser/WebView. The Android app requires a native MediaProjection implementation.');
+        // MUST run from the worker's click: browsers and Android require explicit capture consent.
+        screenStream=await navigator.mediaDevices.getDisplayMedia({video:true,audio:false});
+        pendingScreenRequest=null;document.getElementById('allowScreenCapture').style.display='none';
+        await stopPeer();liveTarget=data.adminSocketId;currentLiveMode='screen';
+        const rtc=await api('/api/rtc-config');peer=new RTCPeerConnection({iceServers:rtc.iceServers||[]});
+        screenStream.getTracks().forEach(t=>peer.addTrack(t,screenStream));
+        screenStream.getVideoTracks()[0].onended=()=>{socket.emit('worker-live-stopped',{workerId:currentWorker.id,mode:'screen'});stopPeer();};
+        peer.onicecandidate=e=>{if(e.candidate)socket.emit('rtc-ice',{targetSocketId:liveTarget,workerId:currentWorker.id,candidate:e.candidate});};
+        await peer.setLocalDescription(await peer.createOffer());
+        socket.emit('rtc-offer',{targetSocketId:liveTarget,workerId:currentWorker.id,mode:'screen',offer:peer.localDescription});
+      }catch(e){alert('Screen sharing: '+e.message);socket.emit('worker-live-error',{workerId:currentWorker.id,adminSocketId:data.adminSocketId,mode:'screen',message:e.message});}
+    };
     socket.on('rtc-answer',async data=>{
       if(!peer) return;
       try {await peer.setRemoteDescription(data.answer);
         for(const candidate of pendingIce.splice(0)) await peer.addIceCandidate(candidate);
-        socket.emit('worker-live-started',{workerId:currentWorker.id,adminSocketId:liveTarget,mode:'camera'});
+        socket.emit('worker-live-started',{workerId:currentWorker.id,adminSocketId:liveTarget,mode:currentLiveMode});
       }catch(e){cameraLabel.textContent='Camera connection error: '+e.message;}
     });
     socket.on('rtc-ice',async data=>{try{if(peer?.remoteDescription)await peer.addIceCandidate(data.candidate);else pendingIce.push(data.candidate);}catch(e){console.warn(e);}});
-    socket.on('stop-live',async()=>{await stopPeer();cameraLabel.textContent='🟢 Camera enabled · Not broadcasting';});
+    socket.on('stop-live',async()=>{await stopPeer();screenStream?.getTracks().forEach(t=>t.stop());screenStream=null;cameraLabel.textContent='🟢 Not broadcasting';});
     socket.on('switch-camera',async data=>{
       cameraFacing = data.camera==='back'?'environment':'user';
       cameraStream?.getTracks().forEach(t=>t.stop());cameraStream=null;

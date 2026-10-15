@@ -139,9 +139,22 @@
           </form>
         </div>
 
+        <div style="background:var(--panel-2);padding:16px;border-radius:12px;border:1px solid var(--line);">
+          <h3>✅ Add Completed Task</h3>
+          <p class="muted">Credit a finished task directly to one worker. No worker submission needed.</p>
+          <form id="completedTaskForm" onsubmit="event.preventDefault();addCompletedTask();" style="display:grid;gap:10px;">
+            <label>Worker <select id="completedWorkerId" required style="width:100%"></select></label>
+            <label>Completed Task <input id="completedTitle" required maxlength="200" placeholder="Task name" style="width:100%"></label>
+            <label>Hours Worked <input id="completedHours" type="number" min="0" max="100000" step="0.01" value="0" required style="width:100%"></label>
+            <label>Payment (USD) <input id="completedAmount" type="number" min="0" step="0.01" value="0" required style="width:100%"></label>
+            <label>Notes <textarea id="completedDescription" rows="2" style="width:100%"></textarea></label>
+            <button type="submit" class="btn">ADD COMPLETED TASK</button>
+          </form>
+        </div>
         <div>
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
             <h3>Task List</h3>
+            <button type="button" class="btn btn-sm danger" onclick="resetTaskLogs()">RESET TASK LOGS</button>
             <select id="filterTaskWorker" onchange="loadTasks()">
               <option value="">All Workers</option>
               </select>
@@ -423,8 +436,8 @@
 
           c.querySelector('.btn-screenshot').onclick = () => {
             const video = document.getElementById('video-' + workerId);
-            if (!video?.srcObject || !video.videoWidth || !video.videoHeight || video.readyState < 2) {
-              alert('No live camera frame available. Wait for the worker camera to connect.');
+            if (liveModes.get(workerId) !== 'SCREEN' || !video?.srcObject || !video.videoWidth || !video.videoHeight || video.readyState < 2) {
+              alert('A live DEVICE SCREEN stream is required. Click Start Screen and ask the worker to approve sharing. Camera frames cannot be used for screenshots.');
               return;
             }
             try {
@@ -654,7 +667,7 @@
     function syncWorkerSelectors() {
       const available = workers.slice().sort((a,b)=>a.name.localeCompare(b.name));
       const options = [
-        ['taskWorkerId', false], ['filterTaskWorker', true], ['chatWorkerSelect', false]
+        ['taskWorkerId', false], ['completedWorkerId', false], ['filterTaskWorker', true], ['chatWorkerSelect', false]
       ];
       for (const [id, includeAll] of options) {
         const el=document.getElementById(id); if (!el) continue;
@@ -709,6 +722,31 @@
       `).join('');
     }
 
+    async function resetTaskLogs(){
+      const workerId=document.getElementById('filterTaskWorker')?.value||'';
+      const label=workerId ? document.getElementById('filterTaskWorker').selectedOptions[0].text : 'ALL WORKERS';
+      const explanation=`This permanently deletes APPROVED and REJECTED task history for ${label}, including related task earnings entries. In-progress, assigned, and pending tasks, worker accounts, and manual earnings adjustments remain unchanged.`;
+      if(!confirm(`${explanation}\n\nContinue?`))return;
+      const typed=prompt('To confirm, type RESET TASK LOGS exactly:');
+      if(typed!=='RESET TASK LOGS'){if(typed!==null)alert('Reset cancelled: incorrect confirmation.');return;}
+      try{
+        const result=await api('/api/admin/tasks/reset-logs',{workerId,confirmation:typed});
+        await loadTasks();await refreshEarnings();
+        alert(`Cleared ${result.deletedTasks} task log(s) and ${result.deletedEarningsEntries} linked earnings record(s).`);
+      }catch(e){alert(e.message);}
+    }
+    async function addCompletedTask(){
+      const workerId=document.getElementById('completedWorkerId').value;
+      const title=document.getElementById('completedTitle').value.trim();
+      const amount=Number(document.getElementById('completedAmount').value);
+      const hours=Number(document.getElementById('completedHours').value);
+      const description=document.getElementById('completedDescription').value;
+      if(!workerId||!title){alert('Select a worker and provide a task title.');return;}
+      if(!confirm(`Add completed task "${title}" for ${workerId}, ${hours} hours, $${amount.toFixed(2)}?`))return;
+      try {await api('/api/admin/tasks/completed',{workerId,title,amount,hours,description});
+        document.getElementById('completedTaskForm').reset();loadTasks();refreshEarnings();}
+      catch(e){alert(e.message)}
+    }
     async function assignTask() {
       const workerId = document.getElementById('taskWorkerId').value;
       if (!workerId) { alert('Select a worker or Open to Everyone.'); return; }

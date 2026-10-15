@@ -1065,6 +1065,47 @@ app.post('/api/tasks',requireRole('admin'),(req,res)=>{
  tasks.push(task);persistTasks();notifyTask(task,'task:assigned');io.to('workers').emit('task:updated',task);
  res.json({ok:true,task});
 });
+// Admin-recorded completed tasks: immediately approved, with an auditable earnings entry.
+app.post('/api/admin/tasks/completed',requireRole('admin'),(req,res)=>{
+ const {workerId,title,description}=req.body||{};
+ const price=money(req.body.amount);
+ const hours=Number(req.body.hours??0);
+ if(!states.has(workerId)||!String(title||'').trim()||price===null||!Number.isFinite(hours)||hours<0||hours>100000)
+   return res.status(400).json({ok:false,error:'Worker, task title, nonnegative payment and valid hours required'});
+ const now=Date.now(),id=crypto.randomUUID();
+ const task={id,taskId:id,title:String(title).trim().slice(0,200),description:String(description||'').slice(0,3000),price,
+ assignmentType:'ASSIGNED',workerId,allowConcurrent:false,status:'APPROVED',createdAt:now,assignedAt:now,
+ acceptedAt:now,submittedAt:now,completedAt:now,recordedMs:Math.round(hours*3600000),approvedAmount:price,
+ adminNote:'Recorded as completed by admin',recordedByAdmin:true};
+ const entry={id:crypto.randomUUID(),workerId,taskId:id,type:'TASK_APPROVED',amount:price,createdAt:now,reason:'Admin-recorded completed task',admin:req.session.user.username};
+ try {tasks.push(task);persistTasks();earningsLedger.push(entry);saveLedger();}
+ catch(e){tasks.splice(tasks.indexOf(task),1);earningsLedger.splice(earningsLedger.indexOf(entry),1);return res.status(500).json({ok:false,error:'Could not save completed task'});}
+ notifyTask(task,'task:approved');res.json({ok:true,task,entry});
+});
+// Clear historical task logs for one worker or all workers; preserve active tasks and manual adjustments.
+app.post('/api/admin/tasks/reset-logs',requireRole('admin'),(req,res)=>{
+ const workerId=String(req.body?.workerId||'');
+ if(workerId && !states.has(workerId))return res.status(400).json({ok:false,error:'Unknown worker'});
+ if(req.body?.confirmation!=='RESET TASK LOGS')return res.status(400).json({ok:false,error:'Confirmation required'});
+ const archived=new Set(['APPROVED','REJECTED']);
+ const deleted=tasks.filter(t=>archived.has(t.status)&&(!workerId||t.workerId===workerId));
+ const deletedIds=new Set(deleted.map(taskIdOf));
+ const keptTasks=tasks.filter(t=>!deletedIds.has(taskIdOf(t)));
+ const keptLedger=earningsLedger.filter(e=>!(e.taskId&&deletedIds.has(e.taskId)));
+ const oldTasks=tasks.slice(),oldLedger=earningsLedger.slice();
+ try {
+   tasks.splice(0,tasks.length,...keptTasks);earningsLedger.splice(0,earningsLedger.length,...keptLedger);
+   persistTasks();saveLedger();
+ }catch(e){
+   tasks.splice(0,tasks.length,...oldTasks);earningsLedger.splice(0,earningsLedger.length,...oldLedger);
+   try{persistTasks();saveLedger();}catch(_){}
+   return res.status(500).json({ok:false,error:'Unable to clear task logs'});
+ }
+ io.to('admins').emit('tasks:reset',{workerId:workerId||null,count:deleted.length});
+ io.to('workers').emit('tasks:reset',{workerId:workerId||null,count:deleted.length});
+ io.emit('earnings:updated',{workerId:workerId||null});
+ res.json({ok:true,deletedTasks:deleted.length,deletedEarningsEntries:oldLedger.length-keptLedger.length});
+});
 app.post('/api/tasks/:taskId/accept',requireRole('worker'),(req,res)=>{
  const t=tasks.find(x=>taskIdOf(x)===req.params.taskId);const wid=req.session.user.id;
  if(!t)return res.status(404).json({ok:false,error:'Task not found'});
