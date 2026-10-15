@@ -156,58 +156,9 @@
           </section>
         </div>
 
-        <!-- Row 2: Device Registration Approvals -->
-        <section class="pink-card">
-          <div class="card-header">
-            <h2>📱 Device Registration Approvals</h2>
-            <span class="badge-tag">2 Pending</span>
-          </div>
-          <div class="table-container">
-            <table class="kitty-table">
-              <thead>
-                <tr>
-                  <th>Device ID</th>
-                  <th>Worker Name</th>
-                  <th>Device Type</th>
-                  <th>Location</th>
-                  <th>Submitted At</th>
-                  <th>Status</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>KITTY-001</td>
-                  <td>Kitty Worker 01</td>
-                  <td>Windows PC</td>
-                  <td>Manila, PH</td>
-                  <td>Apr 26, 2025 14:52</td>
-                  <td><span class="status-pill pending">Pending</span></td>
-                  <td>
-                    <button class="btn-pink" style="padding:4px 10px; font-size:11px; display:inline-block;">Approve</button>
-                    <button class="btn-outline" style="padding:4px 10px; font-size:11px; display:inline-block;">Reject</button>
-                  </td>
-                </tr>
-                <tr>
-                  <td>KITTY-002</td>
-                  <td>Kitty Worker 02</td>
-                  <td>Android Phone</td>
-                  <td>Cebu, PH</td>
-                  <td>Apr 26, 2025 14:37</td>
-                  <td><span class="status-pill pending">Pending</span></td>
-                  <td>
-                    <button class="btn-pink" style="padding:4px 10px; font-size:11px; display:inline-block;">Approve</button>
-                    <button class="btn-outline" style="padding:4px 10px; font-size:11px; display:inline-block;">Reject</button>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <!-- Row 3: Task Management, Terminal, Worker Chat -->
+        <!-- Row 2: Task Management, Terminal, Worker Chat (Device Registration Removed) -->
         <div class="grid-3col">
-          <!-- Card 5: Task Management -->
+          <!-- Card 4: Task Management -->
           <section class="pink-card">
             <div class="card-header">
               <h2>📋 Task Management</h2>
@@ -242,14 +193,14 @@
             </div>
           </section>
 
-          <!-- Card 6: Remote Device Terminal -->
+          <!-- Card 5: Remote Device Terminal -->
           <section class="pink-card">
             <div class="card-header">
               <h2>>_ Remote Device Terminal</h2>
             </div>
             <div class="terminal-box" id="terminal-screen">
-              <div>> Connecting to KITTY-001...</div>
-              <div>> Device online. OS: Windows 11</div>
+              <div>> Connecting to Worker Device...</div>
+              <div>> Device online. System Ready.</div>
               <div>> Type a command or select from the menu.</div>
               <div style="margin-top:10px; color:#A7F3D0;">C:\> _</div>
             </div>
@@ -259,28 +210,22 @@
             </div>
           </section>
 
-          <!-- Card 7: Worker Chat -->
+          <!-- Card 6: Worker Chat (Direct Worker-to-Admin Chat) -->
           <section class="pink-card">
             <div class="card-header">
               <h2>💬 Worker Chat</h2>
-              <select class="custom-select" style="padding:2px 6px; font-size:11px;">
-                <option>All Workers</option>
-              </select>
+              <span class="badge-tag" id="chat-worker-badge">Worker-to-Admin</span>
             </div>
 
             <div class="chat-messages" id="chat-stream">
               <div class="chat-bubble">
-                <div class="sender">Kitty Worker 01 🐱</div>
-                Task 3 is now completed!
-              </div>
-              <div class="chat-bubble" style="align-self:flex-end; background:#FFE4E1;">
-                <div class="sender">Kitty Worker 02 🐱</div>
-                On my way to the next task. 👍
+                <div class="sender">System 🐱</div>
+                Select a worker to view or start chat.
               </div>
             </div>
 
             <div class="chat-input-row">
-              <input type="text" id="chat-text-input" placeholder="Type a message...">
+              <input type="text" id="chat-text-input" placeholder="Message worker...">
               <button class="btn-pink" id="btn-send-chat" style="padding:8px 14px;">➢</button>
             </div>
           </section>
@@ -297,6 +242,7 @@
     let iceServers = [];
     let audioEnabled = false;
     let selectedWorkerId = null;
+    let chatHistoryMap = new Map(); // workerId -> array of messages
     const peers = new Map();
     const requested = new Map();
 
@@ -353,6 +299,48 @@
         requested.set(workerId, Date.now());
         socket.emit('admin-live-request', { workerId, mode: 'camera' });
       }, 300);
+    }
+
+    function renderChatForWorker(workerId) {
+      const stream = document.getElementById('chat-stream');
+      stream.innerHTML = '';
+      if (!workerId) {
+        stream.innerHTML = '<div class="chat-bubble"><div class="sender">System 🐱</div>Select a worker to chat.</div>';
+        return;
+      }
+
+      const msgs = chatHistoryMap.get(workerId) || [];
+      if (msgs.length === 0) {
+        const worker = workers.find(w => w.id === workerId);
+        const name = worker ? worker.name : workerId;
+        stream.innerHTML = `<div class="chat-bubble"><div class="sender">System 🐱</div>No messages yet with ${name}. Send a message below!</div>`;
+        return;
+      }
+
+      msgs.forEach(msg => {
+        const bubble = document.createElement('div');
+        bubble.className = 'chat-bubble';
+        if (msg.senderRole === 'admin') {
+          bubble.style.alignSelf = 'flex-end';
+          bubble.style.background = '#FFE4E1';
+          bubble.innerHTML = `<div class="sender">Admin 👩‍💼</div>${escapeHtml(msg.text)}`;
+        } else {
+          bubble.style.alignSelf = 'flex-start';
+          bubble.innerHTML = `<div class="sender">${escapeHtml(msg.senderName)} 🐱</div>${escapeHtml(msg.text)}`;
+        }
+        stream.appendChild(bubble);
+      });
+
+      stream.scrollTop = stream.scrollHeight;
+    }
+
+    function escapeHtml(str) {
+      return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function loadChatHistory(workerId) {
+      if (!workerId) return;
+      socket.emit('get-chat-history', { workerId });
     }
 
     function updateUI() {
@@ -415,10 +403,10 @@
         btnPause.textContent = '▶ START';
       }
 
-      // Auto-connect video feed if worker is online
-      if (socket?.connected && worker.online && worker.captureReady && !peers.has(worker.id) && !requested.has(worker.id)) {
-        requestLiveFeed(worker.id);
-      }
+      // Update chat worker badge & chat history
+      document.getElementById('chat-worker-badge').textContent = `Chat with ${worker.name}`;
+      loadChatHistory(worker.id);
+      renderChatForWorker(worker.id);
     }
 
     // Event Listeners
@@ -483,16 +471,17 @@
     document.getElementById('btn-send-chat').onclick = () => {
       const input = document.getElementById('chat-text-input');
       const text = input.value.trim();
-      if (!text) return;
-      const stream = document.getElementById('chat-stream');
-      const bubble = document.createElement('div');
-      bubble.className = 'chat-bubble';
-      bubble.style.alignSelf = 'flex-start';
-      bubble.innerHTML = `<div class="sender">Admin 👩‍💼</div>${text}`;
-      stream.appendChild(bubble);
-      stream.scrollTop = stream.scrollHeight;
+      if (!text || !selectedWorkerId) return;
+
+      socket.emit('send-chat-message', { workerId: selectedWorkerId, text });
       input.value = '';
     };
+
+    document.getElementById('chat-text-input').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        document.getElementById('btn-send-chat').click();
+      }
+    });
 
     (async () => {
       const me = await api('/api/me');
@@ -511,6 +500,23 @@
       socket.on('workers-state', data => {
         workers = data;
         updateUI();
+      });
+
+      socket.on('chat-history', ({ workerId, messages }) => {
+        chatHistoryMap.set(workerId, messages || []);
+        if (workerId === selectedWorkerId) {
+          renderChatForWorker(workerId);
+        }
+      });
+
+      socket.on('chat-message', msg => {
+        const msgs = chatHistoryMap.get(msg.workerId) || [];
+        msgs.push(msg);
+        chatHistoryMap.set(msg.workerId, msgs);
+
+        if (msg.workerId === selectedWorkerId) {
+          renderChatForWorker(selectedWorkerId);
+        }
       });
 
       socket.on('rtc-offer', async p => {
