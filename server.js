@@ -553,6 +553,28 @@ app.post('/api/worker/stop', requireRole('worker'), (req, res) => {
 // Persistent administrator task list.
 const TASKS_FILE = path.join(DATA_DIR, 'admin-tasks.json');
 const adminTasks = readJson(TASKS_FILE, []);
+app.get('/api/worker/tasks', requireRole('worker'), (req,res) => {
+  res.json({ok:true,tasks:adminTasks.filter(t => !t.workerId || t.workerId === req.session.user.id)});
+});
+app.post('/api/worker/tasks/:id/submit', requireRole('worker'), (req,res) => {
+  const task=adminTasks.find(t=>t.id===req.params.id && (!t.workerId || t.workerId===req.session.user.id));
+  if(!task) return res.status(404).json({error:'Task not found'});
+  if(task.status==='completed') return res.status(409).json({error:'Task already completed'});
+  if(task.status!=='open' && task.assignedWorkerId!==req.session.user.id) return res.status(409).json({error:'Task is not available'});
+  if(task.assignedWorkerId && task.assignedWorkerId!==req.session.user.id) return res.status(409).json({error:'Task claimed by another worker'});
+  task.assignedWorkerId=req.session.user.id;task.status='submitted';task.submittedAt=new Date().toISOString();
+  fs.writeFileSync(TASKS_FILE,JSON.stringify(adminTasks,null,2));
+  io.to('admins').emit('tasks-updated');res.json({ok:true,task});
+});
+app.post('/api/worker/tasks/:id/accept', requireRole('worker'), (req,res) => {
+  const task=adminTasks.find(t=>t.id===req.params.id && (!t.workerId || t.workerId===req.session.user.id));
+  if(!task) return res.status(404).json({error:'Task not found'});
+  if(task.status!=='open' || (task.assignedWorkerId && task.assignedWorkerId!==req.session.user.id)) return res.status(409).json({error:'Task unavailable'});
+  if(adminTasks.some(t=>t.assignedWorkerId===req.session.user.id && t.status==='in_progress')) return res.status(409).json({error:'Submit your current task first'});
+  task.assignedWorkerId=req.session.user.id;task.status='in_progress';task.acceptedAt=new Date().toISOString();
+  fs.writeFileSync(TASKS_FILE,JSON.stringify(adminTasks,null,2));
+  io.to('admins').emit('tasks-updated');res.json({ok:true,task});
+});
 app.get('/api/admin/tasks', requireRole('admin'), (_req,res) => res.json({ok:true,tasks:adminTasks}));
 app.post('/api/admin/tasks', requireRole('admin'), (req,res) => {
   const title = String(req.body?.title || '').trim().slice(0,160);
