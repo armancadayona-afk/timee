@@ -730,13 +730,24 @@
           if (e.candidate) socket.emit('rtc-ice', { targetSocketId: p.workerSocketId, workerId: p.workerId, candidate: e.candidate });
         };
         await pc.setRemoteDescription(p.offer);
+        // ICE candidates can arrive before the offer/remote description. Drain any queued
+        // candidates now rather than silently dropping them (common on mobile networks).
+        const entry = peers.get(p.workerId);
+        for (const candidate of (entry?.ice || [])) {
+          try { await pc.addIceCandidate(candidate); } catch (e) { console.warn('Queued ICE candidate failed', e); }
+        }
+        if (entry) entry.ice = [];
         await pc.setLocalDescription(await pc.createAnswer());
         socket.emit('rtc-answer', { targetSocketId: p.workerSocketId, workerId: p.workerId, answer: pc.localDescription });
       });
 
       socket.on('rtc-ice', async p => {
         const entry = peers.get(p.workerId);
-        if (entry?.pc?.remoteDescription) await entry.pc.addIceCandidate(p.candidate);
+        if (!entry?.pc) return;
+        try {
+          if (entry.pc.remoteDescription) await entry.pc.addIceCandidate(p.candidate);
+          else entry.ice.push(p.candidate);
+        } catch (e) { console.warn('ICE candidate failed', e); }
       });
 
       socket.on('task:assigned', () => loadTasks());

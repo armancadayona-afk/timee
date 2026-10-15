@@ -35,7 +35,8 @@ class MainActivity : Activity() {
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, false)
         webView.settings.javaScriptEnabled = true
         webView.settings.domStorageEnabled = true
-        webView.settings.mediaPlaybackRequiresUserGesture = true
+        // Allow remote WebRTC video/audio tracks to start after the user has logged in.
+        webView.settings.mediaPlaybackRequiresUserGesture = false
         webView.settings.allowFileAccess = false
         webView.settings.allowContentAccess = false
         webView.webViewClient = object : WebViewClient() {
@@ -75,6 +76,15 @@ class MainActivity : Activity() {
         request.grant(request.resources.filter {
             it == PermissionRequest.RESOURCE_VIDEO_CAPTURE || it == PermissionRequest.RESOURCE_AUDIO_CAPTURE
         }.toTypedArray())
+        // Start only when the page actually requests media and Android runtime
+        // permissions have already been granted. Service starts while Activity is visible.
+        if (BuildConfig.FLAVOR.startsWith("worker") &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            androidx.core.content.ContextCompat.startForegroundService(
+                this, android.content.Intent(this, MediaKeepAliveService::class.java)
+            )
+        }
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
