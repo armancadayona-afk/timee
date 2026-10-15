@@ -24,10 +24,15 @@ const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 const DATA_DIR = path.join(__dirname, 'data');
 const STATE_FILE = path.join(DATA_DIR, 'state.json');
 const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
+const TASKS_FILE = path.join(DATA_DIR, 'tasks.json');
+const CHAT_FILE = path.join(DATA_DIR, 'chat.json');
+const USERS_FILE = path.join(DATA_DIR, 'users.json');
+const DEVICE_REQUESTS_FILE = path.join(DATA_DIR, 'device_requests.json');
 const HTTP_SESSION_DIR = path.join(DATA_DIR, 'http-sessions');
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
 fs.mkdirSync(HTTP_SESSION_DIR, { recursive: true });
+// Preserve existing records across deployments. No automatic data reset.
 
 if (IS_PRODUCTION) app.set('trust proxy', 1);
 
@@ -70,35 +75,20 @@ const sessionMiddleware = session({
 app.use(sessionMiddleware);
 io.engine.use(sessionMiddleware);
 
+// Prefilled worker accounts, restored for simple selection without device registration.
 const users = [
-  {
-    role: 'admin',
-    username: process.env.ADMIN_USERNAME || 'admin',
-    password: process.env.ADMIN_PASSWORD || 'admin123',
-    name: process.env.ADMIN_NAME || 'Administrator'
-  },
-  {
-    role: 'worker',
-    id: 'worker1',
-    username: process.env.WORKER1_USERNAME || 'john',
-    password: process.env.WORKER1_PASSWORD || 'john123',
-    name: process.env.WORKER1_NAME || 'John'
-  },
-  {
-    role: 'worker',
-    id: 'worker2',
-    username: process.env.WORKER2_USERNAME || 'mark',
-    password: process.env.WORKER2_PASSWORD || 'mark123',
-    name: process.env.WORKER2_NAME || 'Mark'
-  },
-  {
-    role: 'worker',
-    id: 'worker3',
-    username: process.env.WORKER3_USERNAME || 'anne',
-    password: process.env.WORKER3_PASSWORD || 'anne123',
-    name: process.env.WORKER3_NAME || 'Anne'
-  }
+  { role: 'admin', username: process.env.ADMIN_USERNAME || 'admin', password: process.env.ADMIN_PASSWORD || 'admin123', name: process.env.ADMIN_NAME || 'Administrator' },
+  { role: 'worker', id: 'worker1', username: process.env.WORKER1_USERNAME || 'john', password: process.env.WORKER1_PASSWORD || 'john123', name: process.env.WORKER1_NAME || 'Worker 1' },
+  { role: 'worker', id: 'worker2', username: process.env.WORKER2_USERNAME || 'mark', password: process.env.WORKER2_PASSWORD || 'mark123', name: process.env.WORKER2_NAME || 'Worker 2' },
+  { role: 'worker', id: 'worker3', username: process.env.WORKER3_USERNAME || 'anne', password: process.env.WORKER3_PASSWORD || 'anne123', name: process.env.WORKER3_NAME || 'Worker 3' }
 ];
+
+const savedUsers = readJson(USERS_FILE, []);
+savedUsers.forEach(u => {
+  if (u.username && !users.some(x => x.username.toLowerCase() === u.username.toLowerCase())) {
+    users.push(u);
+  }
+});
 
 const LIVE_NONE = 'NONE';
 const LIVE_CAMERA_PENDING = 'CAMERA_PENDING';
@@ -116,11 +106,12 @@ function initialWorkerState(user) {
     startedAt: null,
     accumulatedMs: 0,
     socketId: null,
+    mediaSocketId: null,
     sessionId: null,
     lastSeenAt: null,
-    disconnectTimer: null,
 
     liveMode: LIVE_NONE,
+    desiredLiveMode: LIVE_NONE,
     liveAdminSocketId: null,
     liveRequestedAt: null
   };
@@ -142,10 +133,25 @@ for (const worker of users.filter(user => user.role === 'worker')) {
   const state = initialWorkerState(worker);
   const old = persisted[worker.id];
 
-  // Do not restore a previously running live/timer state after a server restart.
-  // Historical shift records remain in sessions.json.
-  if (old && Number.isFinite(Number(old.lastSeenAt))) {
-    state.lastSeenAt = Number(old.lastSeenAt);
+  if (old) {
+    if (Number.isFinite(Number(old.lastSeenAt))) {
+      state.lastSeenAt = Number(old.lastSeenAt);
+    }
+    if (['WORKING', 'PAUSED', 'STOPPED', 'OFFLINE'].includes(old.status)) {
+      state.status = old.status;
+    }
+    if (old.startedAt != null) {
+      state.startedAt = Number(old.startedAt);
+    }
+    if (Number.isFinite(Number(old.accumulatedMs))) {
+      state.accumulatedMs = Number(old.accumulatedMs);
+    }
+    if (old.sessionId) {
+      state.sessionId = String(old.sessionId);
+    }
+    if (['NONE', 'CAMERA', 'SCREEN'].includes(old.desiredLiveMode)) {
+      state.desiredLiveMode = old.desiredLiveMode;
+    }
   }
 
   states.set(worker.id, state);
@@ -162,15 +168,41 @@ function persistState() {
 
   for (const [id, state] of states.entries()) {
     output[id] = {
-      lastSeenAt: state.lastSeenAt
+      status: state.status,
+      startedAt: state.startedAt,
+      accumulatedMs: state.accumulatedMs,
+      sessionId: state.sessionId,
+      lastSeenAt: state.lastSeenAt,
+      desiredLiveMode: state.desiredLiveMode || LIVE_NONE
     };
   }
 
   writeJsonAtomic(STATE_FILE, output);
 }
 
+const tasks = readJson(TASKS_FILE, []);
+const chatMessages = readJson(CHAT_FILE, []);
+const deviceRequests = readJson(DEVICE_REQUESTS_FILE, []);
+
 function persistSessions() {
   writeJsonAtomic(SESSIONS_FILE, workSessions.slice(-1000));
+}
+
+function persistTasks() {
+  writeJsonAtomic(TASKS_FILE, tasks);
+}
+
+function persistChat() {
+  writeJsonAtomic(CHAT_FILE, chatMessages);
+}
+
+function persistUsers() {
+  const dynamicUsers = users.filter(u => u.id && u.id.startsWith('worker_'));
+  writeJsonAtomic(USERS_FILE, dynamicUsers);
+}
+
+function persistDeviceRequests() {
+  writeJsonAtomic(DEVICE_REQUESTS_FILE, deviceRequests);
 }
 
 function safeWorkerState(state) {
@@ -185,8 +217,35 @@ function safeWorkerState(state) {
     accumulatedMs: state.accumulatedMs,
     lastSeenAt: state.lastSeenAt,
     liveMode: state.liveMode,
+    desiredLiveMode: state.desiredLiveMode || LIVE_NONE,
     liveRequestedAt: state.liveRequestedAt
   };
+}
+
+function checkAutoReconnectLive(state) {
+  if (!state || !state.captureReady || !(state.mediaSocketId || state.socketId)) return;
+  if (!state.desiredLiveMode || state.desiredLiveMode === LIVE_NONE) return;
+  if (state.liveMode !== LIVE_NONE) return;
+
+  const adminSockets = io.sockets.adapter.rooms.get('admins');
+  if (!adminSockets || adminSockets.size === 0) return;
+
+  const targetAdminSocketId = state.liveAdminSocketId && io.sockets.sockets.get(state.liveAdminSocketId)
+    ? state.liveAdminSocketId
+    : [...adminSockets][0];
+
+  const modeStr = state.desiredLiveMode === LIVE_SCREEN ? 'screen' : 'camera';
+  state.liveMode = modeStr === 'camera' ? LIVE_CAMERA_PENDING : LIVE_SCREEN_PENDING;
+  state.liveAdminSocketId = targetAdminSocketId;
+  state.liveRequestedAt = Date.now();
+
+  broadcastStates();
+
+  io.to(state.mediaSocketId || state.socketId).emit('live-request', {
+    adminSocketId: targetAdminSocketId,
+    workerId: state.id,
+    mode: modeStr
+  });
 }
 
 function broadcastStates() {
@@ -215,7 +274,7 @@ function stopWorkerLive(state, reason = 'stopped', notifyWorker = true) {
   const previousMode = state.liveMode;
 
   if (notifyWorker && state.socketId) {
-    io.to(state.socketId).emit('stop-live', {
+    io.to(state.mediaSocketId || state.socketId).emit('stop-live', {
       adminSocketId,
       reason
     });
@@ -238,7 +297,6 @@ function startShift(state) {
   if (state.sessionId) return;
 
   clearDisconnectTimer(state);
-  // Starting the clock must not interrupt an existing broadcast.
 
   state.status = 'WORKING';
   state.startedAt = Date.now();
@@ -341,6 +399,68 @@ function loginRateLimit(req, res, next) {
   next();
 }
 
+// ==========================================
+// WAKE-UP ROUTER LOGIC ("KUMUSTA" KEYWORD)
+// ==========================================
+function processWakeupKeyword(sender, text, channel) {
+  if (!text) return false;
+  const content = String(text).toLowerCase();
+
+  if (content.includes('kumusta')) {
+    console.log(`[WAKE-UP TRIGGERED] Channel: ${channel} | From: ${sender} | Msg: "${text}"`);
+    io.emit('worker-wakeup', {
+      channel,
+      sender: String(sender || 'Unknown'),
+      message: text,
+      timestamp: Date.now()
+    });
+    return true;
+  }
+  return false;
+}
+
+// 1. Android SMS / Direct Gateway Webhook
+app.post(['/api/webhook/sms-wakeup', '/api/webhook/android-sms'], (req, res) => {
+  const payload = req.body.data || req.body;
+  const sender = payload.from || payload.contact || payload.sender || 'SMS';
+  const message = payload.content || payload.message || payload.body || '';
+
+  const triggered = processWakeupKeyword(sender, message, 'SMS');
+  return res.json({ ok: true, triggered });
+});
+
+// 2. Facebook Messenger Webhook Handlers
+app.get('/api/webhook/messenger-wakeup', (req, res) => {
+  const VERIFY_TOKEN = process.env.MESSENGER_VERIFY_TOKEN || 'kitty_verify_token';
+  const mode = req.query['hub.mode'];
+  const token = req.query['hub.verify_token'];
+  const challenge = req.query['hub.challenge'];
+
+  if (mode === 'subscribe' && token === VERIFY_TOKEN) {
+    return res.status(200).send(challenge);
+  }
+  return res.sendStatus(403);
+});
+
+app.post('/api/webhook/messenger-wakeup', (req, res) => {
+  const body = req.body;
+
+  if (body.object === 'page') {
+    (body.entry || []).forEach(entry => {
+      const event = entry.messaging && entry.messaging[0];
+      if (event && event.message && event.message.text) {
+        processWakeupKeyword(event.sender.id, event.message.text, 'Messenger');
+      }
+    });
+    return res.status(200).send('EVENT_RECEIVED');
+  }
+  return res.sendStatus(404);
+});
+
+// ==========================================
+// CORE ROUTES & APIS
+// ==========================================
+
 app.get('/', (_req, res) => {
   const indexPath = path.join(__dirname, 'public', 'index.html');
 
@@ -393,29 +513,12 @@ app.post('/api/login', loginRateLimit, (req, res) => {
 
   if (user.role === 'worker') {
     const state = states.get(user.id);
+    const oldSocketId = state?.socketId;
 
-    // Logging in does not start the timer. If a prior session is still marked
-    // running, close it so the Worker explicitly starts the next shift.
-    if (state.status === 'WORKING' || state.sessionId) {
-      const oldSocketId = finishShift(state, 'relogin', 'STOPPED');
-
-      if (oldSocketId) {
-        io.to(oldSocketId).emit('session-replaced');
-        io.sockets.sockets.get(oldSocketId)?.disconnect(true);
-      }
-    } else {
-      const oldSocketId = state.socketId;
-      stopWorkerLive(state, 'relogin', true);
-      state.status = 'STOPPED';
-      state.online = false;
-      state.socketId = null;
-      state.startedAt = null;
-      state.accumulatedMs = 0;
-
-      if (oldSocketId) {
-        io.to(oldSocketId).emit('session-replaced');
-        io.sockets.sockets.get(oldSocketId)?.disconnect(true);
-      }
+    if (oldSocketId) {
+      io.to(oldSocketId).emit('session-replaced');
+      io.sockets.sockets.get(oldSocketId)?.disconnect(true);
+      if (state) state.socketId = null;
     }
 
     broadcastStates();
@@ -428,6 +531,247 @@ app.post('/api/login', loginRateLimit, (req, res) => {
       ? '/admin.html'
       : '/worker.html'
   });
+});
+
+// --- Device / User Registration API ---
+app.post('/api/register', (req, res) => {
+  const { username, password, name, role } = req.body || {};
+  const cleanUsername = String(username || '').trim().toLowerCase();
+  const cleanPassword = String(password || '').trim();
+  const cleanName = String(name || '').trim() || cleanUsername;
+  const cleanRole = (role === 'admin') ? 'admin' : 'worker';
+
+  if (!cleanUsername || !cleanPassword) {
+    return res.status(400).json({ ok: false, error: 'Username and password are required' });
+  }
+
+  if (users.some(u => u.username.toLowerCase() === cleanUsername)) {
+    return res.status(400).json({ ok: false, error: 'Username already registered' });
+  }
+
+  const newId = cleanRole === 'worker' ? 'worker_' + Date.now().toString(36) : null;
+  const newUser = {
+    role: cleanRole,
+    id: newId,
+    username: cleanUsername,
+    password: cleanPassword,
+    name: cleanName
+  };
+
+  users.push(newUser);
+  persistUsers();
+
+  if (cleanRole === 'worker') {
+    states.set(newId, initialWorkerState(newUser));
+    broadcastStates();
+  }
+
+  req.session.user = {
+    role: newUser.role,
+    id: newUser.id,
+    username: newUser.username,
+    name: newUser.name
+  };
+
+  res.json({
+    ok: true,
+    user: req.session.user,
+    redirect: newUser.role === 'admin' ? '/admin.html' : '/worker.html'
+  });
+});
+
+// --- Device Registration & Approval System (Section 4, 5, 6) ---
+
+// POST /api/devices/register
+app.post('/api/devices/register', (req, res) => {
+  const { deviceId, deviceName, platform, appVersion, publicKey, workerName } = req.body || {};
+  const cleanDeviceId = String(deviceId || '').trim();
+  const cleanName = String(deviceName || workerName || 'Android Device').trim();
+
+  if (!cleanDeviceId) {
+    return res.status(400).json({ success: false, error: 'deviceId is required' });
+  }
+
+  let device = deviceRequests.find(d => d.deviceId === cleanDeviceId);
+  if (!device) {
+    device = {
+      deviceId: cleanDeviceId,
+      deviceName: cleanName,
+      platform: platform || 'android',
+      appVersion: appVersion || '1.0.0',
+      publicKey: publicKey || '',
+      status: 'pending',
+      registeredAt: Date.now(),
+      workerId: null,
+      workerName: cleanName
+    };
+    deviceRequests.push(device);
+  } else {
+    device.deviceName = cleanName;
+    device.publicKey = publicKey || device.publicKey;
+    if (device.status === 'rejected') {
+      device.status = 'pending';
+    }
+  }
+
+  persistDeviceRequests();
+  io.to('admins').emit('device:requested', device);
+
+  res.json({
+    success: true,
+    deviceId: device.deviceId,
+    status: device.status
+  });
+});
+
+// GET /api/devices/status & /api/device/status/:deviceId
+const handleDeviceStatus = (req, res) => {
+  const deviceId = req.params.deviceId || req.headers['x-device-id'] || req.query.deviceId;
+  if (!deviceId) {
+    return res.status(400).json({ error: 'Device ID required' });
+  }
+
+  const device = deviceRequests.find(d => d.deviceId === deviceId);
+  if (!device) {
+    const existingUser = users.find(u => u.deviceId === deviceId);
+    if (existingUser) {
+      return res.json({
+        deviceId,
+        status: 'approved',
+        workerId: existingUser.id,
+        workerName: existingUser.name
+      });
+    }
+    return res.json({
+      deviceId,
+      status: 'not_registered',
+      workerId: null
+    });
+  }
+
+  res.json({
+    deviceId: device.deviceId,
+    status: device.status,
+    workerId: device.workerId || ('worker_' + device.deviceId.substring(0, 8)),
+    workerName: device.workerName || device.deviceName
+  });
+};
+
+app.get('/api/devices/status', handleDeviceStatus);
+app.get('/api/devices/status/:deviceId', handleDeviceStatus);
+app.get('/api/device/status/:deviceId', handleDeviceStatus);
+
+// GET /api/admin/devices
+app.get('/api/admin/devices', requireRole('admin'), (req, res) => {
+  res.json({ success: true, devices: deviceRequests });
+});
+
+// POST /api/admin/devices/:deviceId/approve
+app.post('/api/admin/devices/:deviceId/approve', requireRole('admin'), (req, res) => {
+  const deviceId = req.params.deviceId;
+  const { workerName } = req.body || {};
+  const device = deviceRequests.find(d => d.deviceId === deviceId);
+
+  if (!device) {
+    return res.status(404).json({ success: false, error: 'Device not found' });
+  }
+
+  const assignedWorkerId = device.workerId || ('worker_' + device.deviceId.substring(0, 10));
+  const assignedWorkerName = String(workerName || device.workerName || device.deviceName || 'Worker Device').trim();
+
+  device.status = 'approved';
+  device.workerId = assignedWorkerId;
+  device.workerName = assignedWorkerName;
+  device.approvedAt = Date.now();
+  persistDeviceRequests();
+
+  let user = users.find(u => u.deviceId === deviceId || u.id === assignedWorkerId);
+  if (!user) {
+    user = {
+      role: 'worker',
+      id: assignedWorkerId,
+      username: 'dev_' + deviceId.substring(0, 8),
+      password: 'dev_auth_token',
+      name: assignedWorkerName,
+      deviceId: deviceId
+    };
+    users.push(user);
+    persistUsers();
+  } else {
+    user.name = assignedWorkerName;
+  }
+
+  if (!states.has(assignedWorkerId)) {
+    states.set(assignedWorkerId, initialWorkerState(user));
+  } else {
+    states.get(assignedWorkerId).name = assignedWorkerName;
+  }
+  broadcastStates();
+
+  io.emit('device:approved', { deviceId: device.deviceId, workerId: assignedWorkerId, workerName: assignedWorkerName });
+  res.json({ success: true, device });
+});
+
+// POST /api/admin/devices/:deviceId/reject
+app.post('/api/admin/devices/:deviceId/reject', requireRole('admin'), (req, res) => {
+  const deviceId = req.params.deviceId;
+  const device = deviceRequests.find(d => d.deviceId === deviceId);
+
+  if (!device) {
+    return res.status(404).json({ success: false, error: 'Device not found' });
+  }
+
+  device.status = 'rejected';
+  persistDeviceRequests();
+
+  io.emit('device:rejected', { deviceId: device.deviceId });
+  res.json({ success: true, device });
+});
+
+// POST /api/admin/devices/:deviceId/revoke
+app.post('/api/admin/devices/:deviceId/revoke', requireRole('admin'), (req, res) => {
+  const deviceId = req.params.deviceId;
+  const device = deviceRequests.find(d => d.deviceId === deviceId);
+
+  if (!device) {
+    return res.status(404).json({ success: false, error: 'Device not found' });
+  }
+
+  device.status = 'revoked';
+  persistDeviceRequests();
+
+  const user = users.find(u => u.deviceId === deviceId);
+  if (user && user.id) {
+    const state = states.get(user.id);
+    if (state && state.socketId) {
+      io.to(state.socketId).emit('device:revoked');
+      io.sockets.sockets.get(state.socketId)?.disconnect(true);
+      state.socketId = null;
+      state.status = 'OFFLINE';
+      state.online = false;
+    }
+  }
+
+  io.emit('device:revoked', { deviceId: device.deviceId });
+  broadcastStates();
+  res.json({ success: true, device });
+});
+
+// PATCH /api/admin/devices/:deviceId
+app.patch('/api/admin/devices/:deviceId', requireRole('admin'), (req, res) => {
+  const deviceId = req.params.deviceId;
+  const { workerName, deviceName } = req.body || {};
+  const device = deviceRequests.find(d => d.deviceId === deviceId);
+
+  if (!device) {
+    return res.status(404).json({ success: false, error: 'Device not found' });
+  }
+
+  if (workerName) device.workerName = String(workerName).trim();
+  if (deviceName) device.deviceName = String(deviceName).trim();
+  persistDeviceRequests();
+
+  res.json({ success: true, device });
 });
 
 app.post('/api/logout', requireAuth, (req, res) => {
@@ -624,6 +968,41 @@ app.post('/api/admin/worker/timer', requireRole('admin'), (req, res) => {
   });
 });
 
+app.post('/api/admin/workers/:workerId/reset-time', requireRole('admin'), (req, res) => {
+  const workerId = req.params.workerId;
+  const state = states.get(workerId);
+
+  if (!state) {
+    return res.status(404).json({
+      ok: false,
+      error: 'Unknown worker'
+    });
+  }
+
+  const previousAccumulatedMs = timerState.elapsed(state);
+
+  if (state.status === 'WORKING') {
+    state.accumulatedMs = 0;
+    state.startedAt = Date.now();
+  } else {
+    state.accumulatedMs = 0;
+    state.startedAt = null;
+  }
+
+  persistState();
+  broadcastStates();
+
+  if (state.socketId) {
+    io.to(state.socketId).emit('timer-updated', safeWorkerState(state));
+  }
+
+  res.json({
+    ok: true,
+    previousAccumulatedMs,
+    state: safeWorkerState(state)
+  });
+});
+
 app.get('/api/rtc-config', requireAuth, (_req, res) => {
   let iceServers = [
     {
@@ -648,6 +1027,165 @@ app.get('/api/rtc-config', requireAuth, (_req, res) => {
     ok: true,
     iceServers
   });
+});
+
+// Task and earnings API: server-authoritative records, no hourly-rate calculation.
+const LEDGER_FILE = path.join(DATA_DIR, 'earnings.json');
+const earningsLedger = readJson(LEDGER_FILE, []);
+function saveLedger(){writeJsonAtomic(LEDGER_FILE,earningsLedger);}
+function money(x){const v=Number(x);return Number.isFinite(v)&&v>=0?Math.round(v*100)/100:null;}
+function taskIdOf(t){return t.taskId||t.id;}
+function notifyTask(t,event='task:updated'){
+  io.to('admins').emit(event,t);
+  if(t.workerId)io.to(`worker:${t.workerId}`).emit(event,t);
+  io.to('admins').emit('earnings:updated',{workerId:t.workerId});
+  if(t.workerId)io.to(`worker:${t.workerId}`).emit('earnings:updated',{});
+}
+function visibleTasks(user){
+  return user.role==='admin'?tasks:tasks.filter(t=>t.workerId===user.id || (t.assignmentType==='OPEN'&&t.status==='AVAILABLE'));
+}
+function publicTask(t){return t;}
+app.get('/api/tasks',requireAuth,(req,res)=>{
+ let list=visibleTasks(req.session.user);
+ if(req.session.user.role==='admin'&&req.query.workerId)list=list.filter(t=>t.workerId===req.query.workerId);
+ res.json({ok:true,tasks:list.map(publicTask)});
+});
+app.get('/api/worker/tasks',requireRole('worker'),(req,res)=>res.json({ok:true,tasks:visibleTasks(req.session.user)}));
+app.post('/api/tasks',requireRole('admin'),(req,res)=>{
+ const {workerId,title,description,dueAt,assignmentType,allowConcurrent}=req.body||{};
+ const type=assignmentType==='OPEN'||workerId==='OPEN'?'OPEN':'ASSIGNED';
+ if(!String(title||'').trim()||(type==='ASSIGNED'&&!states.has(workerId)))return res.status(400).json({ok:false,error:'Valid title and worker required'});
+ const price=money(req.body.price??0);
+ if(price===null)return res.status(400).json({ok:false,error:'Invalid task price'});
+ const id=crypto.randomUUID();
+ const task={id,taskId:id,title:String(title).trim().slice(0,200),description:String(description||'').slice(0,3000),price,
+   assignmentType:type,workerId:type==='OPEN'?null:workerId,allowConcurrent:allowConcurrent===true,
+   status:type==='OPEN'?'AVAILABLE':'ASSIGNED',createdAt:Date.now(),assignedAt:type==='ASSIGNED'?Date.now():null,dueAt:dueAt||null,
+   acceptedAt:null,submittedAt:null,completedAt:null,recordedMs:null,approvedAmount:null,adminNote:''};
+ tasks.push(task);persistTasks();notifyTask(task,'task:assigned');io.to('workers').emit('task:updated',task);
+ res.json({ok:true,task});
+});
+app.post('/api/tasks/:taskId/accept',requireRole('worker'),(req,res)=>{
+ const t=tasks.find(x=>taskIdOf(x)===req.params.taskId);const wid=req.session.user.id;
+ if(!t)return res.status(404).json({ok:false,error:'Task not found'});
+ if(t.status!=='AVAILABLE'&&t.status!=='ASSIGNED')return res.status(409).json({ok:false,error:'Task already claimed or submitted'});
+ if(t.assignmentType!=='OPEN'&&t.workerId!==wid)return res.status(403).json({ok:false,error:'Not assigned to this worker'});
+ if(!t.allowConcurrent&&tasks.some(x=>x.workerId===wid&&x.status==='IN_PROGRESS'&&!x.allowConcurrent))
+   return res.status(409).json({ok:false,error:'Submit your current regular task first'});
+ // Lock synchronously before any asynchronous operations: prevents double claim.
+ t.workerId=wid;t.status='IN_PROGRESS';t.acceptedAt=Date.now();t.assignedAt??=Date.now();persistTasks();notifyTask(t);io.to('workers').emit('task:updated',t);
+ res.json({ok:true,task:t});
+});
+app.post('/api/tasks/:taskId/submit',requireRole('worker'),(req,res)=>{
+ const t=tasks.find(x=>taskIdOf(x)===req.params.taskId);const wid=req.session.user.id;
+ if(!t)return res.status(404).json({ok:false,error:'Task not found'});
+ if(t.workerId!==wid)return res.status(403).json({ok:false,error:'Not your task'});
+ if(t.status!=='IN_PROGRESS')return res.status(409).json({ok:false,error:'Task is not in progress; submission already recorded or task not accepted'});
+ const state=states.get(wid);
+ if(!state)return res.status(404).json({ok:false,error:'Worker timer unavailable'});
+ const duration=timerState.elapsed(state);
+ if(duration<0||!Number.isFinite(duration))return res.status(422).json({ok:false,error:'Invalid timer duration'});
+ // Capture time first, persist submission before resetting timer.
+ const now=Date.now();const record={taskId:taskIdOf(t),workerId:wid,recordedMs:duration,submittedAt:now,status:'PENDING_APPROVAL'};
+ t.recordedMs=duration;t.submittedAt=now;t.status='PENDING_APPROVAL';t.submissionId=crypto.randomUUID();
+ try{persistTasks();}catch(e){Object.assign(t,{status:'IN_PROGRESS',recordedMs:null,submittedAt:null,submissionId:null});return res.status(500).json({ok:false,error:'Unable to save submission; timer preserved'});}
+ // New timer segment begins at zero; previous clock history is part of the task record.
+ state.accumulatedMs=0;
+ if(state.status==='WORKING')state.startedAt=Date.now();
+ else state.startedAt=null;
+ persistState();broadcastStates();notifyTask(t,'task:submitted');
+ res.json({ok:true,task:t,submission:record,state:safeWorkerState(state)});
+});
+app.post('/api/tasks/:taskId/approve',requireRole('admin'),(req,res)=>{
+ const t=tasks.find(x=>taskIdOf(x)===req.params.taskId);
+ if(!t)return res.status(404).json({ok:false,error:'Task not found'});
+ if(t.status!=='PENDING_APPROVAL'&&t.status!=='SUBMITTED')return res.status(409).json({ok:false,error:'Task is not pending approval'});
+ const payment=money(req.body.amount??t.price??0);
+ if(payment===null)return res.status(400).json({ok:false,error:'Invalid payment amount'});
+ if(earningsLedger.some(x=>x.taskId===taskIdOf(t)&&x.type==='TASK_APPROVED'))return res.status(409).json({ok:false,error:'Already credited'});
+ const entry={id:crypto.randomUUID(),workerId:t.workerId,taskId:taskIdOf(t),type:'TASK_APPROVED',amount:payment,createdAt:Date.now(),reason:String(req.body.note||'Task approved').slice(0,500),admin:req.session.user.username};
+ earningsLedger.push(entry);saveLedger();t.status='APPROVED';t.approvedAmount=payment;t.completedAt=Date.now();t.adminNote=entry.reason;persistTasks();notifyTask(t,'task:approved');res.json({ok:true,task:t,entry});
+});
+app.post('/api/tasks/:taskId/return',requireRole('admin'),(req,res)=>{
+ const t=tasks.find(x=>taskIdOf(x)===req.params.taskId);
+ if(!t)return res.status(404).json({ok:false,error:'Task not found'});
+ if(t.status!=='PENDING_APPROVAL'&&t.status!=='SUBMITTED')return res.status(409).json({ok:false,error:'Task is not pending approval'});
+ t.status='REJECTED';t.adminNote=String(req.body.adminNote||'').slice(0,1000);persistTasks();notifyTask(t,'task:returned');res.json({ok:true,task:t});
+});
+app.post('/api/admin/earnings/adjust',requireRole('admin'),(req,res)=>{
+ const {workerId,amount,reason}=req.body||{};const val=Number(amount);
+ if(!states.has(workerId)||!Number.isFinite(val)||val===0||!String(reason||'').trim())return res.status(400).json({ok:false,error:'Worker, nonzero amount and reason are required'});
+ const entry={id:crypto.randomUUID(),workerId,type:'ADJUSTMENT',amount:Math.round(val*100)/100,reason:String(reason).slice(0,500),createdAt:Date.now(),admin:req.session.user.username};
+ earningsLedger.push(entry);saveLedger();io.to('admins').to(`worker:${workerId}`).emit('earnings:updated',{workerId});res.json({ok:true,entry});
+});
+app.get('/api/earnings',requireAuth,(req,res)=>{
+ const me=req.session.user;
+ const workerId=me.role==='admin'?(req.query.workerId||null):me.id;
+ const records=tasks.filter(t=>!workerId||t.workerId===workerId);
+ const ledger=earningsLedger.filter(e=>!workerId||e.workerId===workerId);
+ const approved=ledger.reduce((total,e)=>total+e.amount,0);
+ const pending=records.filter(t=>t.status==='PENDING_APPROVAL').reduce((total,t)=>total+Number(t.price||0),0);
+ res.json({ok:true,workerId,records,transactions:ledger,summary:{submitted:records.filter(t=>t.submittedAt).length,approvedTasks:records.filter(t=>t.status==='APPROVED').length,recordedMs:records.reduce((sum,t)=>sum+(t.recordedMs||0),0),approvedEarnings:Math.round(approved*100)/100,pendingEarnings:Math.round(pending*100)/100}});
+});
+
+// Chat API
+app.get('/api/chat/:workerId', requireAuth, (req, res) => {
+  const workerId = req.params.workerId;
+  const user = req.session.user;
+  if (user.role === 'worker' && user.id !== workerId) {
+    return res.status(403).json({ ok: false, error: 'Forbidden' });
+  }
+
+  const messages = chatMessages.filter(m => m.workerId === workerId);
+  res.json({ ok: true, messages });
+});
+
+app.post('/api/chat/:workerId/messages', requireAuth, (req, res) => {
+  const workerId = req.params.workerId;
+  const user = req.session.user;
+  if (user.role === 'worker' && user.id !== workerId) {
+    return res.status(403).json({ ok: false, error: 'Forbidden' });
+  }
+
+  const msgText = String(req.body.message || '').trim();
+  if (!msgText) return res.status(400).json({ ok: false, error: 'Message cannot be empty' });
+
+  const newMsg = {
+    messageId: 'msg_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+    workerId,
+    senderId: user.id || 'admin',
+    senderRole: user.role.toUpperCase(),
+    message: msgText,
+    createdAt: Date.now(),
+    readAt: null
+  };
+
+  chatMessages.push(newMsg);
+  persistChat();
+
+  io.to(`worker:${workerId}`).to('admins').emit('chat:message', newMsg);
+
+  res.json({ ok: true, message: newMsg });
+});
+
+app.post('/api/chat/:workerId/read', requireAuth, (req, res) => {
+  const workerId = req.params.workerId;
+  const user = req.session.user;
+  if (user.role === 'worker' && user.id !== workerId) {
+    return res.status(403).json({ ok: false, error: 'Forbidden' });
+  }
+
+  let count = 0;
+  chatMessages.forEach(m => {
+    if (m.workerId === workerId && !m.readAt && m.senderRole !== user.role.toUpperCase()) {
+      m.readAt = Date.now();
+      count++;
+    }
+  });
+  if (count > 0) persistChat();
+
+  io.to(`worker:${workerId}`).to('admins').emit('chat:read', { workerId });
+  res.json({ ok: true, count });
 });
 
 app.use(
@@ -677,7 +1215,17 @@ io.on('connection', socket => {
       'workers-state',
       [...states.values()].map(safeWorkerState)
     );
+  } else if (user.role === 'worker' && user.id && socket.handshake.query.nativeMedia === '1') {
+    const state = states.get(user.id);
+    if (!state) return socket.disconnect(true);
+    if (state.mediaSocketId && state.mediaSocketId !== socket.id) { const previous = state.mediaSocketId; state.mediaSocketId = null; io.sockets.sockets.get(previous)?.disconnect(true); }
+    state.mediaSocketId = socket.id;
+    state.captureReady = false;
+    socket.emit('native-media-connected', { workerId:user.id });
+    broadcastStates();
   } else if (user.role === 'worker' && user.id) {
+    socket.join(`worker:${user.id}`);
+    socket.join('workers');
     const state = states.get(user.id);
 
     if (!state) {
@@ -694,7 +1242,7 @@ io.on('connection', socket => {
 
     clearDisconnectTimer(state);
     state.online = true;
-    state.captureReady = false;
+    state.captureReady = Boolean(state.mediaSocketId);
     state.socketId = socket.id;
     state.lastSeenAt = Date.now();
     persistState();
@@ -704,9 +1252,11 @@ io.on('connection', socket => {
   socket.on('worker-capture-ready', () => {
     if (user.role !== 'worker') return;
     const state = states.get(user.id);
-    if (!state || state.socketId !== socket.id) return;
+    if (!state || (state.socketId !== socket.id && state.mediaSocketId !== socket.id)) return;
+    if (state.mediaSocketId && socket.id !== state.mediaSocketId) return;
     state.captureReady = true;
     broadcastStates();
+    checkAutoReconnectLive(state);
   });
 
   socket.on('worker-heartbeat', () => {
@@ -725,6 +1275,34 @@ io.on('connection', socket => {
     state.lastSeenAt = Date.now();
     persistState();
     broadcastStates();
+    checkAutoReconnectLive(state);
+  });
+
+  socket.on('chat:message', ({ workerId, message }) => {
+    const msgText = String(message || '').trim();
+    if (!msgText) return;
+
+    let targetWorkerId = workerId;
+    if (user.role === 'worker') {
+      targetWorkerId = user.id;
+    }
+
+    if (!targetWorkerId) return;
+
+    const newMsg = {
+      messageId: 'msg_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+      workerId: targetWorkerId,
+      senderId: user.id || 'admin',
+      senderRole: user.role.toUpperCase(),
+      message: msgText,
+      createdAt: Date.now(),
+      readAt: null
+    };
+
+    chatMessages.push(newMsg);
+    persistChat();
+
+    io.to(`worker:${targetWorkerId}`).to('admins').emit('chat:message', newMsg);
   });
 
   socket.on('admin-ping-worker', ({ workerId, nonce } = {}) => {
@@ -811,8 +1389,8 @@ io.on('connection', socket => {
         !state ||
         !state.captureReady ||
         !state.online ||
-        !state.socketId ||
-        !io.sockets.sockets.get(state.socketId)
+        !(state.mediaSocketId || state.socketId) ||
+        !io.sockets.sockets.get(state.mediaSocketId || state.socketId)
       ) {
         socket.emit('live-error', {
           workerId,
@@ -823,14 +1401,13 @@ io.on('connection', socket => {
         return;
       }
 
+      state.desiredLiveMode =
+        normalizedMode === 'camera'
+          ? LIVE_CAMERA
+          : LIVE_SCREEN;
+
       if (state.liveMode !== LIVE_NONE) {
-        socket.emit('live-error', {
-          workerId,
-          mode: normalizedMode,
-          message:
-            'Another live feed is already active or waiting for Worker approval. Stop it first.'
-        });
-        return;
+        stopWorkerLive(state, 'mode-switch', true);
       }
 
       state.liveMode =
@@ -841,9 +1418,10 @@ io.on('connection', socket => {
       state.liveAdminSocketId = socket.id;
       state.liveRequestedAt = Date.now();
 
+      persistState();
       broadcastStates();
 
-      io.to(state.socketId).emit('live-request', {
+      io.to(state.mediaSocketId || state.socketId).emit('live-request', {
         adminSocketId: socket.id,
         workerId,
         mode: normalizedMode
@@ -890,10 +1468,12 @@ io.on('connection', socket => {
 
       if (!state) return;
 
+      state.desiredLiveMode = LIVE_NONE;
       if (state.liveMode !== LIVE_NONE) {
         stopWorkerLive(state, 'admin-stop', true);
-        broadcastStates();
       }
+      persistState();
+      broadcastStates();
     }
   );
 
@@ -914,7 +1494,7 @@ io.on('connection', socket => {
 
       const targetFacing = String(camera || facing || 'switch').toLowerCase();
 
-      io.to(state.socketId).emit('switch-camera', {
+      io.to(state.mediaSocketId || state.socketId).emit('switch-camera', {
         workerId: state.id,
         camera: targetFacing,
         facing: targetFacing
@@ -969,6 +1549,30 @@ io.on('connection', socket => {
     }
   );
 
+  socket.on(
+    'admin-reset-time',
+    ({ workerId } = {}) => {
+      if (user.role !== 'admin') return;
+
+      const state = states.get(workerId);
+      if (!state) return;
+
+      if (state.status === 'WORKING') {
+        state.accumulatedMs = 0;
+        state.startedAt = Date.now();
+      } else {
+        state.accumulatedMs = 0;
+        state.startedAt = null;
+      }
+
+      persistState();
+      broadcastStates();
+
+      if (state.socketId) {
+        io.to(state.socketId).emit('timer-updated', safeWorkerState(state));
+      }
+    }
+  );
 
   socket.on(
     'worker-live-ack',
@@ -989,7 +1593,7 @@ io.on('connection', socket => {
 
       if (
         !state ||
-        state.socketId !== socket.id ||
+        (state.mediaSocketId || state.socketId) !== socket.id ||
         adminSocketId !== state.liveAdminSocketId
       ) {
         return;
@@ -1023,7 +1627,7 @@ io.on('connection', socket => {
 
       if (
         !state ||
-        state.socketId !== socket.id ||
+        (state.mediaSocketId || state.socketId) !== socket.id ||
         adminSocketId !== state.liveAdminSocketId
       ) {
         return;
@@ -1146,7 +1750,7 @@ io.on('connection', socket => {
 
       if (
         !state ||
-        state.socketId !== socket.id ||
+        (state.mediaSocketId || state.socketId) !== socket.id ||
         state.liveAdminSocketId !== targetSocketId
       ) {
         return;
@@ -1181,7 +1785,7 @@ io.on('connection', socket => {
       if (
         !state ||
         state.liveAdminSocketId !== socket.id ||
-        state.socketId !== targetSocketId
+        (state.mediaSocketId || state.socketId) !== targetSocketId
       ) {
         return;
       }
@@ -1209,7 +1813,7 @@ io.on('connection', socket => {
         if (
           !state ||
           user.id !== workerId ||
-          state.socketId !== socket.id ||
+          (state.mediaSocketId || state.socketId) !== socket.id ||
           state.liveAdminSocketId !== targetSocketId
         ) {
           return;
@@ -1220,7 +1824,7 @@ io.on('connection', socket => {
         if (
           !state ||
           state.liveAdminSocketId !== socket.id ||
-          state.socketId !== targetSocketId
+          (state.mediaSocketId || state.socketId) !== targetSocketId
         ) {
           return;
         }
@@ -1240,6 +1844,11 @@ io.on('connection', socket => {
     if (user.role === 'worker' && user.id) {
       const state = states.get(user.id);
 
+      if (state && state.mediaSocketId === socket.id) {
+        state.mediaSocketId = null; state.captureReady = false;
+        stopWorkerLive(state, "native-media-disconnected", false);
+        broadcastStates();
+      }
       if (state && state.socketId === socket.id) {
         const adminSocketId = state.liveAdminSocketId;
 
@@ -1253,25 +1862,10 @@ io.on('connection', socket => {
 
         resetLiveState(state);
         state.online = false;
-        state.captureReady = false;
+        state.captureReady = Boolean(state.mediaSocketId);
         state.socketId = null;
+        persistState();
         broadcastStates();
-
-        clearDisconnectTimer(state);
-
-        state.disconnectTimer = setTimeout(() => {
-          if (
-            !state.socketId &&
-            state.sessionId
-          ) {
-            finishShift(
-              state,
-              'disconnect-timeout',
-              'STOPPED'
-            );
-            broadcastStates();
-          }
-        }, 30000);
       }
     }
 
@@ -1281,7 +1875,7 @@ io.on('connection', socket => {
       for (const state of states.values()) {
         if (state.liveAdminSocketId === socket.id) {
           if (state.socketId) {
-            io.to(state.socketId).emit('stop-live', {
+            io.to(state.mediaSocketId || state.socketId).emit('stop-live', {
               adminSocketId: socket.id,
               reason: 'admin-disconnected'
             });

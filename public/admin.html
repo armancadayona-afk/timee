@@ -3,61 +3,210 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Work Timer Admin</title>
+  <title>Kitty Timer | Admin Panel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css">
   <style>
     .wrap { width: min(1200px, 100%); margin: 0 auto; padding: 24px 18px 44px; }
     .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; }
     .card { padding: 20px; }
-    video { width: 100%; background: #02050a; border-radius: 12px; aspect-ratio: 4/3; }
-    .timer { font-size: 38px; margin: 12px 0 8px; }
-    .history { white-space: pre-wrap; margin-top: 10px; font-size: 13px; color: var(--muted); }
-    .tools { display: flex; gap: 12px; margin: 20px 0; }
+    video { width: 100%; background: #000; border-radius: 16px; aspect-ratio: 4/3; border: 2px solid var(--line); }
+    .connection-clock{font-size:12px;color:var(--primary);margin:3px 0 8px;} .connection-duration{font-variant-numeric:tabular-nums;font-size:15px;}
+    .timer { font-size: 38px; margin: 12px 0 2px; font-family: 'Fredoka', cursive; color: var(--primary); }
+    .est-pay { font-size: 15px; font-weight: 800; color: var(--success); margin-bottom: 8px; }
+    .history { white-space: pre-wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
+    .tools { display: flex; gap: 12px; margin: 16px 0; }
     .controls-group { display: flex; gap: 8px; margin: 8px 0; flex-wrap: wrap; }
     .controls-group .btn { flex: 1; min-width: 90px; }
 
     @keyframes pulse-red {
-      0% { background-color: #EF4444; }
-      50% { background-color: #B91C1C; }
-      100% { background-color: #EF4444; }
+      0% { background-color: #ff3366; }
+      50% { background-color: #d90429; }
+      100% { background-color: #ff3366; }
     }
+    .btn-record-active { animation: pulse-red 1.5s infinite; color: #fff !important; }
 
-    .btn-record-active {
-      animation: pulse-red 1.5s infinite;
-      color: #FFFFFF !important;
-      font-weight: bold;
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(74, 40, 53, 0.65);
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
     }
+    .modal-content {
+      background: #ffffff;
+      border: 2px solid var(--line);
+      border-radius: var(--radius-md);
+      padding: 24px;
+      max-width: 420px;
+      width: 90%;
+      color: var(--text);
+    }
+    h1 { font-family: 'Fredoka', cursive; color: var(--primary); }
+
+    /* Desktop reference and Android-responsive theme */
+    body { background:#ffdbe8; background-image:radial-gradient(#ff9db8 1.2px,transparent 1.2px);background-size:20px 20px; }
+    .wrap {width:min(1380px,100%);padding:16px 20px 36px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;align-items:start;}
+    .kitty-header {grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;background:#fffafd;border:2px solid #ff9fc0;border-radius:22px;padding:14px 22px;gap:12px;}
+    .kitty-header h1 {font-size:clamp(22px,2.5vw,34px);font-family:'Pacifico','Fredoka',cursive;color:#fb165b;}
+    .wrap > #message {grid-column:1/-1;margin:-12px 5px 0;font-size:12px;}
+    .wrap > .card {background:#fffafd;border:2px solid #ffabc8;border-radius:23px;box-shadow:0 5px 16px #ec6b9920;}
+    .wrap > .card:has(#deviceList),.monitor-shell {grid-column:1/-1;}
+    .monitor-shell {padding:17px 22px;}
+    .section-head {display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px;}
+    .section-head h2,.wrap > .card h2{color:#fa125c;font-family:'Fredoka',sans-serif;font-size:23px;}
+    .section-head label {display:flex;gap:10px;align-items:center;margin:0;color:#fc2164;font-size:15px;}
+    .section-head select{min-width:240px;}
+    #workers.grid{display:block;}
+    #workers > article[hidden]{display:none!important;}
+    #workers > article{display:grid;grid-template-columns:1.05fr 1.15fr .8fr;gap:12px;border:0;box-shadow:none;padding:0;background:transparent;}
+    #workers .worker-name{display:none;}
+    .camera-panel,.timer-panel,.monitor-controls{min-width:0;padding:12px;border:2px solid #ffc0d5;border-radius:16px;background:linear-gradient(145deg,#fff,#fff2f7);}
+    #workers h3{font-family:'Fredoka',sans-serif;color:#fb145a;font-size:19px;margin-bottom:12px;}
+    .camera-panel video{width:100%;height:260px;aspect-ratio:auto;background:linear-gradient(140deg,#ffe8f0,#fff4f7);object-fit:contain;}
+    .live-tag{float:right;background:#12bc71;border-radius:20px;padding:4px 10px;color:white;font-size:12px;}
+    .timer-panel .timer{font-size:clamp(42px,5vw,76px);font-variant-numeric:tabular-nums;text-align:center;white-space:nowrap;color:#fc0953;font-weight:700;letter-spacing:-2px;margin:10px 0;}
+    .timer-panel .state,.timer-panel .est-pay,.timer-panel .connection-clock,.timer-panel .ping-status{text-align:center;}
+    .timer-panel .controls-group{justify-content:center;}
+    #workers .btn{border-radius:20px;min-height:39px;background:linear-gradient(#ff6295,#fb125c);border-color:#ffb3ca;}
+    #workers .btn.secondary{background:#fff6fa;color:#fb2163!important;}
+    #workers .btn.danger{background:#e8173d;}
+    #workers .btn-record{background:#fff6fa!important;color:#f00659!important;}
+    .monitor-controls .controls-group{display:grid;grid-template-columns:1fr 1fr;}
+    .monitor-controls .btn{min-width:0;font-size:12px;}
+    .monitor-controls .controls-group:has(.btn-screen-start){display:none;}
+    .wrap > .card:has(#taskForm){grid-column:1/span 2;margin:0!important;}
+    .wrap > .card:has(#adminChatContainer){grid-column:3;margin:0!important;}
+    .wrap > .card:has(#taskForm)>div{grid-template-columns:1fr 1fr!important;gap:12px!important;}
+    #adminChatContainer{height:360px!important;}
+    #deviceList{display:grid;gap:8px;}
+    #deviceList>.card{margin:0!important;border-radius:12px!important;display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+    #deviceList>.card p{flex:1;overflow-wrap:anywhere;}
+    .wrap > .card{padding:18px!important;}
+    @media(max-width:950px){.wrap{grid-template-columns:1fr;gap:12px;padding:10px;}.wrap > .card:has(#taskForm),.wrap > .card:has(#adminChatContainer){grid-column:1/-1;}.monitor-shell{grid-column:1/-1;}#workers>article{grid-template-columns:1fr 1fr;}.monitor-controls{grid-column:1/-1;}.monitor-controls .controls-group{grid-template-columns:repeat(2,1fr)} }
+    @media(max-width:600px){.kitty-header{padding:12px;}.kitty-header h1{font-size:19px;}.section-head label{width:100%;justify-content:space-between;}.section-head select{min-width:0;width:60%;}#workers>article{grid-template-columns:1fr;}.camera-panel video{height:230px;}.timer-panel .timer{font-size:clamp(44px,13vw,72px);}.monitor-controls{grid-column:auto;}.wrap > .card:has(#taskForm)>div{grid-template-columns:1fr!important;}.wrap > .card{padding:13px!important;}#adminChatContainer{height:320px!important;}}
+
   </style>
 </head>
 <body>
   <main class="wrap">
-    <h1>Work Timer Admin</h1>
-    <p class="muted">Worker camera control & recording panel. Admin manages video feeds, front/back cameras, and broadcast recordings below.</p>
-    <div class="tools">
-      <button class="btn" id="audio">Enable Audio</button>
-      <button class="btn secondary" id="logout">Log Out</button>
-    </div>
-    <p id="message">Connecting…</p>
-    <section id="workers" class="grid"></section>
+    <header class="kitty-header"><h1>🎀 Hello Kitty Admin Console 💗</h1><button class="btn secondary" id="logoutTop">Log Out →</button></header>
+    
+    <div class="tools" style="display:none"><button class="btn secondary" id="logout">Log Out</button></div>
+    <p id="message" class="muted">Connecting…</p>
+    
+    <section class="card monitor-shell"><div class="section-head"><h2>🖥️ Monitor Worker Feed 🎀</h2><label>Select Worker: <select id="monitorWorkerSelect" aria-label="Select worker to monitor"></select></label></div><section id="workers" class="grid"></section></section>
+
+    <section class="card" style="margin-top:24px;padding:20px"><h2>🎀 Device Registration Approvals 📱 ⚙️</h2><p id="deviceMsg" class="muted">Loading devices…</p><div id="deviceList"></div></section>
+    <!-- Tasks Management Section -->
+    <section class="card" style="margin-top: 24px;">
+      <h2>Tasks &amp; Assign Console 📋 🎀</h2>
+      <p class="muted" style="margin-bottom: 16px;">Assign and review worker tasks in real-time.</p>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;">
+        <div style="background: var(--panel-2); padding: 16px; border-radius: 12px; border: 1px solid var(--line);">
+          <h3>Assign New Task</h3>
+          <form id="taskForm" onsubmit="event.preventDefault(); assignTask();">
+            <label>Assign Task To:
+              <select id="taskWorkerId" style="width: 100%; margin-top: 4px;"><option value="OPEN">🌎 Open to Everyone</option>
+                </select>
+            </label>
+
+            <label>Task Title:
+              <input type="text" id="taskTitle" placeholder="e.g. Update listing photos" required style="width: 100%;">
+            </label>
+
+            <label>Task Price (USD): <input id="taskPrice" type="number" min="0" step="0.01" value="0" required style="width:100%"></label>
+            <label style="display:flex;gap:8px;align-items:center;color:var(--text)"><input type="checkbox" id="taskConcurrent"> Allow Concurrent Work</label>
+            <label>Task Description:
+              <textarea id="taskDesc" rows="3" placeholder="Enter task instructions..." style="width: 100%;"></textarea>
+            </label>
+
+            <div style="display: flex; gap: 10px;">
+              <label style="flex: 1;">Due Date:
+                <input type="date" id="taskDueDate" style="width: 100%;">
+              </label>
+              <label style="flex: 1;">Due Time:
+                <input type="time" id="taskDueTime" style="width: 100%;">
+              </label>
+            </div>
+
+            <button type="submit" class="btn" style="width: 100%; margin-top: 14px;">ASSIGN TASK</button>
+          </form>
+        </div>
+
+        <div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <h3>Task List</h3>
+            <select id="filterTaskWorker" onchange="loadTasks()">
+              <option value="">All Workers</option>
+              </select>
+          </div>
+          <div id="adminTaskList" style="display: grid; gap: 12px; max-height: 480px; overflow-y: auto;">
+            <p class="muted">Loading tasks…</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Chat Section -->
+    <section class="card" style="margin-top: 24px;">
+      <h2>💬 Worker Chat 🎀</h2>
+  
+
+      <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 16px;">
+        <label style="margin: 0;">Select Worker: </label>
+        <select id="chatWorkerSelect" onchange="switchChatWorker(this.value)">
+          </select>
+      </div>
+
+      <div id="adminChatContainer" style="background: var(--panel-2); border: 2px solid var(--line); border-radius: 12px; height: 320px; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px;"></div>
+
+      <form id="adminChatForm" onsubmit="event.preventDefault(); sendAdminChat();" style="display: flex; gap: 10px; margin-top: 12px;">
+        <input type="text" id="adminChatInput" placeholder="Type a message..." style="flex: 1; margin: 0;" required autocomplete="off">
+        <button type="submit" class="btn" style="min-width: 90px;">Send</button>
+      </form>
+    </section>
   </main>
+
+  <!-- Reset Confirmation Modal -->
+  <div id="resetModal" class="modal-overlay">
+    <div class="modal-content">
+      <h3 id="resetModalTitle" style="color: var(--danger); margin-bottom: 12px;">Reset Worker Time?</h3>
+      <p id="resetModalBody" style="font-size: 14px; margin-bottom: 16px; line-height: 1.5;"></p>
+      <div style="display: flex; gap: 10px; justify-content: flex-end;">
+        <button class="btn secondary" onclick="closeResetModal()">CANCEL</button>
+        <button class="btn danger" id="resetModalConfirmBtn">RESET TIME</button>
+      </div>
+    </div>
+  </div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script>
-    let workers = [], socket, iceServers = [], audioEnabled = false;
+    let workers = [], socket, iceServers = [];
     const peers = new Map(), requested = new Map(), activeRecorders = new Map();
+    const liveModes = new Map();
+    const workerAudio = new Map();
+    const pingStatusMap = new Map();
+    let pendingResetWorkerId = null;
 
-    async function api(path, body) {
+    async function api(path, body, method) {
       const r = await fetch(path, {
-        method: body ? 'POST' : 'GET',
-        headers: { 'Content-Type': 'application/json' },
-        body: body ? JSON.stringify(body) : undefined
+        method: method || (body === undefined ? 'GET' : 'POST'),
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: body === undefined ? undefined : JSON.stringify(body)
       });
-      if (r.status === 401 || r.status === 403) {
-        location.href = '/';
-        throw Error('Sign in required');
-      }
-      const d = await r.json();
-      if (!r.ok) throw Error(d.error || 'Request failed');
+      const raw = await r.text();
+      let d;
+      try { d = JSON.parse(raw); }
+      catch (_) { throw new Error(`Server returned HTML/text instead of JSON (${r.status}) for ${path}. Check API route or deployment.`); }
+      if (r.status === 401 || r.status === 403) { location.href = '/'; throw Error('Sign in required'); }
+      if (!r.ok) throw Error(d.error || `Request failed (${r.status})`);
       return d;
     }
 
@@ -66,20 +215,35 @@
       return [Math.floor(t / 3600), Math.floor(t / 60) % 60, t % 60].map(x => String(x).padStart(2, '0')).join(':');
     }
 
+    function calcPay(ms) {
+      const hours = Math.max(0, ms) / 3600000.0;
+      return (hours * 7.0).toFixed(2);
+    }
+
+    function formatLastSeen(timestamp) {
+      if (!timestamp) return 'Never';
+      const diffSec = Math.floor((Date.now() - timestamp) / 1000);
+      if (diffSec < 10) return 'Just now';
+      if (diffSec < 60) return `${diffSec}s ago`;
+      const diffMin = Math.floor(diffSec / 60);
+      if (diffMin < 60) return `${diffMin}m ago`;
+      const diffHours = Math.floor(diffMin / 60);
+      return `${diffHours}h ago`;
+    }
+
     function closePeer(id) {
-      // Finalize active recording for this peer safely
       if (activeRecorders.has(id)) {
         const session = activeRecorders.get(id);
         activeRecorders.delete(id);
         try { session.recorder.stop(); } catch (_) {}
       }
-
       const p = peers.get(id);
       if (p?.pc) p.pc.close();
       peers.delete(id);
       const v = document.getElementById('video-' + id);
       if (v) v.srcObject = null;
       requested.delete(id);
+      liveModes.set(id, 'NONE');
     }
 
     function toggleRecord(id, name) {
@@ -106,73 +270,61 @@
       }
 
       const chunks = [];
-      const mimeTypes = [
-        'video/webm;codecs=vp9,opus',
-        'video/webm;codecs=vp8,opus',
-        'video/webm',
-        'video/mp4'
-      ];
-      const selectedType = mimeTypes.find(t => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(t)) || '';
-
+      const selectedType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus') ? 'video/webm;codecs=vp9,opus' : 'video/webm';
       let recorder;
       try {
-        recorder = new MediaRecorder(stream, selectedType ? { mimeType: selectedType } : {});
+        recorder = new MediaRecorder(stream, { mimeType: selectedType });
       } catch (e) {
         alert('Recording error: ' + e.message);
         return;
       }
 
-      recorder.ondataavailable = e => {
-        if (e.data && e.data.size > 0) chunks.push(e.data);
-      };
-
+      recorder.ondataavailable = e => { if (e.data && e.data.size > 0) chunks.push(e.data); };
       recorder.onstop = () => {
         if (!chunks.length) return;
         const blob = new Blob(chunks, { type: recorder.mimeType || 'video/webm' });
         const now = new Date();
         const pad = n => String(n).padStart(2, '0');
         const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
-        const sanitizeName = (name || 'Worker').replace(/[^a-zA-Z0-9_-]/g, '');
-        const fileName = `WorkTimer_${sanitizeName}_${dateStr}.mp4`;
+        const fileName = `WorkTimer_${(name || 'Worker').replace(/[^a-zA-Z0-9_-]/g, '')}_${dateStr}.webm`;
 
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const base64Data = reader.result;
-          if (window.AndroidAdmin && window.AndroidAdmin.saveRecording) {
-            window.AndroidAdmin.saveRecording(fileName, base64Data);
-          } else {
-            const a = document.createElement('a');
-            a.href = base64Data;
-            a.download = fileName;
-            document.body.appendChild(a);
-            a.click();
-            setTimeout(() => {
-              document.body.removeChild(a);
-            }, 1000);
-          }
-        };
-        reader.readAsDataURL(blob);
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => document.body.removeChild(a), 1000);
 
-        if (card) {
-          const liveEl = card.querySelector('.live');
-          if (liveEl) liveEl.textContent = 'Recording saved: ' + fileName;
-        }
+        if (card) card.querySelector('.live').textContent = 'Recording saved: ' + fileName;
       };
 
       recorder.start(1000);
       activeRecorders.set(id, { recorder, chunks });
-
-      if (btn) {
-        btn.textContent = '■ STOP RECORDING';
-        btn.classList.add('btn-record-active');
-      }
-      if (card) {
-        const liveEl = card.querySelector('.live');
-        if (liveEl) liveEl.textContent = '● RECORDING LIVE BROADCAST…';
-      }
+      if (btn) btn.classList.add('btn-record-active');
+      if (card) card.querySelector('.live').textContent = '● RECORDING LIVE BROADCAST…';
     }
 
+    function openResetModal(workerId, name, currentTimeStr) {
+      pendingResetWorkerId = workerId;
+      document.getElementById('resetModalTitle').textContent = `Reset ${name} Time?`;
+      document.getElementById('resetModalBody').innerHTML = `Current recorded time: <strong>${currentTimeStr}</strong><br><br>Reset timer to <strong>00:00:00</strong>?`;
+      document.getElementById('resetModal').style.display = 'flex';
+    }
+
+    function closeResetModal() {
+      pendingResetWorkerId = null;
+      document.getElementById('resetModal').style.display = 'none';
+    }
+
+    document.getElementById('resetModalConfirmBtn').onclick = () => {
+      if (pendingResetWorkerId) socket.emit('admin-reset-time', { workerId: pendingResetWorkerId });
+      closeResetModal();
+    };
+
     function update() {
+      for (const card of document.querySelectorAll('#workers > article')) {
+        if (!workers.some(w=>w.id===card.id)) {closePeer(card.id);card.remove();}
+      }
       for (const w of workers) {
         let c = document.getElementById(w.id);
         if (!c) {
@@ -183,137 +335,198 @@
             <h2></h2>
             <video autoplay playsinline muted></video>
             <div class="timer">00:00:00</div>
+            <div class="connection-clock">Server connection: <strong class="connection-duration">00:00:00</strong></div>
+            <div class="est-pay">Estimated Pay: $0.00</div>
             <p class="state"></p>
-            <p class="live" style="min-height: 20px; font-weight: 600;"></p>
+            <p class="ping-status" style="font-size: 12px; color: var(--muted); margin: 2px 0 6px;"></p>
+            <p class="live" style="min-height: 20px; font-weight: 700; color: var(--primary);"></p>
 
             <div class="controls-group">
-              <button class="btn btn-sm secondary btn-front">FRONT</button>
-              <button class="btn btn-sm secondary btn-back">BACK</button>
-              <button class="btn btn-sm btn-record" style="background: #059669; color: white;">● RECORD</button>
+              <button class="btn btn-sm btn-camera-start">Start Camera</button>
+              <button class="btn btn-sm secondary btn-camera-stop">Stop Camera</button>
             </div>
-
             <div class="controls-group">
-              <button class="btn btn-sm btn-live" style="flex:2;">Start Live</button>
-              <button class="btn btn-sm secondary btn-timer-stop">Stop Time</button>
+              <button class="btn btn-sm secondary btn-front">Front Cam</button>
+              <button class="btn btn-sm secondary btn-back">Back Cam</button>
             </div>
-
+            <div class="controls-group">
+              <button class="btn btn-sm btn-screen-start">Start Screen</button>
+              <button class="btn btn-sm danger btn-screen-stop">Stop Screen</button>
+            </div>
+            <div class="controls-group">
+              <button class="btn btn-sm btn-audio">AUDIO OFF</button>
+              <button class="btn btn-sm secondary btn-ping">PING</button>
+            </div>
+            <div class="controls-group">
+              <button class="btn btn-sm btn-record" style="background: var(--success); border-color: var(--success);">● RECORD</button>
+              <button class="btn btn-sm secondary btn-screenshot">📷 Screenshot</button>
+            </div>
             <div class="controls-group">
               <button class="btn btn-sm btn-timer-action" style="flex:2;">Start Time</button>
+              <button class="btn btn-sm secondary btn-timer-stop">Stop Time</button>
+            </div>
+            <div class="controls-group">
+              <button class="btn btn-sm danger btn-reset-time">RESET</button>
               <button class="btn btn-sm secondary btn-history">History</button>
             </div>
-
             <p class="history"></p>
           `;
-
+          // Reuse existing working event handlers; only reorganize visual layout.
+          const videoPanel = document.createElement('div'); videoPanel.className = 'camera-panel';
+          const timerPanel = document.createElement('div'); timerPanel.className = 'timer-panel';
+          const controlPanel = document.createElement('div'); controlPanel.className = 'monitor-controls';
+          videoPanel.innerHTML = '<h3>📹 Camera Feed <span class="live-tag">● LIVE</span></h3>';
+          timerPanel.innerHTML = '<h3>⏱️ Worker Timer</h3>';
+          controlPanel.innerHTML = '<h3>⚙️ Monitor Controls</h3>';
+          const video = c.querySelector('video'); videoPanel.append(video);
+          for (const cls of ['.timer','.est-pay','.state','.connection-clock','.ping-status']) {
+            const el = c.querySelector(cls); if(el) timerPanel.append(el);
+          }
+          const groups = [...c.querySelectorAll('.controls-group')];
+          for (const group of groups) {
+            if(group.querySelector('.btn-timer-action') || group.querySelector('.btn-timer-stop') || group.querySelector('.btn-record') || group.querySelector('.btn-audio')) timerPanel.append(group);
+            else controlPanel.append(group);
+          }
+          c.querySelector('h2').className='worker-name';
+          c.insertBefore(videoPanel,c.querySelector('.worker-name').nextSibling);
+          c.insertBefore(timerPanel,videoPanel.nextSibling);
+          c.insertBefore(controlPanel,timerPanel.nextSibling);
+          const liveInfo=c.querySelector('.live'); if(liveInfo) controlPanel.append(liveInfo);
+          const history=c.querySelector('.history');if(history) timerPanel.append(history);
           c.querySelector('video').id = 'video-' + w.id;
           document.getElementById('workers').append(c);
 
-          // Front Camera button
-          c.querySelector('.btn-front').onclick = () => {
-            socket.emit('admin-switch-camera', { workerId: w.id, camera: 'front', facing: 'front' });
-            c.querySelector('.live').textContent = 'Switching to Front Camera…';
+          const workerId = w.id;
+
+          c.querySelector('.btn-audio').onclick = () => {
+            const isAudioOn = !workerAudio.get(workerId);
+            workerAudio.set(workerId, isAudioOn);
+            const btnAudio = c.querySelector('.btn-audio');
+            btnAudio.textContent = isAudioOn ? 'AUDIO ON' : 'AUDIO OFF';
+            btnAudio.style.background = isAudioOn ? 'var(--success)' : '';
+            const video = document.getElementById('video-' + workerId);
+            if (video) { video.muted = !isAudioOn; if (isAudioOn) video.play().catch(()=>{}); }
           };
 
-          // Back Camera button
-          c.querySelector('.btn-back').onclick = () => {
-            socket.emit('admin-switch-camera', { workerId: w.id, camera: 'back', facing: 'back' });
-            c.querySelector('.live').textContent = 'Switching to Back Camera…';
+          c.querySelector('.btn-ping').onclick = () => {
+            pingStatusMap.set(workerId, 'Pinging worker…');
+            c.querySelector('.ping-status').textContent = 'Pinging worker…';
+            socket.emit('admin-ping-worker', { workerId, nonce: 'ping_' + Date.now() });
           };
 
-          // Record button
+          c.querySelector('.btn-front').onclick = () => socket.emit('admin-switch-camera', { workerId, camera: 'front' });
+          c.querySelector('.btn-back').onclick = () => socket.emit('admin-switch-camera', { workerId, camera: 'back' });
           c.querySelector('.btn-record').onclick = () => {
-            toggleRecord(w.id, w.name);
+            const current = workers.find(x => x.id === workerId);
+            if (current) toggleRecord(workerId, current.name);
           };
 
-          // Start/Stop Live Camera Feed button
-          c.querySelector('.btn-live').onclick = () => {
-            if (w.liveMode === 'NONE') {
-              requested.set(w.id, Date.now());
-              socket.emit('admin-live-request', { workerId: w.id, mode: 'camera' });
-              c.querySelector('.live').textContent = 'Connecting camera and audio…';
-            } else {
-              socket.emit('admin-live-stop', { workerId: w.id });
-              closePeer(w.id);
-              c.querySelector('.live').textContent = 'Live camera stopped';
+          c.querySelector('.btn-screenshot').onclick = () => {
+            const video = document.getElementById('video-' + workerId);
+            if (!video?.srcObject || !video.videoWidth || !video.videoHeight || video.readyState < 2) {
+              alert('No live camera frame available. Wait for the worker camera to connect.');
+              return;
             }
+            try {
+              const canvas = document.createElement('canvas');
+              canvas.width = video.videoWidth;
+              canvas.height = video.videoHeight;
+              canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+              canvas.toBlob(blob => {
+                if (!blob) { alert('Unable to capture this frame.'); return; }
+                const name = (workers.find(x => x.id === workerId)?.name || workerId).replace(/[^a-zA-Z0-9_-]/g, '_');
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url; link.download = `KittyTimer_${name}_${new Date().toISOString().replace(/[:.]/g, '-')}.png`;
+                document.body.appendChild(link); link.click(); link.remove();
+                setTimeout(() => URL.revokeObjectURL(url), 2000);
+              }, 'image/png');
+            } catch (error) { alert('Screenshot failed: ' + error.message); }
           };
 
-          // Start/Pause/Resume Timer button
+          c.querySelector('.btn-camera-start').onclick = () => {
+            requested.set(workerId, Date.now());
+            socket.emit('admin-live-request', { workerId, mode: 'camera' });
+          };
+          c.querySelector('.btn-camera-stop').onclick = () => {
+            socket.emit('admin-live-stop', { workerId });
+            closePeer(workerId);
+          };
+
+          c.querySelector('.btn-screen-start').onclick = () => {
+            requested.set(workerId, Date.now());
+            socket.emit('admin-live-request', { workerId, mode: 'screen' });
+          };
+          c.querySelector('.btn-screen-stop').onclick = () => {
+            socket.emit('admin-live-stop', { workerId });
+            closePeer(workerId);
+          };
+
           c.querySelector('.btn-timer-action').onclick = () => {
-            const action = w.status === 'WORKING' ? 'pause' : w.status === 'PAUSED' ? 'resume' : 'start';
-            socket.emit('admin-timer-control', { workerId: w.id, action });
+            const current = workers.find(x => x.id === workerId);
+            if (!current) return;
+            const action = current.status === 'WORKING' ? 'pause' : current.status === 'PAUSED' ? 'resume' : 'start';
+            socket.emit('admin-timer-control', { workerId, action });
           };
 
-          // Stop Timer button
-          c.querySelector('.btn-timer-stop').onclick = () => {
-            socket.emit('admin-timer-control', { workerId: w.id, action: 'stop' });
+          c.querySelector('.btn-timer-stop').onclick = () => socket.emit('admin-timer-control', { workerId, action: 'stop' });
+
+          c.querySelector('.btn-reset-time').onclick = () => {
+            const current = workers.find(x => x.id === workerId);
+            if (!current) return;
+            const elapsed = (current.accumulatedMs || 0) + (current.status === 'WORKING' && current.startedAt ? Date.now() - current.startedAt : 0);
+            openResetModal(workerId, current.name, fmt(elapsed));
           };
 
-          // History button
           c.querySelector('.btn-history').onclick = async () => {
             try {
-              const d = await api('/api/work-sessions/' + w.id);
+              const d = await api('/api/work-sessions/' + workerId);
               c.querySelector('.history').textContent = d.sessions.map(s =>
                 new Date(s.startedAt).toLocaleString() + ' | ' + (s.endedAt ? fmt(s.durationMs) : 'Active shift')
               ).join('\n') || 'No completed shifts';
-            } catch (e) {
-              c.querySelector('.history').textContent = e.message;
-            }
+            } catch (e) { c.querySelector('.history').textContent = e.message; }
           };
         }
 
-        // Update Text and Values
         c.querySelector('h2').textContent = w.name;
-        c.querySelector('.state').textContent = w.status + ' · ' + (w.online ? 'Connected' : 'Offline');
-        c.querySelector('.timer').textContent = fmt((w.accumulatedMs || 0) + (w.status === 'WORKING' && w.startedAt ? Date.now() - w.startedAt : 0));
+        const connState = w.online ? 'Connected' : (w.status === 'WORKING' || w.status === 'PAUSED' ? 'Reconnecting...' : 'Offline');
+        c.querySelector('.state').textContent = w.status + ' · ' + connState;
+        const elapsedConnection = w.online && Number.isFinite(w.connectedAt) ? Math.max(0,Date.now() - w.connectedAt) : 0;
+        c.querySelector('.connection-duration').textContent = fmt(elapsedConnection);
+        const elapsedMs = (w.accumulatedMs || 0) + (w.status === 'WORKING' && w.startedAt ? Date.now() - w.startedAt : 0);
+        c.querySelector('.timer').textContent = fmt(elapsedMs);
+        c.querySelector('.est-pay').textContent = `Estimated Pay: $${calcPay(elapsedMs)}`;
+        c.querySelector('.ping-status').textContent = pingStatusMap.get(w.id) || (w.lastSeenAt ? `Last seen: ${formatLastSeen(w.lastSeenAt)}` : '');
 
-        // Update Camera Live Button Text
-        const btnLive = c.querySelector('.btn-live');
-        btnLive.textContent = w.liveMode === 'NONE' ? 'Start Live' : 'Stop Live';
-        btnLive.disabled = !w.online || !w.captureReady;
+        const btnCamStart = c.querySelector('.btn-camera-start');
+        const btnCamStop = c.querySelector('.btn-camera-stop');
+        const btnScreenStart = c.querySelector('.btn-screen-start');
+        const btnScreenStop = c.querySelector('.btn-screen-stop');
 
-        // Front / Back buttons
-        const btnFront = c.querySelector('.btn-front');
-        const btnBack = c.querySelector('.btn-back');
-        btnFront.disabled = !w.online;
-        btnBack.disabled = !w.online;
+        btnCamStart.disabled = !w.online || !w.captureReady || w.liveMode === 'CAMERA';
+        btnCamStop.disabled = !w.online || (w.liveMode !== 'CAMERA' && w.liveMode !== 'CAMERA_PENDING');
+        btnScreenStart.disabled = !w.online || w.liveMode === 'SCREEN';
+        btnScreenStop.disabled = !w.online || (w.liveMode !== 'SCREEN' && w.liveMode !== 'SCREEN_PENDING');
 
-        // Record button
-        const btnRecord = c.querySelector('.btn-record');
-        btnRecord.disabled = !w.online || w.liveMode === 'NONE';
-
-        // Timer action button text
         const btnTimerAction = c.querySelector('.btn-timer-action');
         btnTimerAction.textContent = w.status === 'WORKING' ? 'Pause Time' : w.status === 'PAUSED' ? 'Resume Time' : 'Start Time';
         btnTimerAction.disabled = !w.online;
+        c.querySelector('.btn-timer-stop').disabled = !w.online || (w.status !== 'WORKING' && w.status !== 'PAUSED');
 
-        // Timer stop button
-        const btnTimerStop = c.querySelector('.btn-timer-stop');
-        btnTimerStop.disabled = !w.online || (w.status !== 'WORKING' && w.status !== 'PAUSED');
-
-        if (!w.online) {
-          closePeer(w.id);
-          c.querySelector('.live').textContent = 'Camera offline';
-          continue;
-        }
-
-        if (socket?.connected && w.captureReady && w.liveMode === 'NONE' && !peers.has(w.id) && !requested.has(w.id)) {
-          requested.set(w.id, Date.now());
-          socket.emit('admin-live-request', { workerId: w.id, mode: 'camera' });
-          c.querySelector('.live').textContent = 'Connecting camera and audio…';
-        }
+        if (!w.online) closePeer(w.id);
       }
     }
 
-    document.getElementById('audio').onclick = () => {
-      audioEnabled = true;
-      document.querySelectorAll('video').forEach(v => {
-        v.muted = false;
-        v.play().catch(() => {});
-      });
-      document.getElementById('audio').textContent = 'Audio enabled';
-    };
-
+    function syncMonitorSelector() {
+      const selector=document.getElementById('monitorWorkerSelect');
+      const previous=selector.value;
+      selector.replaceChildren();
+      for(const w of workers) selector.add(new Option(`${w.name} — ${w.online ? "🟢 Active" : "⚪ Inactive"}`,w.id));
+      if(workers.some(w=>w.id===previous)) selector.value=previous;
+      for(const card of document.querySelectorAll('#workers > article')) card.hidden = card.id !== selector.value;
+    }
+    document.getElementById('monitorWorkerSelect').addEventListener('change',syncMonitorSelector);
+    document.getElementById('logoutTop').onclick=()=>document.getElementById('logout').click();
     document.getElementById('logout').onclick = async () => {
       await api('/api/logout', {});
       location.href = '/';
@@ -321,102 +534,241 @@
 
     (async () => {
       const me = await api('/api/me');
-      if (me.user.role !== 'admin') {
-        location.href = '/worker.html';
-        return;
-      }
+      if (me.user.role !== 'admin') { location.href = '/worker.html'; return; }
       iceServers = (await api('/api/rtc-config')).iceServers;
       socket = io();
 
       socket.on('connect', () => {
-        document.getElementById('message').textContent = 'Connected';
+        document.getElementById('message').textContent = 'Connected 🌸';
         for (const id of [...peers.keys()]) closePeer(id);
         requested.clear();
         update();
       });
 
+      const autoRequested = new Set();
       socket.on('workers-state', data => {
-        workers = data;
-        update();
+        workers = data; update(); syncWorkerSelectors(); syncMonitorSelector();
+        for (const w of workers) {
+          if (!w.online || !w.captureReady) { autoRequested.delete(w.id); continue; }
+          if (w.liveMode === 'CAMERA' || w.liveMode === 'CAMERA_PENDING') continue;
+          if (w.liveMode !== 'NONE') continue;
+          if (autoRequested.has(w.id)) continue;
+          autoRequested.add(w.id);
+          socket.emit('admin-live-request', { workerId: w.id, mode: 'camera' });
+        }
+      });
+      socket.on('live-error', ({workerId, message}) => {
+        if (workerId) autoRequested.delete(workerId);
+        const card = workerId && document.getElementById(workerId);
+        if (card) card.querySelector('.live').textContent = message || 'Camera unavailable';
       });
 
-      socket.on('disconnect', () => {
-        document.getElementById('message').textContent = 'Reconnecting…';
-        for (const id of [...peers.keys()]) closePeer(id);
-        requested.clear();
+
+      // --- WAKE UP TOAST ALERT NOTIFICATION ---
+      socket.on('worker-wakeup', data => {
+        const toast = document.createElement('div');
+        toast.className = 'wakeup-toast';
+        toast.innerHTML = `
+          <span style="font-size: 28px;">🎀</span>
+          <div>
+            <strong style="color: var(--primary);">Wake-Up Triggered!</strong>
+            <p style="font-size: 13px; margin: 0;">Via <strong>${data.channel}</strong> (${data.sender}): "${data.message}"</p>
+          </div>
+        `;
+        document.body.appendChild(toast);
+        const sound = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+        sound.play().catch(()=>{});
+        setTimeout(() => toast.remove(), 7000);
+      });
+
+      socket.on('worker-ping-result', p => {
+        pingStatusMap.set(p.workerId, p.ok ? 'Last response: Just now' : 'No response');
+        update();
       });
 
       socket.on('rtc-offer', async p => {
-        const early = peers.get(p.workerId)?.ice || [];
+        liveModes.set(p.workerId, p.mode === 'screen' ? 'SCREEN' : 'CAMERA');
         closePeer(p.workerId);
         const pc = new RTCPeerConnection({ iceServers });
-        const entry = { pc, ice: early };
-        peers.set(p.workerId, entry);
+        peers.set(p.workerId, { pc, ice: [] });
 
         pc.ontrack = e => {
           const v = document.getElementById('video-' + p.workerId);
-          v.srcObject = e.streams[0] || new MediaStream(e.track ? [e.track] : []);
-          v.muted = !audioEnabled;
-          v.play().catch(() => {});
-          const card = document.getElementById(p.workerId);
-          if (card) card.querySelector('.live').textContent = 'Live camera + audio';
+          v.srcObject = e.streams[0] || new MediaStream([e.track]);
+          v.muted = !workerAudio.get(p.workerId);
+          v.play().catch(()=>{});
         };
-
         pc.onicecandidate = e => {
           if (e.candidate) socket.emit('rtc-ice', { targetSocketId: p.workerSocketId, workerId: p.workerId, candidate: e.candidate });
         };
-
-        pc.onconnectionstatechange = () => {
-          if (pc.connectionState === 'failed') {
-            socket.emit('admin-live-stop', { workerId: p.workerId });
-            closePeer(p.workerId);
-            const card = document.getElementById(p.workerId);
-            if (card) card.querySelector('.live').textContent = 'Connection failed; check TURN settings';
-            requested.set(p.workerId, Date.now() + 20000);
-          }
-        };
-
-        try {
-          await pc.setRemoteDescription(p.offer);
-          for (const ice of entry.ice) {
-            try { await pc.addIceCandidate(ice); } catch (_) {}
-          }
-          entry.ice = [];
-          await pc.setLocalDescription(await pc.createAnswer());
-          socket.emit('rtc-answer', { targetSocketId: p.workerSocketId, workerId: p.workerId, answer: pc.localDescription });
-        } catch (e) {
-          document.getElementById('message').textContent = e.message;
-          socket.emit('admin-live-stop', { workerId: p.workerId });
-          closePeer(p.workerId);
-        }
+        await pc.setRemoteDescription(p.offer);
+        await pc.setLocalDescription(await pc.createAnswer());
+        socket.emit('rtc-answer', { targetSocketId: p.workerSocketId, workerId: p.workerId, answer: pc.localDescription });
       });
 
       socket.on('rtc-ice', async p => {
-        let entry = peers.get(p.workerId);
-        if (!entry) {
-          entry = { pc: null, ice: [] };
-          peers.set(p.workerId, entry);
-        }
-        if (!entry.pc?.remoteDescription) entry.ice.push(p.candidate);
-        else try { await entry.pc.addIceCandidate(p.candidate); } catch (e) { document.getElementById('message').textContent = e.message; }
+        const entry = peers.get(p.workerId);
+        if (entry?.pc?.remoteDescription) await entry.pc.addIceCandidate(p.candidate);
       });
 
-      socket.on('live-error', p => {
-        closePeer(p.workerId);
-        requested.set(p.workerId, Date.now());
-        const c = document.getElementById(p.workerId);
-        if (c) c.querySelector('.live').textContent = p.message;
-      });
+      socket.on('task:assigned', () => loadTasks());
+      socket.on('task:submitted', () => loadTasks());
+      socket.on('task:approved', () => loadTasks());
+      socket.on('task:returned', () => loadTasks());
+      socket.on('task:updated', () => loadTasks());
+      socket.on('chat:message', msg => { if (msg.workerId === activeChatWorkerId) loadChat(); });
+      socket.on('devices:updated', async () => { await loadDevices(); });
 
-      socket.on('live-status', p => {
-        if (p.mode === 'NONE') closePeer(p.workerId);
-      });
+      loadTasks();
+      loadChat();
 
       setInterval(() => {
         for (const [id, at] of requested) if (Date.now() - at > 30000) requested.delete(id);
         update();
       }, 500);
     })().catch(e => document.getElementById('message').textContent = e.message);
+
+    async function loadDevices() {
+      try {
+        const r=await api('/api/admin/devices');
+        const box=document.getElementById('deviceList');box.replaceChildren();
+        document.getElementById('deviceMsg').textContent=r.devices.length ? '' : 'No device requests yet.';
+        for(const d of r.devices) {
+          const row=document.createElement('div');row.className='card';row.style.cssText='padding:12px;margin:10px 0';
+          const info=document.createElement('p');info.textContent=`${d.deviceId} — ${d.status} — ${d.workerName || d.label || ''}`;row.append(info);
+          if(d.status==='pending' || d.status==='rejected') {
+            const name=document.createElement('input');name.placeholder='Worker display name';name.value=d.workerName || '';row.append(name);
+            for(const action of ['approve','reject']) {const btn=document.createElement('button');btn.className='btn';btn.textContent=action==='approve'?'Approve':'Reject';btn.onclick=()=>decideDevice(d.deviceId,action,name.value);row.append(btn);}
+          }
+          if(d.status==='approved') {const rename=document.createElement('button');rename.className='btn secondary';rename.textContent='Rename ✎';rename.onclick=async()=>{const workerName=prompt('New worker name:',d.workerName||d.deviceName||'');if(workerName&&workerName.trim()){try{await api('/api/admin/devices/'+encodeURIComponent(d.deviceId),{workerName:workerName.trim()},'PATCH');await loadDevices();}catch(e){alert(e.message)}}};row.append(rename);const btn=document.createElement('button');btn.className='btn danger';btn.textContent='Revoke';btn.onclick=()=>decideDevice(d.deviceId,'revoke','');row.append(btn);}
+          box.append(row);
+        }
+      } catch(e){document.getElementById('deviceMsg').textContent=e.message;}
+    }
+    async function decideDevice(id,action,workerName) {
+      if(action==='revoke' && !confirm('Revoke this device?')) return;
+      try {await api('/api/admin/devices/'+encodeURIComponent(id)+'/'+action,{workerName});await loadDevices();}
+      catch(e){alert(e.message);}
+    }
+    loadDevices();setInterval(loadDevices,15000);
+    function syncWorkerSelectors() {
+      const available = workers.slice().sort((a,b)=>a.name.localeCompare(b.name));
+      const options = [
+        ['taskWorkerId', false], ['filterTaskWorker', true], ['chatWorkerSelect', false]
+      ];
+      for (const [id, includeAll] of options) {
+        const el=document.getElementById(id); if (!el) continue;
+        const previous=el.value;
+        el.replaceChildren();
+        if (includeAll) el.add(new Option('All Workers',''));
+        if (el.id==='taskWorkerId') el.add(new Option('🌎 Open to Everyone','OPEN'));
+        for (const w of available) el.add(new Option(`${w.name} — ${w.online ? "🟢 Active" : "⚪ Inactive"}`,w.id));
+        if ([...el.options].some(o=>o.value===previous)) el.value=previous;
+      }
+      const next=document.getElementById('chatWorkerSelect')?.value || '';
+      if (next!==activeChatWorkerId) {activeChatWorkerId=next;loadChat();}
+      const chatInput=document.getElementById('adminChatInput');
+      const send=document.querySelector('#adminChatForm button[type="submit"]');
+      if (chatInput) chatInput.disabled=!activeChatWorkerId;
+      if (send) send.disabled=!activeChatWorkerId;
+      const taskButton=document.querySelector('#taskForm button[type="submit"]');
+      if (taskButton) taskButton.disabled=false;
+    }
+    setTimeout(refreshEarnings,900);setInterval(refreshEarnings,20000);
+    // Tasks Functions
+    async function loadTasks() {
+      const filter = document.getElementById('filterTaskWorker')?.value || '';
+      try {
+        const data = await api(filter ? `/api/tasks?workerId=${filter}` : '/api/tasks');
+        renderTasks(data.tasks || []);
+      } catch (e) {
+        document.getElementById('adminTaskList').innerHTML = `<p class="muted">Error: ${e.message}</p>`;
+      }
+    }
+
+    function escapeHtml(s) {return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+    function renderTasks(tasks) {
+      const container = document.getElementById('adminTaskList');
+      if (!container) return;
+      if (!tasks.length) { container.innerHTML = `<p class="muted">No tasks found.</p>`; return; }
+      container.innerHTML = tasks.slice().reverse().map(t => `
+        <div style="background: var(--panel-2); padding: 12px; border-radius: 12px; border: 1px solid var(--line);">
+          <div style="display: flex; justify-content: space-between;">
+            <strong>${escapeHtml(t.title)}</strong>
+            <span style="font-size: 11px; font-weight: 800; color: var(--primary);">${escapeHtml(t.status)}</span>
+          </div>
+          <div style="font-size:13px">${t.workerId ? escapeHtml(t.workerId) : 'Open Task'} · $${Number(t.price||0).toFixed(2)} · ${t.recordedMs==null?'Not submitted':fmt(t.recordedMs)} ${t.allowConcurrent?'· Concurrent':''}</div>
+          ${t.description ? `<p style="font-size: 13px; margin-top: 6px;">${escapeHtml(t.description)}</p>` : ''}
+          ${['SUBMITTED','PENDING_APPROVAL'].includes(t.status) ? `
+            <div style="margin-top: 8px; display: flex; gap: 8px;">
+              <button class="btn btn-sm" onclick="approveTask('${t.taskId || t.id}')">Approve</button>
+              <button class="btn btn-sm secondary" onclick="returnTaskPrompt('${t.taskId || t.id}')">Return</button>
+            </div>
+          ` : ''}
+        </div>
+      `).join('');
+    }
+
+    async function assignTask() {
+      const workerId = document.getElementById('taskWorkerId').value;
+      if (!workerId) { alert('Select a worker or Open to Everyone.'); return; }
+      const title = document.getElementById('taskTitle').value;
+      const description = document.getElementById('taskDesc').value;
+      const dateVal = document.getElementById('taskDueDate').value;
+      const timeVal = document.getElementById('taskDueTime').value;
+      const dueAt = dateVal ? dateVal + (timeVal ? ' ' + timeVal : '') : null;
+
+      await api('/api/tasks', {workerId,assignmentType:workerId==='OPEN'?'OPEN':'ASSIGNED',title,description,dueAt,price:Number(document.getElementById('taskPrice').value),allowConcurrent:document.getElementById('taskConcurrent').checked});
+      document.getElementById('taskTitle').value = '';
+      document.getElementById('taskDesc').value = '';
+      loadTasks();
+    }
+
+    async function approveTask(id) {
+      const amount=prompt('Final approved payment in USD (leave blank to use task price):','');
+      if(amount===null)return;
+      try{await api(`/api/tasks/${id}/approve`,amount.trim()?{amount:Number(amount)}:{});loadTasks();refreshEarnings();}
+      catch(e){alert(e.message)}
+    }
+    async function refreshEarnings(){
+      try{const d=await api('/api/earnings');const el=document.getElementById('earningsSummary');if(el)el.textContent=`Approved: $${d.summary.approvedEarnings.toFixed(2)} · Pending: $${d.summary.pendingEarnings.toFixed(2)} · ${d.summary.approvedTasks} approved tasks · ${fmt(d.summary.recordedMs)} submitted hours`;}
+      catch(e){console.warn(e)}
+    }
+    async function addEarningsAdjustment(){
+      const wid=prompt('Worker ID (e.g., worker1):');if(!wid)return;
+      const val=prompt('Adjustment in USD (use a negative amount for deduction):');if(val===null)return;
+      const reason=prompt('Reason for adjustment:');if(!reason)return;
+      try{await api('/api/admin/earnings/adjust',{workerId:wid,amount:Number(val),reason});refreshEarnings();}catch(e){alert(e.message)}
+    }
+    async function returnTaskPrompt(id) {
+      const note = prompt('Admin note:');
+      if (note !== null) { await api(`/api/tasks/${id}/return`, { adminNote: note }); loadTasks(); }
+    }
+
+    // Chat Functions
+    let activeChatWorkerId = ''; 
+    function switchChatWorker(id) { activeChatWorkerId = id; loadChat(); }
+    async function loadChat() {
+      if (!activeChatWorkerId) { document.getElementById('adminChatContainer').textContent='No approved devices yet. Approve a worker device to start chatting.'; return; }
+      const d = await api(`/api/chat/${activeChatWorkerId}`);
+      const container = document.getElementById('adminChatContainer');
+      container.innerHTML = (d.messages || []).map(m => `
+        <div style="align-self: ${m.senderRole === 'ADMIN' ? 'flex-end' : 'flex-start'}; background: ${m.senderRole === 'ADMIN' ? 'var(--primary-soft)' : '#fff'}; border: 1px solid var(--line); padding: 8px 12px; border-radius: 12px; max-width: 75%;">
+          <div style="font-size: 11px; color: var(--muted);">${m.senderRole} · ${new Date(m.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>
+          <div style="font-size: 13px;">${escapeHtml(m.message)}</div>
+        </div>
+      `).join('');
+      container.scrollTop = container.scrollHeight;
+    }
+
+    async function sendAdminChat() {
+      const input = document.getElementById('adminChatInput');
+      const text = input.value.trim();
+      if (!text || !activeChatWorkerId) return;
+      input.value = '';
+      await api(`/api/chat/${activeChatWorkerId}/messages`, { message: text });
+      loadChat();
+    }
   </script>
 </body>
 </html>
