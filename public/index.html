@@ -3,46 +3,28 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Kitty Timer | Sign in</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <title>Worker Timer</title>
   <link rel="stylesheet" href="/styles.css">
-  <style>
-    h1 { font-family: 'Fredoka', cursive, sans-serif; color: var(--primary); }
-    .brand-bow {
-      width: 44px;
-      height: 30px;
-    }
-  </style>
 </head>
 <body>
   <main class="login-shell">
     <section class="card login-card" aria-labelledby="loginTitle">
-      <div class="brand-mark">
-        <svg class="brand-bow" viewBox="0 0 100 60">
-          <path d="M50 30 C30 10, 10 20, 20 40 C30 60, 50 40, 50 30 Z" fill="#ff4d6d"/>
-          <path d="M50 30 C70 10, 90 20, 80 40 C70 60, 50 40, 50 30 Z" fill="#ff4d6d"/>
-          <circle cx="50" cy="30" r="10" fill="#ffffff" stroke="#ff4d6d" stroke-width="3"/>
-        </svg>
-      </div>
-      <div class="eyebrow">Kitty Work Timer</div>
-      <h1 id="loginTitle">Welcome Back</h1>
-      <p class="muted">Sign in to Kitty WorkTimer with your assigned account.</p>
-      
+      <div class="brand-mark" aria-hidden="true">WT</div>
+      <div class="eyebrow">Work session</div>
+      <h1 id="loginTitle">Sign in</h1>
+      <p class="muted">Use your assigned admin or worker account.</p>
       <form id="loginForm">
         <label>Username
-          <input id="username" name="username" autocomplete="username" placeholder="Username" required autofocus>
+          <input id="username" name="username" autocomplete="username" required autofocus>
         </label>
         <label>Password
-          <input id="password" name="password" type="password" autocomplete="current-password" placeholder="••••••••" required>
+          <input id="password" name="password" type="password" autocomplete="current-password" required>
         </label>
-        <button id="loginBtn" class="btn" type="submit">Sign In 🎀</button>
-        <p id="message" class="small muted" style="margin-top: 10px;" aria-live="polite"></p>
+        <button id="loginBtn" class="btn" type="submit">Sign in</button>
+        <p id="message" class="small muted" aria-live="polite"></p>
       </form>
     </section>
   </main>
-
 <script>
   const form = document.getElementById('loginForm');
   const button = document.getElementById('loginBtn');
