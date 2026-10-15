@@ -43,6 +43,17 @@ class MainActivity : Activity() {
                 val uri: Uri = request.url
                 return uri.scheme != "https" || uri.host != Uri.parse(serverBase).host
             }
+
+            override fun onPageFinished(view: WebView, url: String) {
+                super.onPageFinished(view, url)
+                if (Uri.parse(url).host != Uri.parse(serverBase).host) return
+                val username = BuildConfig.DEFAULT_USERNAME
+                val escaped = username.replace("\\", "\\\\").replace("'", "\\'")
+                view.evaluateJavascript(
+                    "(function(){const u=document.getElementById('username');if(u){u.value='$escaped';const p=document.getElementById('password');if(p)p.focus();}})();",
+                    null
+                )
+            }
         }
         webView.webChromeClient = object : WebChromeClient() {
             override fun onPermissionRequest(request: PermissionRequest) {
