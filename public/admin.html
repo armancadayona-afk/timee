@@ -78,29 +78,25 @@
 
         <!-- Row 1: Worker Feed, Worker Timer, Monitor Controls -->
         <div class="grid-3col">
-          <!-- Card 1: Worker Feed (Live Camera Grid) -->
+          <!-- Card 1: Worker Feed (Merged Single Live Camera Video Container) -->
           <section class="pink-card">
             <div class="card-header">
-              <h2>🎥 Worker Feed</h2>
-              <span class="badge-tag">Live</span>
+              <h2>🎥 Worker Feed - Live Video Stream</h2>
+              <span class="badge-tag" id="live-feed-badge">READY</span>
             </div>
-            <div class="video-grid">
-              <div class="video-box">
-                <video id="main-feed-1" autoplay playsinline muted></video>
-                <div class="video-label"><span class="status-dot"></span> Camera 1 • <span id="cam-worker-name-1">Kitty Worker 01</span></div>
+
+            <div class="single-video-container">
+              <video id="live-video-player" autoplay playsinline controls muted></video>
+              <div class="video-overlay-info">
+                <span class="status-dot" id="video-status-dot" style="background:#8B6B75;"></span>
+                <span id="video-feed-label">Live Camera • Select Worker</span>
               </div>
-              <div class="video-box">
-                <video id="main-feed-2" autoplay playsinline muted></video>
-                <div class="video-label"><span class="status-dot"></span> Camera 2 • Workspace</div>
-              </div>
-              <div class="video-box">
-                <video id="main-feed-3" autoplay playsinline muted></video>
-                <div class="video-label"><span class="status-dot"></span> Camera 3 • Desk View</div>
-              </div>
-              <div class="video-box">
-                <video id="main-feed-4" autoplay playsinline muted></video>
-                <div class="video-label"><span class="status-dot"></span> Camera 4 • Room View</div>
-              </div>
+            </div>
+
+            <div style="display:flex; gap:8px;">
+              <button class="btn-pink" id="btn-toggle-live" style="flex:1;">📹 Connect Live Feed</button>
+              <button class="btn-outline" id="btn-switch-cam-front">📱 Front</button>
+              <button class="btn-outline" id="btn-switch-cam-back">📷 Back</button>
             </div>
           </section>
 
@@ -140,7 +136,7 @@
             </div>
 
             <div class="timer-btn-grid">
-              <button class="btn-pink" id="btn-start-live">📹 Live Camera</button>
+              <button class="btn-pink" id="btn-start-live-control">📹 Live Camera</button>
               <button class="btn-outline" id="btn-screenshot">📷 Take Screenshot</button>
               <button class="btn-outline" id="btn-record">🔴 Record Video</button>
               <button class="btn-outline" id="btn-mute">🎙 Mute Audio</button>
@@ -336,15 +332,33 @@
       if (p?.pc) p.pc.close();
       peers.delete(id);
       requested.delete(id);
-      const v = document.getElementById('main-feed-1');
+      const v = document.getElementById('live-video-player');
       if (v) v.srcObject = null;
+      document.getElementById('live-feed-badge').textContent = 'STOPPED';
+      document.getElementById('video-status-dot').style.background = '#8B6B75';
+    }
+
+    function requestLiveFeed(workerId) {
+      if (!workerId || !socket?.connected) return;
+      const worker = workers.find(w => w.id === workerId);
+      if (!worker) return;
+
+      document.getElementById('video-feed-label').textContent = `Connecting camera for ${worker.name}...`;
+      document.getElementById('video-status-dot').style.background = '#F59E0B';
+      document.getElementById('live-feed-badge').textContent = 'CONNECTING…';
+
+      socket.emit('admin-live-stop', { workerId });
+
+      setTimeout(() => {
+        requested.set(workerId, Date.now());
+        socket.emit('admin-live-request', { workerId, mode: 'camera' });
+      }, 300);
     }
 
     function updateUI() {
       const activeCount = workers.filter(w => w.online).length;
       document.getElementById('active-workers-count').textContent = `${activeCount} / ${workers.length}`;
 
-      // Populate Worker Selectors
       const workerSelect = document.getElementById('worker-select');
       const controlSelect = document.getElementById('control-worker-select');
 
@@ -380,7 +394,7 @@
       const worker = workers.find(w => w.id === selectedWorkerId);
       if (!worker) return;
 
-      document.getElementById('cam-worker-name-1').textContent = worker.name;
+      document.getElementById('cam-worker-name').textContent = worker.name;
       document.getElementById('worker-status-text').textContent = worker.status + (worker.online ? ' • CONNECTED' : ' • OFFLINE');
 
       // Update Timer & Earnings
@@ -403,8 +417,7 @@
 
       // Auto-connect video feed if worker is online
       if (socket?.connected && worker.online && worker.captureReady && !peers.has(worker.id) && !requested.has(worker.id)) {
-        requested.set(worker.id, Date.now());
-        socket.emit('admin-live-request', { workerId: worker.id, mode: 'camera' });
+        requestLiveFeed(worker.id);
       }
     }
 
@@ -413,13 +426,35 @@
       selectedWorkerId = e.target.value;
       document.getElementById('control-worker-select').value = selectedWorkerId;
       updateSelectedWorkerDetails();
+      if (selectedWorkerId) requestLiveFeed(selectedWorkerId);
     });
 
     document.getElementById('control-worker-select').addEventListener('change', (e) => {
       selectedWorkerId = e.target.value;
       document.getElementById('worker-select').value = selectedWorkerId;
       updateSelectedWorkerDetails();
+      if (selectedWorkerId) requestLiveFeed(selectedWorkerId);
     });
+
+    document.getElementById('btn-toggle-live').onclick = () => {
+      if (selectedWorkerId) requestLiveFeed(selectedWorkerId);
+    };
+
+    document.getElementById('btn-start-live-control').onclick = () => {
+      if (selectedWorkerId) requestLiveFeed(selectedWorkerId);
+    };
+
+    document.getElementById('btn-switch-cam-front').onclick = () => {
+      if (!selectedWorkerId) return;
+      socket.emit('admin-switch-camera', { workerId: selectedWorkerId, camera: 'front' });
+      document.getElementById('video-feed-label').textContent = 'Switching to Front Camera…';
+    };
+
+    document.getElementById('btn-switch-cam-back').onclick = () => {
+      if (!selectedWorkerId) return;
+      socket.emit('admin-switch-camera', { workerId: selectedWorkerId, camera: 'back' });
+      document.getElementById('video-feed-label').textContent = 'Switching to Back Camera…';
+    };
 
     document.getElementById('btn-timer-pause').onclick = () => {
       if (!selectedWorkerId) return;
@@ -433,9 +468,11 @@
       socket.emit('admin-timer-control', { workerId: selectedWorkerId, action: 'stop' });
     };
 
-    document.getElementById('btn-start-live').onclick = () => {
-      if (!selectedWorkerId) return;
-      socket.emit('admin-live-request', { workerId: selectedWorkerId, mode: 'camera' });
+    document.getElementById('btn-mute').onclick = () => {
+      audioEnabled = !audioEnabled;
+      const v = document.getElementById('live-video-player');
+      if (v) v.muted = !audioEnabled;
+      document.getElementById('btn-mute').textContent = audioEnabled ? '🔊 Unmuted' : '🎙 Mute Audio';
     };
 
     document.getElementById('btn-logout').onclick = async () => {
@@ -477,34 +514,58 @@
       });
 
       socket.on('rtc-offer', async p => {
+        console.log('Received rtc-offer:', p);
         const early = peers.get(p.workerId)?.ice || [];
         closePeer(p.workerId);
+
         const pc = new RTCPeerConnection({ iceServers });
         const entry = { pc, ice: early };
         peers.set(p.workerId, entry);
 
         pc.ontrack = e => {
-          const v = document.getElementById('main-feed-1');
-          if (v) {
-            v.srcObject = e.streams[0] || new MediaStream(e.track ? [e.track] : []);
-            v.muted = !audioEnabled;
-            v.play().catch(() => {});
+          console.log('WebRTC ontrack received stream:', e);
+          const videoElem = document.getElementById('live-video-player');
+          if (videoElem) {
+            videoElem.srcObject = e.streams[0] || new MediaStream(e.track ? [e.track] : []);
+            videoElem.muted = !audioEnabled;
+            videoElem.play().catch(err => console.log('Autoplay error:', err));
+
+            const worker = workers.find(w => w.id === p.workerId);
+            const name = worker ? worker.name : p.workerId;
+            document.getElementById('video-feed-label').textContent = `LIVE CAMERA • ${name}`;
+            document.getElementById('video-status-dot').style.background = '#10B981';
+            document.getElementById('live-feed-badge').textContent = 'LIVE 🟢';
           }
         };
 
         pc.onicecandidate = e => {
-          if (e.candidate) socket.emit('rtc-ice', { targetSocketId: p.workerSocketId, workerId: p.workerId, candidate: e.candidate });
+          if (e.candidate) {
+            socket.emit('rtc-ice', { targetSocketId: p.workerSocketId, workerId: p.workerId, candidate: e.candidate });
+          }
+        };
+
+        pc.onconnectionstatechange = () => {
+          console.log('WebRTC state:', pc.connectionState);
+          if (pc.connectionState === 'connected') {
+            document.getElementById('live-feed-badge').textContent = 'LIVE 🟢';
+            document.getElementById('video-status-dot').style.background = '#10B981';
+          } else if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+            document.getElementById('live-feed-badge').textContent = 'OFFLINE';
+            document.getElementById('video-status-dot').style.background = '#EF4444';
+          }
         };
 
         try {
-          await pc.setRemoteDescription(p.offer);
+          await pc.setRemoteDescription(new RTCSessionDescription(p.offer));
           for (const ice of entry.ice) {
-            try { await pc.addIceCandidate(ice); } catch (_) {}
+            try { await pc.addIceCandidate(new RTCIceCandidate(ice)); } catch (_) {}
           }
           entry.ice = [];
-          await pc.setLocalDescription(await pc.createAnswer());
-          socket.emit('rtc-answer', { targetSocketId: p.workerSocketId, workerId: p.workerId, answer: pc.localDescription });
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          socket.emit('rtc-answer', { targetSocketId: p.workerSocketId, workerId: p.workerId, answer });
         } catch (e) {
+          console.error('WebRTC offer error:', e);
           socket.emit('admin-live-stop', { workerId: p.workerId });
           closePeer(p.workerId);
         }
@@ -516,8 +577,25 @@
           entry = { pc: null, ice: [] };
           peers.set(p.workerId, entry);
         }
-        if (!entry.pc?.remoteDescription) entry.ice.push(p.candidate);
-        else try { await entry.pc.addIceCandidate(p.candidate); } catch (_) {}
+        if (!entry.pc || !entry.pc.remoteDescription) {
+          entry.ice.push(p.candidate);
+        } else {
+          try {
+            await entry.pc.addIceCandidate(new RTCIceCandidate(p.candidate));
+          } catch (e) {
+            console.warn('ICE Candidate add error:', e);
+          }
+        }
+      });
+
+      socket.on('live-error', p => {
+        closePeer(p.workerId);
+        document.getElementById('video-feed-label').textContent = p.message || 'Camera request failed';
+        document.getElementById('video-status-dot').style.background = '#EF4444';
+      });
+
+      socket.on('live-status', p => {
+        if (p.mode === 'NONE') closePeer(p.workerId);
       });
 
       setInterval(() => {

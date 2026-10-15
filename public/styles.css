@@ -341,42 +341,38 @@ select.custom-select:focus {
   border-radius: 12px;
 }
 
-/* Camera Video Grid */
-.video-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-
-.video-box {
+/* Merged Single Camera Video Container */
+.single-video-container {
   position: relative;
+  width: 100%;
+  aspect-ratio: 16/9;
   background: #02050A;
-  border-radius: 12px;
+  border-radius: 14px;
   overflow: hidden;
   border: 1px solid var(--border);
-  aspect-ratio: 4/3;
 }
 
-.video-box video {
+.single-video-container video {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   display: block;
 }
 
-.video-label {
+.video-overlay-info {
   position: absolute;
-  bottom: 6px;
-  left: 6px;
-  background: rgba(0, 0, 0, 0.7);
+  bottom: 10px;
+  left: 10px;
+  background: rgba(0, 0, 0, 0.75);
   color: white;
-  font-size: 10px;
-  font-weight: 600;
-  padding: 3px 8px;
-  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
+  backdrop-filter: blur(4px);
 }
 
 /* Worker Timer Card */
