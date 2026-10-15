@@ -26,8 +26,6 @@ const STATE_FILE = path.join(DATA_DIR, 'state.json');
 const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
 const TASKS_FILE = path.join(DATA_DIR, 'tasks.json');
 const CHAT_FILE = path.join(DATA_DIR, 'chat.json');
-const USERS_FILE = path.join(DATA_DIR, 'users.json');
-const DEVICE_REQUESTS_FILE = path.join(DATA_DIR, 'device_requests.json');
 const HTTP_SESSION_DIR = path.join(DATA_DIR, 'http-sessions');
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -75,20 +73,13 @@ const sessionMiddleware = session({
 app.use(sessionMiddleware);
 io.engine.use(sessionMiddleware);
 
-// Prefilled worker accounts, restored for simple selection without device registration.
+// Fixed accounts: workers are configured here and cannot self-register.
 const users = [
   { role: 'admin', username: process.env.ADMIN_USERNAME || 'admin', password: process.env.ADMIN_PASSWORD || 'admin123', name: process.env.ADMIN_NAME || 'Administrator' },
-  { role: 'worker', id: 'worker1', username: process.env.WORKER1_USERNAME || 'john', password: process.env.WORKER1_PASSWORD || 'john123', name: process.env.WORKER1_NAME || 'Worker 1' },
-  { role: 'worker', id: 'worker2', username: process.env.WORKER2_USERNAME || 'mark', password: process.env.WORKER2_PASSWORD || 'mark123', name: process.env.WORKER2_NAME || 'Worker 2' },
-  { role: 'worker', id: 'worker3', username: process.env.WORKER3_USERNAME || 'anne', password: process.env.WORKER3_PASSWORD || 'anne123', name: process.env.WORKER3_NAME || 'Worker 3' }
+  { role: 'worker', id: 'worker1', username: process.env.WORKER1_USERNAME || 'worker1', password: process.env.WORKER1_PASSWORD || 'bestworker1', name: process.env.WORKER1_NAME || 'Worker 1' },
+  { role: 'worker', id: 'worker2', username: process.env.WORKER2_USERNAME || 'worker2', password: process.env.WORKER2_PASSWORD || 'bestworker2', name: process.env.WORKER2_NAME || 'Worker 2' },
+  { role: 'worker', id: 'worker3', username: process.env.WORKER3_USERNAME || 'worker3', password: process.env.WORKER3_PASSWORD || 'bestworker3', name: process.env.WORKER3_NAME || 'Worker 3' }
 ];
-
-const savedUsers = readJson(USERS_FILE, []);
-savedUsers.forEach(u => {
-  if (u.username && !users.some(x => x.username.toLowerCase() === u.username.toLowerCase())) {
-    users.push(u);
-  }
-});
 
 const LIVE_NONE = 'NONE';
 const LIVE_CAMERA_PENDING = 'CAMERA_PENDING';
@@ -182,7 +173,6 @@ function persistState() {
 
 const tasks = readJson(TASKS_FILE, []);
 const chatMessages = readJson(CHAT_FILE, []);
-const deviceRequests = readJson(DEVICE_REQUESTS_FILE, []);
 
 function persistSessions() {
   writeJsonAtomic(SESSIONS_FILE, workSessions.slice(-1000));
@@ -196,14 +186,6 @@ function persistChat() {
   writeJsonAtomic(CHAT_FILE, chatMessages);
 }
 
-function persistUsers() {
-  const dynamicUsers = users.filter(u => u.id && u.id.startsWith('worker_'));
-  writeJsonAtomic(USERS_FILE, dynamicUsers);
-}
-
-function persistDeviceRequests() {
-  writeJsonAtomic(DEVICE_REQUESTS_FILE, deviceRequests);
-}
 
 function safeWorkerState(state) {
   return {
@@ -533,247 +515,7 @@ app.post('/api/login', loginRateLimit, (req, res) => {
   });
 });
 
-// --- Device / User Registration API ---
-app.post('/api/register', (req, res) => {
-  const { username, password, name, role } = req.body || {};
-  const cleanUsername = String(username || '').trim().toLowerCase();
-  const cleanPassword = String(password || '').trim();
-  const cleanName = String(name || '').trim() || cleanUsername;
-  const cleanRole = (role === 'admin') ? 'admin' : 'worker';
-
-  if (!cleanUsername || !cleanPassword) {
-    return res.status(400).json({ ok: false, error: 'Username and password are required' });
-  }
-
-  if (users.some(u => u.username.toLowerCase() === cleanUsername)) {
-    return res.status(400).json({ ok: false, error: 'Username already registered' });
-  }
-
-  const newId = cleanRole === 'worker' ? 'worker_' + Date.now().toString(36) : null;
-  const newUser = {
-    role: cleanRole,
-    id: newId,
-    username: cleanUsername,
-    password: cleanPassword,
-    name: cleanName
-  };
-
-  users.push(newUser);
-  persistUsers();
-
-  if (cleanRole === 'worker') {
-    states.set(newId, initialWorkerState(newUser));
-    broadcastStates();
-  }
-
-  req.session.user = {
-    role: newUser.role,
-    id: newUser.id,
-    username: newUser.username,
-    name: newUser.name
-  };
-
-  res.json({
-    ok: true,
-    user: req.session.user,
-    redirect: newUser.role === 'admin' ? '/admin.html' : '/worker.html'
-  });
-});
-
-// --- Device Registration & Approval System (Section 4, 5, 6) ---
-
-// POST /api/devices/register
-app.post('/api/devices/register', (req, res) => {
-  const { deviceId, deviceName, platform, appVersion, publicKey, workerName } = req.body || {};
-  const cleanDeviceId = String(deviceId || '').trim();
-  const cleanName = String(deviceName || workerName || 'Android Device').trim();
-
-  if (!cleanDeviceId) {
-    return res.status(400).json({ success: false, error: 'deviceId is required' });
-  }
-
-  let device = deviceRequests.find(d => d.deviceId === cleanDeviceId);
-  if (!device) {
-    device = {
-      deviceId: cleanDeviceId,
-      deviceName: cleanName,
-      platform: platform || 'android',
-      appVersion: appVersion || '1.0.0',
-      publicKey: publicKey || '',
-      status: 'pending',
-      registeredAt: Date.now(),
-      workerId: null,
-      workerName: cleanName
-    };
-    deviceRequests.push(device);
-  } else {
-    device.deviceName = cleanName;
-    device.publicKey = publicKey || device.publicKey;
-    if (device.status === 'rejected') {
-      device.status = 'pending';
-    }
-  }
-
-  persistDeviceRequests();
-  io.to('admins').emit('device:requested', device);
-
-  res.json({
-    success: true,
-    deviceId: device.deviceId,
-    status: device.status
-  });
-});
-
-// GET /api/devices/status & /api/device/status/:deviceId
-const handleDeviceStatus = (req, res) => {
-  const deviceId = req.params.deviceId || req.headers['x-device-id'] || req.query.deviceId;
-  if (!deviceId) {
-    return res.status(400).json({ error: 'Device ID required' });
-  }
-
-  const device = deviceRequests.find(d => d.deviceId === deviceId);
-  if (!device) {
-    const existingUser = users.find(u => u.deviceId === deviceId);
-    if (existingUser) {
-      return res.json({
-        deviceId,
-        status: 'approved',
-        workerId: existingUser.id,
-        workerName: existingUser.name
-      });
-    }
-    return res.json({
-      deviceId,
-      status: 'not_registered',
-      workerId: null
-    });
-  }
-
-  res.json({
-    deviceId: device.deviceId,
-    status: device.status,
-    workerId: device.workerId || ('worker_' + device.deviceId.substring(0, 8)),
-    workerName: device.workerName || device.deviceName
-  });
-};
-
-app.get('/api/devices/status', handleDeviceStatus);
-app.get('/api/devices/status/:deviceId', handleDeviceStatus);
-app.get('/api/device/status/:deviceId', handleDeviceStatus);
-
-// GET /api/admin/devices
-app.get('/api/admin/devices', requireRole('admin'), (req, res) => {
-  res.json({ success: true, devices: deviceRequests });
-});
-
-// POST /api/admin/devices/:deviceId/approve
-app.post('/api/admin/devices/:deviceId/approve', requireRole('admin'), (req, res) => {
-  const deviceId = req.params.deviceId;
-  const { workerName } = req.body || {};
-  const device = deviceRequests.find(d => d.deviceId === deviceId);
-
-  if (!device) {
-    return res.status(404).json({ success: false, error: 'Device not found' });
-  }
-
-  const assignedWorkerId = device.workerId || ('worker_' + device.deviceId.substring(0, 10));
-  const assignedWorkerName = String(workerName || device.workerName || device.deviceName || 'Worker Device').trim();
-
-  device.status = 'approved';
-  device.workerId = assignedWorkerId;
-  device.workerName = assignedWorkerName;
-  device.approvedAt = Date.now();
-  persistDeviceRequests();
-
-  let user = users.find(u => u.deviceId === deviceId || u.id === assignedWorkerId);
-  if (!user) {
-    user = {
-      role: 'worker',
-      id: assignedWorkerId,
-      username: 'dev_' + deviceId.substring(0, 8),
-      password: 'dev_auth_token',
-      name: assignedWorkerName,
-      deviceId: deviceId
-    };
-    users.push(user);
-    persistUsers();
-  } else {
-    user.name = assignedWorkerName;
-  }
-
-  if (!states.has(assignedWorkerId)) {
-    states.set(assignedWorkerId, initialWorkerState(user));
-  } else {
-    states.get(assignedWorkerId).name = assignedWorkerName;
-  }
-  broadcastStates();
-
-  io.emit('device:approved', { deviceId: device.deviceId, workerId: assignedWorkerId, workerName: assignedWorkerName });
-  res.json({ success: true, device });
-});
-
-// POST /api/admin/devices/:deviceId/reject
-app.post('/api/admin/devices/:deviceId/reject', requireRole('admin'), (req, res) => {
-  const deviceId = req.params.deviceId;
-  const device = deviceRequests.find(d => d.deviceId === deviceId);
-
-  if (!device) {
-    return res.status(404).json({ success: false, error: 'Device not found' });
-  }
-
-  device.status = 'rejected';
-  persistDeviceRequests();
-
-  io.emit('device:rejected', { deviceId: device.deviceId });
-  res.json({ success: true, device });
-});
-
-// POST /api/admin/devices/:deviceId/revoke
-app.post('/api/admin/devices/:deviceId/revoke', requireRole('admin'), (req, res) => {
-  const deviceId = req.params.deviceId;
-  const device = deviceRequests.find(d => d.deviceId === deviceId);
-
-  if (!device) {
-    return res.status(404).json({ success: false, error: 'Device not found' });
-  }
-
-  device.status = 'revoked';
-  persistDeviceRequests();
-
-  const user = users.find(u => u.deviceId === deviceId);
-  if (user && user.id) {
-    const state = states.get(user.id);
-    if (state && state.socketId) {
-      io.to(state.socketId).emit('device:revoked');
-      io.sockets.sockets.get(state.socketId)?.disconnect(true);
-      state.socketId = null;
-      state.status = 'OFFLINE';
-      state.online = false;
-    }
-  }
-
-  io.emit('device:revoked', { deviceId: device.deviceId });
-  broadcastStates();
-  res.json({ success: true, device });
-});
-
-// PATCH /api/admin/devices/:deviceId
-app.patch('/api/admin/devices/:deviceId', requireRole('admin'), (req, res) => {
-  const deviceId = req.params.deviceId;
-  const { workerName, deviceName } = req.body || {};
-  const device = deviceRequests.find(d => d.deviceId === deviceId);
-
-  if (!device) {
-    return res.status(404).json({ success: false, error: 'Device not found' });
-  }
-
-  if (workerName) device.workerName = String(workerName).trim();
-  if (deviceName) device.deviceName = String(deviceName).trim();
-  persistDeviceRequests();
-
-  res.json({ success: true, device });
-});
-
+// Accounts are fixed in server configuration; public registration and device approval are disabled.
 app.post('/api/logout', requireAuth, (req, res) => {
   const user = req.session.user;
 
@@ -1065,6 +807,47 @@ app.post('/api/tasks',requireRole('admin'),(req,res)=>{
  tasks.push(task);persistTasks();notifyTask(task,'task:assigned');io.to('workers').emit('task:updated',task);
  res.json({ok:true,task});
 });
+// Admin-recorded completed tasks: immediately approved, with an auditable earnings entry.
+app.post('/api/admin/tasks/completed',requireRole('admin'),(req,res)=>{
+ const {workerId,title,description}=req.body||{};
+ const price=money(req.body.amount);
+ const hours=Number(req.body.hours??0);
+ if(!states.has(workerId)||!String(title||'').trim()||price===null||!Number.isFinite(hours)||hours<0||hours>100000)
+   return res.status(400).json({ok:false,error:'Worker, task title, nonnegative payment and valid hours required'});
+ const now=Date.now(),id=crypto.randomUUID();
+ const task={id,taskId:id,title:String(title).trim().slice(0,200),description:String(description||'').slice(0,3000),price,
+ assignmentType:'ASSIGNED',workerId,allowConcurrent:false,status:'APPROVED',createdAt:now,assignedAt:now,
+ acceptedAt:now,submittedAt:now,completedAt:now,recordedMs:Math.round(hours*3600000),approvedAmount:price,
+ adminNote:'Recorded as completed by admin',recordedByAdmin:true};
+ const entry={id:crypto.randomUUID(),workerId,taskId:id,type:'TASK_APPROVED',amount:price,createdAt:now,reason:'Admin-recorded completed task',admin:req.session.user.username};
+ try {tasks.push(task);persistTasks();earningsLedger.push(entry);saveLedger();}
+ catch(e){tasks.splice(tasks.indexOf(task),1);earningsLedger.splice(earningsLedger.indexOf(entry),1);return res.status(500).json({ok:false,error:'Could not save completed task'});}
+ notifyTask(task,'task:approved');res.json({ok:true,task,entry});
+});
+// Clear historical task logs for one worker or all workers; preserve active tasks and manual adjustments.
+app.post('/api/admin/tasks/reset-logs',requireRole('admin'),(req,res)=>{
+ const workerId=String(req.body?.workerId||'');
+ if(workerId && !states.has(workerId))return res.status(400).json({ok:false,error:'Unknown worker'});
+ if(req.body?.confirmation!=='RESET TASK LOGS')return res.status(400).json({ok:false,error:'Confirmation required'});
+ const archived=new Set(['APPROVED','REJECTED']);
+ const deleted=tasks.filter(t=>archived.has(t.status)&&(!workerId||t.workerId===workerId));
+ const deletedIds=new Set(deleted.map(taskIdOf));
+ const keptTasks=tasks.filter(t=>!deletedIds.has(taskIdOf(t)));
+ const keptLedger=earningsLedger.filter(e=>!(e.taskId&&deletedIds.has(e.taskId)));
+ const oldTasks=tasks.slice(),oldLedger=earningsLedger.slice();
+ try {
+   tasks.splice(0,tasks.length,...keptTasks);earningsLedger.splice(0,earningsLedger.length,...keptLedger);
+   persistTasks();saveLedger();
+ }catch(e){
+   tasks.splice(0,tasks.length,...oldTasks);earningsLedger.splice(0,earningsLedger.length,...oldLedger);
+   try{persistTasks();saveLedger();}catch(_){}
+   return res.status(500).json({ok:false,error:'Unable to clear task logs'});
+ }
+ io.to('admins').emit('tasks:reset',{workerId:workerId||null,count:deleted.length});
+ io.to('workers').emit('tasks:reset',{workerId:workerId||null,count:deleted.length});
+ io.emit('earnings:updated',{workerId:workerId||null});
+ res.json({ok:true,deletedTasks:deleted.length,deletedEarningsEntries:oldLedger.length-keptLedger.length});
+});
 app.post('/api/tasks/:taskId/accept',requireRole('worker'),(req,res)=>{
  const t=tasks.find(x=>taskIdOf(x)===req.params.taskId);const wid=req.session.user.id;
  if(!t)return res.status(404).json({ok:false,error:'Task not found'});
@@ -1215,7 +998,7 @@ io.on('connection', socket => {
       'workers-state',
       [...states.values()].map(safeWorkerState)
     );
-  } else if (user.role === 'worker' && user.id && socket.handshake.query.nativeMedia === '1') {
+  } else if (user.role === 'worker' && user.id && socket.handshake?.query?.nativeMedia === '1') {
     const state = states.get(user.id);
     if (!state) return socket.disconnect(true);
     if (state.mediaSocketId && state.mediaSocketId !== socket.id) { const previous = state.mediaSocketId; state.mediaSocketId = null; io.sockets.sockets.get(previous)?.disconnect(true); }
