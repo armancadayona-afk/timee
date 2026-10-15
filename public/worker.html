@@ -504,6 +504,45 @@
       if (peer) { peer.onicecandidate = null; peer.close(); peer = null; }
       pendingIce = []; liveTarget = null;
     }
+    // The browser provides unprivileged diagnostics; actual Android ADB requires a
+    // separately implemented and explicitly authorized native Android bridge.
+    async function runApprovedDiagnostic(command) {
+      if (command === 'device-info') return [
+        `User agent: ${navigator.userAgent}`,
+        `Platform: ${navigator.platform || 'Unknown'}`,
+        `Language: ${navigator.language}`,
+        `Screen: ${screen.width}x${screen.height}`
+      ].join('\n');
+      if (command === 'network-status') return [
+        `Online: ${navigator.onLine}`,
+        `Connection type: ${navigator.connection?.effectiveType || 'Unavailable'}`,
+        `Server connection: ${socket.connected ? 'Connected' : 'Disconnected'}`
+      ].join('\n');
+      if (command === 'battery-status') {
+        if (typeof navigator.getBattery !== 'function') return 'Battery data not accessible to this browser.';
+        const b = await navigator.getBattery();
+        return `Charge: ${Math.round(b.level * 100)}%\nCharging: ${b.charging}`;
+      }
+      if (command === 'app-status') return [
+        `Worker: ${currentWorker?.name || 'Unknown'}`,
+        `Timer status: ${currentState?.status || 'Unknown'}`,
+        `Page visibility: ${document.visibilityState}`,
+        `Socket: ${socket.connected ? 'Connected' : 'Disconnected'}`
+      ].join('\n');
+      throw new Error('Unsupported diagnostic');
+    }
+    socket.on('terminal:request', async ({ id, command, expiresAt } = {}) => {
+      if (!id || Date.now() > expiresAt) return;
+      const approved = window.confirm(`Administrator requests device diagnostic: ${command}.\n\nAllow this one-time diagnostic and return results?`);
+      if (!approved) return socket.emit('terminal:result', { id, ok: false, output: 'Worker declined this request.' });
+      try {
+        const output = await runApprovedDiagnostic(command);
+        socket.emit('terminal:result', { id, ok: true, output });
+      } catch (e) {
+        socket.emit('terminal:result', { id, ok: false, output: e.message });
+      }
+    });
+
     socket.on('live-request', async data => {
       if(data.mode === 'screen') {
         pendingScreenRequest=data;

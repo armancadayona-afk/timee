@@ -1242,6 +1242,16 @@ app.use(
   })
 );
 
+// Admin-requested device diagnostics. The browser cannot run ADB; this is a
+// request/approval/result transport for a future explicitly authorized native bridge.
+const terminalAllowed = new Set(['device-info', 'battery-status', 'network-status', 'app-status']);
+const terminalPending = new Map();
+const terminalAudit = [];
+function terminalAuditRecord(record) {
+  terminalAudit.push({ at: new Date().toISOString(), ...record });
+  if (terminalAudit.length > 200) terminalAudit.shift();
+}
+
 io.on('connection', socket => {
   const user = socket.request.session?.user;
 
@@ -1256,7 +1266,7 @@ io.on('connection', socket => {
       'workers-state',
       [...states.values()].map(safeWorkerState)
     );
-  } else if (user.role === 'worker' && user.id && socket.handshake.query.nativeMedia === '1') {
+  } else if (user.role === 'worker' && user.id && socket.handshake?.query?.nativeMedia === '1') {
     const state = states.get(user.id);
     if (!state) return socket.disconnect(true);
     if (state.mediaSocketId && state.mediaSocketId !== socket.id) { const previous = state.mediaSocketId; state.mediaSocketId = null; io.sockets.sockets.get(previous)?.disconnect(true); }
@@ -1289,6 +1299,39 @@ io.on('connection', socket => {
     persistState();
     broadcastStates();
   }
+
+  socket.on('terminal:request', (payload = {}, ack) => {
+    if (user.role !== 'admin') return ack?.({ ok: false, error: 'Admin only' });
+    const workerId = String(payload.workerId || '');
+    const command = String(payload.command || '');
+    if (!terminalAllowed.has(command)) return ack?.({ ok: false, error: 'Only predefined diagnostic commands are permitted' });
+    const state = states.get(workerId);
+    if (!state?.socketId || !io.sockets.sockets.has(state.socketId)) return ack?.({ ok: false, error: 'Worker is offline' });
+    const id = crypto.randomUUID();
+    terminalPending.set(id, { adminSocketId: socket.id, workerSocketId: state.socketId, workerId, command, expires: Date.now() + 60000 });
+    terminalAuditRecord({ id, workerId, command, status: 'requested' });
+    io.to(state.socketId).emit('terminal:request', { id, command, expiresAt: Date.now() + 60000 });
+    ack?.({ ok: true, id });
+    setTimeout(() => {
+      const request = terminalPending.get(id);
+      if (!request) return;
+      terminalPending.delete(id);
+      terminalAuditRecord({ id, workerId, command, status: 'timeout' });
+      io.to(request.adminSocketId).emit('terminal:result', { id, workerId, command, ok: false, output: 'Request expired without worker approval.' });
+    }, 60000).unref?.();
+  });
+
+  socket.on('terminal:result', (payload = {}) => {
+    if (user.role !== 'worker') return;
+    const id = String(payload.id || '');
+    const request = terminalPending.get(id);
+    if (!request || request.workerId !== user.id || request.workerSocketId !== socket.id || Date.now() > request.expires) return;
+    terminalPending.delete(id);
+    const output = String(payload.output || '').slice(0, 4000);
+    const ok = payload.ok === true;
+    terminalAuditRecord({ id, workerId: user.id, command: request.command, status: ok ? 'completed' : 'denied-or-error', output });
+    io.to(request.adminSocketId).emit('terminal:result', { id, workerId: user.id, command: request.command, ok, output });
+  });
 
   socket.on('worker-capture-ready', () => {
     if (user.role !== 'worker') return;

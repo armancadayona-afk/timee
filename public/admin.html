@@ -166,6 +166,23 @@
       </div>
     </section>
 
+    <!-- Remote device diagnostics: approved per request by worker -->
+    <section class="card" style="margin-top:24px" id="terminalPanel">
+      <h2>🎀 Remote Device Terminal</h2>
+      <p class="muted">Admin-requested diagnostics only. Worker approval is required for each request. This web project cannot execute privileged ADB commands.</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end">
+        <label>Worker Device <select id="terminalWorker" style="min-width:160px"></select></label>
+        <label>Diagnostic Command <select id="terminalCommand" style="min-width:230px">
+          <option value="device-info">device-info — browser/device details</option>
+          <option value="battery-status">battery-status — battery API, if available</option>
+          <option value="network-status">network-status — connectivity</option>
+          <option value="app-status">app-status — worker page status</option>
+        </select></label>
+        <button type="button" class="btn" onclick="sendTerminalRequest()">Send Request</button>
+      </div>
+      <pre id="terminalOutput" aria-live="polite" style="background:#201721;color:#ffd7e9;border-radius:12px;padding:14px;white-space:pre-wrap;overflow:auto;max-height:300px;min-height:100px">Select an online worker and send a diagnostic request.</pre>
+    </section>
+
     <!-- Chat Section -->
     <section class="card" style="margin-top: 24px;">
       <h2>💬 Worker Chat 🎀</h2>
@@ -221,6 +238,29 @@
       if (r.status === 401 || r.status === 403) { location.href = '/'; throw Error('Sign in required'); }
       if (!r.ok) throw Error(d.error || `Request failed (${r.status})`);
       return d;
+    }
+
+    function terminalPrint(message) {
+      const el = document.getElementById('terminalOutput');
+      el.textContent += '\n' + String(message);
+      el.scrollTop = el.scrollHeight;
+    }
+    function syncTerminalWorkers() {
+      const select = document.getElementById('terminalWorker');
+      if (!select) return;
+      const chosen = select.value;
+      select.replaceChildren();
+      for (const w of workers) select.add(new Option(`${w.name} (${w.online ? 'online' : 'offline'})`, w.id));
+      if (workers.some(w => w.id === chosen)) select.value = chosen;
+    }
+    function sendTerminalRequest() {
+      const workerId = document.getElementById('terminalWorker').value;
+      const command = document.getElementById('terminalCommand').value;
+      if (!socket?.connected) return terminalPrint('Admin socket is disconnected.');
+      terminalPrint(`> ${workerId}: ${command} — requesting worker approval`);
+      socket.timeout(10000).emit('terminal:request', { workerId, command }, (error, response) => {
+        if (error || !response?.ok) terminalPrint('Error: ' + (response?.error || error?.message || 'No response'));
+      });
     }
 
     function fmt(ms) {
@@ -560,7 +600,7 @@
 
       const autoRequested = new Set();
       socket.on('workers-state', data => {
-        workers = data; update(); syncWorkerSelectors(); syncMonitorSelector();
+        workers = data; syncTerminalWorkers(); update(); syncWorkerSelectors(); syncMonitorSelector();
         for (const w of workers) {
           if (!w.online || !w.captureReady) { autoRequested.delete(w.id); continue; }
           if (w.liveMode === 'CAMERA' || w.liveMode === 'CAMERA_PENDING') continue;
@@ -630,6 +670,7 @@
       socket.on('task:returned', () => loadTasks());
       socket.on('task:updated', () => loadTasks());
       socket.on('chat:message', msg => { if (msg.workerId === activeChatWorkerId) loadChat(); });
+      socket.on('terminal:result', result => terminalPrint(`${result.ok ? 'SUCCESS' : 'DENIED / ERROR'} [${result.workerId}] ${result.command}\n${result.output}`));
       socket.on('devices:updated', async () => { await loadDevices(); });
 
       loadTasks();
