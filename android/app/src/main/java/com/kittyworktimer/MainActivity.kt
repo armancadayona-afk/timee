@@ -35,7 +35,8 @@ class MainActivity : Activity() {
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, false)
         webView.settings.javaScriptEnabled = true
         webView.settings.domStorageEnabled = true
-        webView.settings.mediaPlaybackRequiresUserGesture = true
+        // Allow remote WebRTC video/audio tracks to start after the user has logged in.
+        webView.settings.mediaPlaybackRequiresUserGesture = false
         webView.settings.allowFileAccess = false
         webView.settings.allowContentAccess = false
         webView.webViewClient = object : WebViewClient() {
