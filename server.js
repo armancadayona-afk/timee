@@ -550,6 +550,27 @@ app.post('/api/worker/stop', requireRole('worker'), (req, res) => {
   });
 });
 
+// Persistent administrator task list.
+const TASKS_FILE = path.join(DATA_DIR, 'admin-tasks.json');
+const adminTasks = readJson(TASKS_FILE, []);
+app.get('/api/admin/tasks', requireRole('admin'), (_req,res) => res.json({ok:true,tasks:adminTasks}));
+app.post('/api/admin/tasks', requireRole('admin'), (req,res) => {
+  const title = String(req.body?.title || '').trim().slice(0,160);
+  const description = String(req.body?.description || '').trim().slice(0,2000);
+  const workerId = String(req.body?.workerId || '');
+  if (!title) return res.status(400).json({error:'Title required'});
+  if (workerId && !states.has(workerId)) return res.status(400).json({error:'Unknown worker'});
+  const task = {id:crypto.randomUUID(),title,description,workerId,status:'open',createdAt:new Date().toISOString()};
+  adminTasks.unshift(task); fs.writeFileSync(TASKS_FILE,JSON.stringify(adminTasks,null,2));
+  res.json({ok:true,task});
+});
+app.post('/api/admin/tasks/status',requireRole('admin'),(req,res)=>{
+  const task=adminTasks.find(t=>t.id===req.body?.id);
+  if(!task || !['open','completed'].includes(req.body?.status)) return res.status(400).json({error:'Invalid task or status'});
+  task.status=req.body.status;task.updatedAt=new Date().toISOString();
+  fs.writeFileSync(TASKS_FILE,JSON.stringify(adminTasks,null,2));res.json({ok:true,task});
+});
+
 app.get('/api/workers', requireRole('admin'), (_req, res) => {
   res.json({
     ok: true,
@@ -743,6 +764,36 @@ io.on('connection', socket => {
     persistState();
     broadcastStates();
   }
+
+  // Allowlisted, authenticated diagnostics only. No remote shell or ADB execution.
+  const diagnosticCommands = new Set(['ping','status','info','time','uptime']);
+  const pendingDiagnostics = new Map();
+  socket.on('admin-device-command', ({workerId,command,requestId} = {}) => {
+    if(user.role !== 'admin') return;
+    if(typeof command !== 'string' || !diagnosticCommands.has(command) || typeof requestId !== 'string' || requestId.length>48) return;
+    const worker = states.get(workerId);
+    if(!worker?.online || !worker.socketId || !io.sockets.sockets.has(worker.socketId)) {
+      socket.emit('device-command-result',{workerId,command,requestId,ok:false,result:'Worker offline'});return;
+    }
+    const key=workerId+':'+requestId;
+    pendingDiagnostics.set(key,{workerSocketId:worker.socketId,command});
+    socket.data.pendingDiagnostics = pendingDiagnostics;
+    io.to(worker.socketId).emit('device-command',{command,requestId,adminSocketId:socket.id});
+    setTimeout(()=>{if(pendingDiagnostics.delete(key)) socket.emit('device-command-result',{workerId,command,requestId,ok:false,result:'No response from worker. Browser/APK client may not support diagnostics.'});},6500);
+  });
+  socket.on('device-command-reply', ({requestId,adminSocketId,command,result}={}) => {
+    if(user.role!=='worker' || !user.id || typeof requestId!=='string') return;
+    const admin = io.sockets.sockets.get(adminSocketId);
+    if(!admin || admin.request.session?.user?.role!=='admin') return;
+    const worker=states.get(user.id);
+    if(worker?.socketId!==socket.id || !diagnosticCommands.has(command)) return;
+    const origin=admin.data.pendingDiagnostics;
+    const pending=origin?.get(user.id+':'+requestId);
+    if(!pending || pending.workerSocketId!==socket.id || pending.command!==command) return;
+    origin.delete(user.id+':'+requestId);
+    // Only match responses to live pending admin requests.
+    admin.emit('device-command-result',{workerId:user.id,command,requestId,ok:true,result:String(result??'').slice(0,1800)});
+  });
 
   socket.on('worker-capture-ready', () => {
     if (user.role !== 'worker') return;

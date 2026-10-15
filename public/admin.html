@@ -40,13 +40,13 @@
       <!-- Left Sidebar Navigation -->
       <aside class="sidebar">
         <ul class="nav-list">
-          <li class="nav-item active">📊 <span>Dashboard</span></li>
-          <li class="nav-item">👥 <span>Workers</span></li>
-          <li class="nav-item">📋 <span>Tasks</span></li>
-          <li class="nav-item">📱 <span>Devices</span></li>
-          <li class="nav-item">💬 <span>Chat</span></li>
-          <li class="nav-item">📈 <span>Reports</span></li>
-          <li class="nav-item" id="btn-settings">⚙️ <span>Settings</span></li>
+          <li class="nav-item active" data-view="dashboard" role="button" tabindex="0">📊 <span>Dashboard</span></li>
+          <li class="nav-item" data-view="workers" role="button" tabindex="0">👥 <span>Workers</span></li>
+          <li class="nav-item" data-view="tasks" role="button" tabindex="0">📋 <span>Tasks</span></li>
+          <li class="nav-item" data-view="devices" role="button" tabindex="0">📱 <span>Devices</span></li>
+          <li class="nav-item" data-view="chat" role="button" tabindex="0">💬 <span>Chat</span></li>
+          <li class="nav-item" data-view="reports" role="button" tabindex="0">📈 <span>Reports</span></li>
+          <li class="nav-item" data-view="settings" role="button" tabindex="0">⚙️ <span>Settings</span></li>
           <li class="nav-item" id="btn-logout">🚪 <span>Log Out</span></li>
         </ul>
 
@@ -59,6 +59,7 @@
       <!-- Main Content Area -->
       <main class="content-area">
         <!-- Sub-bar Summary Controls -->
+        <div id="dashboard-view">
         <div class="sub-bar">
           <div class="active-workers-badge">
             👎 Active Workers <span id="active-workers-count">2 / 5</span>
@@ -164,14 +165,14 @@
               <h2>📋 Task Management</h2>
             </div>
             <div style="display:flex; gap:8px;">
-              <button class="btn-pink" style="flex:1; padding:6px; font-size:12px;">Assign New Task</button>
-              <button class="btn-outline" style="flex:1; padding:6px; font-size:12px;">Completed Tasks</button>
+              <button class="btn-pink" id="dashboard-new-task" style="flex:1; padding:6px; font-size:12px;">Assign New Task</button>
+              <button class="btn-outline" id="dashboard-completed" style="flex:1; padding:6px; font-size:12px;">Completed Tasks</button>
             </div>
 
             <div style="display:flex; flex-direction:column; gap:8px; font-size:12px;">
-              <input type="text" placeholder="Task Title *" style="padding:8px 10px; border:1px solid var(--border); border-radius:10px;">
-              <textarea placeholder="Describe the task in detail..." style="padding:8px 10px; border:1px solid var(--border); border-radius:10px; height:50px; resize:none;"></textarea>
-              <button class="btn-pink">🚀 Assign Task</button>
+              <input id="dashboard-task-title" type="text" placeholder="Task Title *" style="padding:8px 10px; border:1px solid var(--border); border-radius:10px;">
+              <textarea id="dashboard-task-desc" placeholder="Describe the task in detail..." style="padding:8px 10px; border:1px solid var(--border); border-radius:10px; height:50px; resize:none;"></textarea>
+              <button class="btn-pink" id="dashboard-create-task">🚀 Assign Task</button>
             </div>
 
             <div style="border-top:1px solid var(--border-soft); padding-top:10px;">
@@ -199,11 +200,9 @@
               <h2>>_ Remote Device Terminal</h2>
             </div>
             <div class="terminal-box" id="terminal-screen">
-              <div>> Connecting to Worker Device...</div>
-              <div>> Device online. System Ready.</div>
-              <div>> Type a command or select from the menu.</div>
-              <div style="margin-top:10px; color:#A7F3D0;">C:\> _</div>
+              <div>Remote worker diagnostics. Enter help for supported commands.</div>
             </div>
+            <div class="terminal-entry"><input id="terminal-command" placeholder="help, ping, status, info, time, uptime" autocomplete="off"></div>
             <div style="display:flex; gap:8px;">
               <button class="btn-pink" style="flex:1;" id="btn-send-cmd">➢ Send Command</button>
               <button class="btn-outline" id="btn-clear-term">🗑 Clear</button>
@@ -230,6 +229,11 @@
             </div>
           </section>
         </div>
+        </div>
+        <section id="secondary-view" class="pink-card" style="display:none;min-height:65vh">
+          <div class="card-header"><h2 id="view-heading"></h2><button class="btn-outline" id="back-dashboard">← Dashboard</button></div>
+          <div id="view-content"></div>
+        </section>
       </main>
     </div>
   </div>
@@ -242,6 +246,7 @@
     let iceServers = [];
     let audioEnabled = false;
     let selectedWorkerId = null;
+    let lastChatWorker = null;
     let chatHistoryMap = new Map(); // workerId -> array of messages
     const peers = new Map();
     const requested = new Map();
@@ -376,13 +381,15 @@
 
       selectedWorkerId = workerSelect.value;
       updateSelectedWorkerDetails();
+      if (currentView !== "dashboard") renderView();
     }
 
     function updateSelectedWorkerDetails() {
       const worker = workers.find(w => w.id === selectedWorkerId);
       if (!worker) return;
 
-      document.getElementById('cam-worker-name').textContent = worker.name;
+      const cameraName = document.getElementById('cam-worker-name');
+      if (cameraName) cameraName.textContent = worker.name;
       document.getElementById('worker-status-text').textContent = worker.status + (worker.online ? ' • CONNECTED' : ' • OFFLINE');
 
       // Update Timer & Earnings
@@ -405,10 +412,63 @@
 
       // Update chat worker badge & chat history
       document.getElementById('chat-worker-badge').textContent = `Chat with ${worker.name}`;
-      loadChatHistory(worker.id);
+      if (socket?.connected && lastChatWorker !== worker.id) { lastChatWorker = worker.id; loadChatHistory(worker.id); }
       renderChatForWorker(worker.id);
     }
 
+    // Functional sidebar panels. Camera controls and WebRTC signaling are unchanged.
+    let currentView = 'dashboard';
+    function showView(view) {
+      currentView = view;
+      document.getElementById('dashboard-view').style.display = view === 'dashboard' ? '' : 'none';
+      document.getElementById('secondary-view').style.display = view === 'dashboard' ? 'none' : '';
+      document.querySelectorAll('[data-view]').forEach(el => el.classList.toggle('active', el.dataset.view === view));
+      renderView();
+    }
+    document.querySelectorAll('[data-view]').forEach(el => {
+      el.onclick = () => showView(el.dataset.view);
+      el.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showView(el.dataset.view); } };
+    });
+    document.getElementById('back-dashboard').onclick = () => showView('dashboard');
+    function workerPicker(id='panel-worker') {
+      return `<select class="custom-select" id="${id}">${workers.map(w=>`<option value="${escapeHtml(w.id)}" ${w.id===selectedWorkerId?'selected':''}>${escapeHtml(w.name)} — ${w.online?'Online':'Offline'}</option>`).join('')}</select>`;
+    }
+    function renderView() {
+      if (currentView === 'dashboard') return;
+      const headings = {workers:'👥 Workers',tasks:'📋 Tasks',devices:'📱 Devices & Terminal',chat:'💬 Worker Chat',reports:'📈 Reports',settings:'⚙️ Settings'};
+      document.getElementById('view-heading').textContent = headings[currentView] || currentView;
+      const content = document.getElementById('view-content');
+      if(currentView === 'workers') {
+        content.innerHTML = `<div class="view-cards">${workers.map(w=>`<div class="view-tile"><strong>${escapeHtml(w.name)}</strong><p>${w.online?'🟢 Online':'⚪ Offline'} · ${escapeHtml(w.status)}</p><p>Time: ${fmt((w.accumulatedMs||0)+(w.status==='WORKING'&&w.startedAt?Date.now()-w.startedAt:0))}</p><button class="btn-outline" data-worker="${escapeHtml(w.id)}">Select worker</button></div>`).join('')}</div>`;
+        content.querySelectorAll('[data-worker]').forEach(b=>b.onclick=()=>{selectedWorkerId=b.dataset.worker;document.getElementById('worker-select').value=selectedWorkerId;document.getElementById('control-worker-select').value=selectedWorkerId;showView('dashboard');updateSelectedWorkerDetails();});
+      } else if (currentView === 'tasks') {
+        content.innerHTML = `<form id="task-form" class="view-form"><input name="title" required maxlength="160" placeholder="Task title"><textarea name="description" placeholder="Task details" maxlength="2000"></textarea><select name="workerId"><option value="">Open to everyone</option>${workers.map(w=>`<option value="${escapeHtml(w.id)}">${escapeHtml(w.name)}</option>`).join('')}</select><button class="btn-pink" type="submit">Create task</button></form><p id="tasks-notice"></p><div id="tasks-table">Loading tasks…</div>`;
+        content.querySelector('#task-form').onsubmit=async e=>{e.preventDefault();const data=Object.fromEntries(new FormData(e.target));try{await api('/api/admin/tasks',data);renderView()}catch(err){content.querySelector('#tasks-notice').textContent=err.message;}};
+        api('/api/admin/tasks').then(d=>{if(currentView!=='tasks')return;document.getElementById('tasks-table').innerHTML=d.tasks.length?d.tasks.map(t=>`<div class="view-tile"><strong>${escapeHtml(t.title)}</strong> · ${escapeHtml(t.status)}<p>${escapeHtml(t.description||'')}<br>Assigned: ${escapeHtml(workers.find(w=>w.id===t.workerId)?.name||'Everyone')}</p><button class="btn-outline" data-task="${escapeHtml(t.id)}">${t.status==='completed'?'Reopen':'Mark completed'}</button></div>`).join(''):'No tasks yet.';document.querySelectorAll('[data-task]').forEach(b=>b.onclick=async()=>{const t=d.tasks.find(t=>t.id===b.dataset.task);await api('/api/admin/tasks/status',{id:t.id,status:t.status==='completed'?'open':'completed'});renderView()})}).catch(err=>{document.getElementById('tasks-table').textContent=err.message});
+      } else if (currentView === 'devices') {
+        content.innerHTML = `<div class="view-form">${workerPicker()}<p>Select a worker, then run a supported command in the dashboard terminal. Commands query the actual connected worker browser, not an Android shell.</p><button class="btn-pink" id="open-terminal">Open terminal</button></div>`;
+        content.querySelector('#open-terminal').onclick=()=>{selectedWorkerId=content.querySelector('#panel-worker').value;document.getElementById('worker-select').value=selectedWorkerId;document.getElementById('control-worker-select').value=selectedWorkerId;showView('dashboard');document.getElementById('terminal-command').focus();};
+      } else if (currentView === 'chat') {
+        content.innerHTML = `<div class="view-form">${workerPicker()}<button class="btn-pink" id="open-chat">Open selected worker chat</button></div>`;
+        content.querySelector('#open-chat').onclick=()=>{selectedWorkerId=content.querySelector('#panel-worker').value;document.getElementById('worker-select').value=selectedWorkerId;showView('dashboard');loadChatHistory(selectedWorkerId);document.getElementById('chat-text-input').focus()};
+      } else if (currentView === 'reports') {
+        content.innerHTML=`<div class="view-form">${workerPicker()}<button class="btn-pink" id="load-reports">Load work sessions</button><button class="btn-outline" id="export-reports">Export CSV</button></div><div id="report-results">Choose a worker to view recorded sessions.</div>`;
+        let reportRows=[];
+        content.querySelector('#load-reports').onclick=async()=>{try{const d=await api('/api/work-sessions/'+encodeURIComponent(content.querySelector('#panel-worker').value));reportRows=d.sessions;content.querySelector('#report-results').innerHTML=reportRows.length?reportRows.map(r=>`<div class="view-tile">${escapeHtml(JSON.stringify(r))}</div>`).join(''):'No sessions for this worker.'}catch(e){content.querySelector('#report-results').textContent=e.message}};
+        content.querySelector('#export-reports').onclick=()=>{if(!reportRows.length){content.querySelector('#load-reports').click();return}const keys=[...new Set(reportRows.flatMap(Object.keys))];const csv=[keys,...reportRows.map(r=>keys.map(k=>r[k]??''))].map(row=>row.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(',')).join('\r\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='worker-sessions.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)};
+      } else if (currentView === 'settings') {
+        content.innerHTML=`<form id="settings-form" class="view-form"><label><input type="checkbox" id="compact-mode" ${localStorage.getItem('kitty-compact')==='1'?'checked':''}> Compact dashboard cards</label><label><input type="checkbox" id="confirm-stop" ${localStorage.getItem('kitty-confirm-stop')!=='0'?'checked':''}> Confirm before stopping a worker timer</label><button class="btn-pink" type="submit">Save preferences</button></form><p>Settings on this page are saved locally in this browser.</p>`;
+        content.querySelector('form').onsubmit=e=>{e.preventDefault();localStorage.setItem('kitty-compact',document.getElementById('compact-mode').checked?'1':'0');localStorage.setItem('kitty-confirm-stop',document.getElementById('confirm-stop').checked?'1':'0');document.body.classList.toggle('compact',document.getElementById('compact-mode').checked);alert('Preferences saved')};
+      }
+    }
+    document.body.classList.toggle('compact',localStorage.getItem('kitty-compact')==='1');
+    document.getElementById('dashboard-new-task').onclick=()=>document.getElementById('dashboard-task-title').focus();
+    document.getElementById('dashboard-completed').onclick=()=>showView('tasks');
+    document.getElementById('dashboard-create-task').onclick=async()=>{
+      const title=document.getElementById('dashboard-task-title').value.trim();
+      if(!title){alert('Enter a task title');return;}
+      try{await api('/api/admin/tasks',{title,description:document.getElementById('dashboard-task-desc').value,workerId:selectedWorkerId||''});document.getElementById('dashboard-task-title').value='';document.getElementById('dashboard-task-desc').value='';showView('tasks')}catch(err){alert(err.message)}
+    };
     // Event Listeners
     document.getElementById('worker-select').addEventListener('change', (e) => {
       selectedWorkerId = e.target.value;
@@ -453,6 +513,7 @@
 
     document.getElementById('btn-timer-stop').onclick = () => {
       if (!selectedWorkerId) return;
+      if(localStorage.getItem('kitty-confirm-stop') !== '0' && !confirm('Stop the selected worker timer?')) return;
       socket.emit('admin-timer-control', { workerId: selectedWorkerId, action: 'stop' });
     };
 
@@ -463,6 +524,12 @@
       document.getElementById('btn-mute').textContent = audioEnabled ? '🔊 Unmuted' : '🎙 Mute Audio';
     };
 
+    let nextTerminalId = 0;
+    function termLine(message) { const screen=document.getElementById('terminal-screen'); const el=document.createElement('div');el.textContent=message;screen.appendChild(el);screen.scrollTop=screen.scrollHeight; }
+    document.getElementById('btn-clear-term').onclick=()=>document.getElementById('terminal-screen').replaceChildren();
+    function runTerminal(){const input=document.getElementById('terminal-command');const command=input.value.trim().toLowerCase();input.value='';if(!command)return;termLine('> '+command);if(command==='clear'){document.getElementById('btn-clear-term').click();return;}if(command==='help'){termLine('Commands: help, clear, status, ping, info, time, uptime. No arbitrary shell/ADB access.');return;}if(!['status','ping','info','time','uptime'].includes(command)){termLine('Unsupported command. Type help.');return;}const worker=workers.find(w=>w.id===selectedWorkerId);if(!worker?.online){termLine('Worker is offline. No command sent.');return;}if(!socket?.connected){termLine('Not connected to server.');return;}socket.emit('admin-device-command',{workerId:selectedWorkerId,command,requestId:String(++nextTerminalId)});termLine('Request sent to '+worker.name+'…');}
+    document.getElementById('btn-send-cmd').onclick=runTerminal;
+    document.getElementById('terminal-command').onkeydown=e=>{if(e.key==='Enter')runTerminal()};
     document.getElementById('btn-logout').onclick = async () => {
       await api('/api/logout', {});
       location.href = '/';
@@ -497,6 +564,7 @@
         requested.clear();
       });
 
+      socket.on('device-command-result', p => { termLine((p.ok?'✓ ':'✗ ')+p.command+': '+(typeof p.result==='string'?p.result:JSON.stringify(p.result))); });
       socket.on('workers-state', data => {
         workers = data;
         updateUI();

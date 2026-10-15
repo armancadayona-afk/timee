@@ -555,3 +555,11 @@ table.kitty-table td {
   .sidebar { width: 70px; padding: 16px 8px; }
   .nav-item span { display: none; }
 }
+/* Working admin sidebar views and diagnostics input */
+.nav-item{cursor:pointer}.nav-item:focus-visible{outline:2px solid #ff2862;outline-offset:2px}
+.view-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.view-tile{border:1px solid #ffc4d6;padding:14px;border-radius:12px;margin:8px 0;background:#fffafb;overflow-wrap:anywhere}
+.view-form{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin:15px 0}
+.view-form input:not([type=checkbox]),.view-form textarea,.view-form select,.terminal-entry input{border:1px solid #ffbfd0;background:#fff;border-radius:10px;padding:10px;min-width:180px;max-width:100%}
+.view-form textarea{min-width:250px}.terminal-entry input{width:100%;background:#111d38;color:#b5e9fc;font-family:monospace;margin:8px 0}
+.compact .pink-card{padding:12px}.compact .grid-3col{gap:10px}
