@@ -577,7 +577,6 @@
         button.textContent='🖥️ Approve Device Screen Sharing';
         return;
       }
-      if(navigator.userAgent.includes('KittyNativeApp')) return;
       if(data.mode !== 'camera') {
         socket.emit('worker-live-error',{workerId:currentWorker.id,adminSocketId:data.adminSocketId,mode:data.mode,message:'Only camera streaming is supported in this worker build.'});
         return;
@@ -646,8 +645,8 @@
         if($('accountName'))$('accountName').textContent=currentWorker.username||currentWorker.name||'Worker'; if($('infoUsername'))$('infoUsername').textContent=currentWorker.username||'—'; if($('welcomeTitle'))$('welcomeTitle').textContent='Welcome back, '+(currentWorker.username||currentWorker.name||'Worker')+'!';
         await refreshState();await refreshTasks();await refreshEarnings();socket.connect();
         // Request user-authorized capture on app launch; Android permission prompts still appear.
-        // Native Android flavor streams through NativeCameraService; web browser retains WebRTC fallback.
-        if (!/Android/.test(navigator.userAgent) || !navigator.userAgent.includes("KittyNativeApp")) initCamera();
+        // Camera capture and WebRTC signaling run in the existing page for Android WebView and browsers.
+        // Native Android screen sharing is handled separately by the Android MediaProjection bridge.
         setInterval(()=>{if(socket.connected)socket.emit('worker-heartbeat');},15000);
         setInterval(draw,500);setInterval(()=>{refreshTasks().catch(()=>{});refreshEarnings().catch(()=>{});},20000);
       }catch(e){$('status').textContent='Please sign in to assigned Worker account. '+e.message;$('timerBtn').disabled=true;}
