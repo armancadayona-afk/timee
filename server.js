@@ -578,6 +578,42 @@ app.get('/api/work-sessions/:workerId', requireRole('admin'), (req, res) => {
   });
 });
 
+const chatMessages = [];
+
+app.get('/api/chat/:workerId', requireAuth, (req, res) => {
+  const targetWorkerId = req.session.user.role === 'worker' ? req.session.user.id : req.params.workerId;
+  const history = chatMessages.filter(m => m.workerId === targetWorkerId);
+  res.json({ ok: true, messages: history });
+});
+
+app.post('/api/chat/send', requireAuth, (req, res) => {
+  const { workerId, text } = req.body || {};
+  const messageText = String(text || '').trim();
+  if (!messageText) return res.status(400).json({ ok: false, error: 'Message cannot be empty' });
+
+  const targetWorkerId = req.session.user.role === 'worker' ? req.session.user.id : workerId;
+  if (!targetWorkerId) return res.status(400).json({ ok: false, error: 'Target worker required' });
+
+  const msg = {
+    id: crypto.randomUUID(),
+    workerId: targetWorkerId,
+    senderRole: req.session.user.role,
+    senderName: req.session.user.name || req.session.user.username,
+    text: messageText,
+    timestamp: Date.now()
+  };
+
+  chatMessages.push(msg);
+
+  io.to('admins').emit('chat-message', msg);
+  const workerState = states.get(targetWorkerId);
+  if (workerState && workerState.socketId) {
+    io.to(workerState.socketId).emit('chat-message', msg);
+  }
+
+  res.json({ ok: true, message: msg });
+});
+
 app.post('/api/admin/worker/timer', requireRole('admin'), (req, res) => {
   const { workerId, action } = req.body || {};
   const state = states.get(workerId);
@@ -1236,6 +1272,37 @@ io.on('connection', socket => {
       });
     }
   );
+
+  socket.on('send-chat-message', ({ workerId, text } = {}) => {
+    const messageText = String(text || '').trim();
+    if (!messageText) return;
+
+    const targetWorkerId = user.role === 'worker' ? user.id : workerId;
+    if (!targetWorkerId) return;
+
+    const msg = {
+      id: crypto.randomUUID(),
+      workerId: targetWorkerId,
+      senderRole: user.role,
+      senderName: user.name || user.username,
+      text: messageText,
+      timestamp: Date.now()
+    };
+
+    chatMessages.push(msg);
+
+    io.to('admins').emit('chat-message', msg);
+    const workerState = states.get(targetWorkerId);
+    if (workerState && workerState.socketId) {
+      io.to(workerState.socketId).emit('chat-message', msg);
+    }
+  });
+
+  socket.on('get-chat-history', ({ workerId } = {}) => {
+    const targetWorkerId = user.role === 'worker' ? user.id : workerId;
+    const history = chatMessages.filter(m => m.workerId === targetWorkerId);
+    socket.emit('chat-history', { workerId: targetWorkerId, messages: history });
+  });
 
   socket.on('disconnect', () => {
     if (user.role === 'worker' && user.id) {
