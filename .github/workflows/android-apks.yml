@@ -28,13 +28,9 @@ jobs:
       - name: Build debug APK
         working-directory: android
         env:
-          SERVER_BASE_URL: ${{ vars.SERVER_BASE_URL }}
+          SERVER_BASE_URL: ${{ vars.SERVER_BASE_URL || 'https://worker-timer-monitor-yqg3.onrender.com' }}
         run: |
-          if [ -z "$SERVER_BASE_URL" ]; then
-            gradle "assemble${{ matrix.flavor }}Debug"
-          else
-            gradle "assemble${{ matrix.flavor }}Debug" -PserverBaseUrl="$SERVER_BASE_URL"
-          fi
+          gradle "assemble${{ matrix.flavor }}Debug" -PserverBaseUrl="$SERVER_BASE_URL"
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
