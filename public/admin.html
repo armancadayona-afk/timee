@@ -125,18 +125,100 @@
     @media(max-width:1100px) { .wrap { grid-template-columns:repeat(2,minmax(0,1fr)); } .monitor-shell,.wrap > #message { grid-column:1/-1; } #workers>article { grid-template-columns:1fr 1fr; } .monitor-controls { grid-column:1/-1; } .wrap > .card:has(#taskForm) { grid-column:1/-1; } .wrap > .card:has(#adminChatContainer) { grid-column:1/-1; } }
     @media(max-width:700px) { .wrap { grid-template-columns:1fr; padding:10px; gap:10px; } .kitty-header { position:static; padding:12px; } .kitty-header h1 { font-size:18px; } .wrap > .card,.monitor-shell { grid-column:1!important; padding:12px!important; } #workers>article { grid-template-columns:1fr; } .camera-panel video { height:220px; } .wrap > .card:has(#taskForm)>div { grid-template-columns:1fr!important; } #adminChatContainer { height:280px!important; } }
 
+  
+
+    /* Admin dashboard redesign v2: real full-width workspace and navigation. */
+    .wrap {
+      width:100%; max-width:none; margin:0; padding:16px 20px 28px;
+      display:grid; grid-template-columns:220px repeat(3,minmax(0,1fr));
+      grid-auto-flow:row; gap:16px; align-items:start;
+    }
+    .admin-sidebar {
+      grid-column:1; grid-row:1 / span 8; align-self:stretch; min-height:calc(100vh - 32px);
+      position:sticky; top:16px; display:flex; flex-direction:column; gap:24px;
+      padding:18px 12px; border:1px solid var(--dash-line); border-radius:18px;
+      background:rgba(255,255,255,.96); box-shadow:0 5px 20px #a92b5910;
+    }
+    .sidebar-brand {display:flex; align-items:center; gap:10px; padding:6px 8px 18px; border-bottom:1px solid #ffe2ec;}
+    .sidebar-kitty {display:grid;place-items:center;width:42px;height:42px;border-radius:14px;background:#ffe6ef;color:#e91e63;font-size:23px;}
+    .sidebar-brand strong {display:block;color:#e91e63;font-family:'Fredoka',sans-serif;font-size:16px;}
+    .sidebar-brand small {display:block;color:var(--dash-muted);font-size:11px;margin-top:2px;}
+    .admin-sidebar nav {display:grid;gap:7px;}
+    .admin-sidebar nav a {display:flex;align-items:center;gap:12px;padding:12px 13px;border-radius:11px;color:#5e5268;font-weight:800;font-size:13px;transition:background .15s,color .15s;}
+    .admin-sidebar nav a span {width:20px;text-align:center;color:#ed3675;font-size:19px;font-weight:900;}
+    .admin-sidebar nav a:hover,.admin-sidebar nav a.active {background:linear-gradient(110deg,#f02f70,#f84c88);color:#fff;box-shadow:0 5px 12px #f02f7026;}
+    .admin-sidebar nav a:hover span,.admin-sidebar nav a.active span {color:#fff;}
+    .sidebar-note {margin-top:auto;padding:16px 8px 10px;text-align:center;color:#e63372;font-size:13px;line-height:1.6;background:#fff5f9;border-radius:14px;}
+    .sidebar-cat {font-size:38px;line-height:1.4;} .sidebar-note strong {font-family:'Fredoka',sans-serif;} .sidebar-note span {display:block;font-size:20px;margin-top:6px;}
+    .kitty-header {grid-column:2/-1;grid-row:auto;position:relative;top:auto;padding:15px 22px;min-height:70px;}
+    .kitty-header h1 {font-size:clamp(22px,2vw,30px);}
+    .wrap > #message {grid-column:2/-1;margin:0!important;min-height:16px;}
+    .monitor-shell {grid-column:2/-1; padding:18px!important;}
+    .monitor-shell .section-head {margin-bottom:16px;}
+    .section-head h2,.wrap > .card h2 {font-size:18px;}
+    .section-head select {min-width:190px;}
+    #workers > article {grid-template-columns:minmax(0,1.12fr) minmax(0,1fr) minmax(0,.95fr);gap:14px;}
+    .camera-panel,.timer-panel,.monitor-controls {padding:16px;}
+    .camera-panel video {height:clamp(180px,16vw,260px);object-fit:contain;}
+    #workers h3 {font-size:15px;}
+    .timer-panel .timer {font-size:clamp(38px,3.2vw,58px);margin:20px 0 10px;}
+    .timer-panel .controls-group {gap:8px;}
+    .monitor-controls .controls-group {gap:8px;}
+    .task-management {grid-column:2/span 2;min-width:0;}
+    .task-management > div {grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:14px!important;}
+    .task-management > div > div:nth-child(3) {grid-column:1/-1;}
+    #adminTaskList {grid-template-columns:repeat(2,minmax(0,1fr));max-height:none!important;}
+    .worker-chat {grid-column:4;min-width:0;}
+    #adminChatContainer {height:440px!important;min-height:300px;}
+    #adminChatForm input {min-width:0;}
+    .wrap > .card {overflow:hidden;}
+    .wrap > .card:has(#taskForm) {grid-column:2/span 2;}
+    .wrap > .card:has(#adminChatContainer) {grid-column:4;}
+    @media (max-width:1250px) {
+      .wrap {grid-template-columns:190px repeat(2,minmax(0,1fr));gap:12px;padding:12px;}
+      .admin-sidebar {grid-row:1/span 10;} .kitty-header,.wrap > #message,.monitor-shell {grid-column:2/-1;}
+      .task-management,.wrap > .card:has(#taskForm) {grid-column:2/-1;}
+      .worker-chat,.wrap > .card:has(#adminChatContainer) {grid-column:2/-1;}
+      #workers > article {grid-template-columns:repeat(2,minmax(0,1fr));}
+      .monitor-controls {grid-column:1/-1;} .camera-panel video {height:220px;}
+      #adminChatContainer {height:320px!important;}
+    }
+    @media (max-width:760px) {
+      .wrap {display:flex;flex-direction:column;padding:10px;gap:10px;}
+      .admin-sidebar {position:static;min-height:0;width:100%;padding:10px;gap:10px;}
+      .sidebar-brand {padding-bottom:10px;} .admin-sidebar nav {display:flex;overflow-x:auto;gap:6px;}
+      .admin-sidebar nav a {flex:0 0 auto;padding:9px 11px;font-size:12px;}
+      .sidebar-note {display:none;} .kitty-header {width:100%;padding:12px;min-height:0;}
+      .kitty-header h1 {font-size:19px;} .wrap > #message,.monitor-shell,.task-management,.worker-chat,.wrap > .card:has(#taskForm),.wrap > .card:has(#adminChatContainer) {width:100%;}
+      #workers > article {grid-template-columns:minmax(0,1fr);}
+      .camera-panel video {height:230px;} .monitor-controls {grid-column:auto;}
+      .task-management > div {grid-template-columns:minmax(0,1fr)!important;}
+      .task-management > div > div:nth-child(3) {grid-column:auto;}
+      #adminTaskList {grid-template-columns:1fr;} #adminChatContainer {height:300px!important;}
+    }
+
   </style>
 </head>
 <body>
   <main class="wrap">
-    <header class="kitty-header"><h1>🎀 Hello Kitty Admin Console 💗</h1><button class="btn secondary" id="logoutTop">Log Out →</button></header>
+    <aside class="admin-sidebar" aria-label="Admin navigation">
+      <div class="sidebar-brand"><span class="sidebar-kitty">🎀</span><div><strong>Kitty Timer</strong><small>Admin Workspace</small></div></div>
+      <nav>
+        <a class="active" href="#adminTop"><span>⌂</span> Dashboard</a>
+        <a href="#monitorSection"><span>▣</span> Worker Monitoring</a>
+        <a href="#taskManagement"><span>☷</span> Task Management</a>
+        <a href="#workerChat"><span>▤</span> Worker Chat</a>
+      </nav>
+      <div class="sidebar-note"><div class="sidebar-cat">♡</div><strong>Small steps</strong><br>make big progress!<span>♥</span></div>
+    </aside>
+    <header class="kitty-header" id="adminTop"><h1>🎀 Hello Kitty Admin Console 💗</h1><button class="btn secondary" id="logoutTop">Log Out →</button></header>
     
     <div class="tools" style="display:none"><button class="btn secondary" id="logout">Log Out</button></div>
     <p id="message" class="muted">Connecting…</p>
     
-    <section class="card monitor-shell"><div class="section-head"><h2>🖥️ Monitor Worker Feed 🎀</h2><label>Select Worker: <select id="monitorWorkerSelect" aria-label="Select worker to monitor"></select></label></div><section id="workers" class="grid"></section></section>
+    <section class="card monitor-shell" id="monitorSection"><div class="section-head"><h2>🖥️ Monitor Worker Feed 🎀</h2><label>Select Worker: <select id="monitorWorkerSelect" aria-label="Select worker to monitor"></select></label></div><section id="workers" class="grid"></section></section>
 <!-- Tasks Management Section -->
-    <section class="card" style="margin-top: 24px;">
+    <section class="card task-management" id="taskManagement" style="margin-top: 24px;">
       <h2>Tasks &amp; Assign Console 📋 🎀</h2>
       <p class="muted" style="margin-bottom: 16px;">Assign and review worker tasks in real-time.</p>
 
@@ -200,7 +282,7 @@
     </section>
 
     <!-- Chat Section -->
-    <section class="card" style="margin-top: 24px;">
+    <section class="card worker-chat" id="workerChat" style="margin-top: 24px;">
       <h2>💬 Worker Chat 🎀</h2>
   
 
