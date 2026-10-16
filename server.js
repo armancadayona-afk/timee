@@ -79,28 +79,28 @@ const users = [
   },
   {
     role: 'worker',
-    id: process.env.WORKER1_USERNAME || 'john',
+    id: 'worker1',
     username: process.env.WORKER1_USERNAME || 'john',
     password: process.env.WORKER1_PASSWORD || 'john123',
     name: process.env.WORKER1_USER || process.env.WORKER1_NAME || 'John'
   },
   {
     role: 'worker',
-    id: process.env.WORKER2_USERNAME || 'mark',
+    id: 'worker2',
     username: process.env.WORKER2_USERNAME || 'mark',
     password: process.env.WORKER2_PASSWORD || 'mark123',
     name: process.env.WORKER2_USER || process.env.WORKER2_NAME || 'Mark'
   },
   {
     role: 'worker',
-    id: process.env.WORKER3_USERNAME || 'anne',
+    id: 'worker3',
     username: process.env.WORKER3_USERNAME || 'anne',
     password: process.env.WORKER3_PASSWORD || 'anne123',
     name: process.env.WORKER3_USER || process.env.WORKER3_NAME || 'Anne'
   },
   {
     role: 'worker',
-    id: process.env.WORKER4_USERNAME || 'thing',
+    id: 'worker4',
     username: process.env.WORKER4_USERNAME || 'thing',
     password: process.env.WORKER4_PASSWORD || 'thing123',
     name: process.env.WORKER4_USER || process.env.WORKER4_NAME || 'Thing'
@@ -740,9 +740,6 @@ app.post('/api/chat/send', requireAuth, (req, res) => {
   if (workerState && workerState.socketId) {
     io.to(workerState.socketId).emit('chat-message', msg);
   }
-
-  res.json({ ok: true, message: msg });
-});
 
   res.json({ ok: true, message: msg });
 });
