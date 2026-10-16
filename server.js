@@ -564,23 +564,7 @@ app.post('/api/worker/stop', requireRole('worker'), (req, res) => {
 const TASKS_FILE = path.join(DATA_DIR, 'admin-tasks.json');
 const adminTasks = readJson(TASKS_FILE, []);
 app.get('/api/worker/tasks', requireRole('worker'), (req,res) => {
-  const wid = req.session.user.id;
-  const userSessions = workSessions.filter(s => s.workerId === wid);
-  const totalMs = userSessions.reduce((sum, s) => sum + (Number(s.durationMs) || 0), 0);
-  const totalHours = (totalMs / 3600000).toFixed(1);
-  const workDays = new Set(userSessions.map(s => new Date(s.startedAt).toDateString())).size;
-  const completedTasks = adminTasks.filter(t => (t.workerId === wid || t.assignedWorkerId === wid) && ['submitted', 'completed'].includes(t.status)).length;
-
-  res.json({
-    ok: true,
-    tasks: adminTasks.filter(t => !t.workerId || t.workerId === wid),
-    stats: {
-      totalMs,
-      totalHours,
-      workDays,
-      completedTasks
-    }
-  });
+  res.json({ok:true,tasks:adminTasks.filter(t => !t.workerId || t.workerId === req.session.user.id)});
 });
 app.post('/api/worker/tasks/:id/submit', requireRole('worker'), (req,res) => {
   const task=adminTasks.find(t=>t.id===req.params.id && (!t.workerId || t.workerId===req.session.user.id));
@@ -590,7 +574,7 @@ app.post('/api/worker/tasks/:id/submit', requireRole('worker'), (req,res) => {
   if(task.assignedWorkerId && task.assignedWorkerId!==req.session.user.id) return res.status(409).json({error:'Task claimed by another worker'});
   task.assignedWorkerId=req.session.user.id;task.status='submitted';task.submittedAt=new Date().toISOString();
   fs.writeFileSync(TASKS_FILE,JSON.stringify(adminTasks,null,2));
-  io.emit('tasks-updated');res.json({ok:true,task});
+  io.to('admins').emit('tasks-updated');res.json({ok:true,task});
 });
 app.post('/api/worker/tasks/:id/accept', requireRole('worker'), (req,res) => {
   const task=adminTasks.find(t=>t.id===req.params.id && (!t.workerId || t.workerId===req.session.user.id));
@@ -599,7 +583,7 @@ app.post('/api/worker/tasks/:id/accept', requireRole('worker'), (req,res) => {
   if(adminTasks.some(t=>t.assignedWorkerId===req.session.user.id && t.status==='in_progress')) return res.status(409).json({error:'Submit your current task first'});
   task.assignedWorkerId=req.session.user.id;task.status='in_progress';task.acceptedAt=new Date().toISOString();
   fs.writeFileSync(TASKS_FILE,JSON.stringify(adminTasks,null,2));
-  io.emit('tasks-updated');res.json({ok:true,task});
+  io.to('admins').emit('tasks-updated');res.json({ok:true,task});
 });
 // Update only the public display name. Login username, worker ID, and records never change.
 app.post('/api/admin/workers/:id/display-name', requireRole('admin'), (req, res) => {
@@ -623,16 +607,13 @@ app.post('/api/admin/tasks', requireRole('admin'), (req,res) => {
   if (workerId && !states.has(workerId)) return res.status(400).json({error:'Unknown worker'});
   const task = {id:crypto.randomUUID(),title,description,workerId,status:'open',createdAt:new Date().toISOString()};
   adminTasks.unshift(task); fs.writeFileSync(TASKS_FILE,JSON.stringify(adminTasks,null,2));
-  io.emit('tasks-updated');
   res.json({ok:true,task});
 });
 app.post('/api/admin/tasks/status',requireRole('admin'),(req,res)=>{
   const task=adminTasks.find(t=>t.id===req.body?.id);
   if(!task || !['open','completed'].includes(req.body?.status)) return res.status(400).json({error:'Invalid task or status'});
   task.status=req.body.status;task.updatedAt=new Date().toISOString();
-  fs.writeFileSync(TASKS_FILE,JSON.stringify(adminTasks,null,2));
-  io.emit('tasks-updated');
-  res.json({ok:true,task});
+  fs.writeFileSync(TASKS_FILE,JSON.stringify(adminTasks,null,2));res.json({ok:true,task});
 });
 
 app.get('/api/workers', requireRole('admin'), (_req, res) => {
