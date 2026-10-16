@@ -79,31 +79,31 @@ const users = [
   },
   {
     role: 'worker',
-    id: 'worker1',
+    id: process.env.WORKER1_USERNAME || 'john',
     username: process.env.WORKER1_USERNAME || 'john',
     password: process.env.WORKER1_PASSWORD || 'john123',
-    name: process.env.WORKER1_NAME || 'John'
+    name: process.env.WORKER1_USER || process.env.WORKER1_NAME || 'John'
   },
   {
     role: 'worker',
-    id: 'worker2',
+    id: process.env.WORKER2_USERNAME || 'mark',
     username: process.env.WORKER2_USERNAME || 'mark',
     password: process.env.WORKER2_PASSWORD || 'mark123',
-    name: process.env.WORKER2_NAME || 'Mark'
+    name: process.env.WORKER2_USER || process.env.WORKER2_NAME || 'Mark'
   },
   {
     role: 'worker',
-    id: 'worker3',
+    id: process.env.WORKER3_USERNAME || 'anne',
     username: process.env.WORKER3_USERNAME || 'anne',
     password: process.env.WORKER3_PASSWORD || 'anne123',
-    name: process.env.WORKER3_NAME || 'Anne'
+    name: process.env.WORKER3_USER || process.env.WORKER3_NAME || 'Anne'
   },
   {
     role: 'worker',
-    id: 'worker4',
+    id: process.env.WORKER4_USERNAME || 'thing',
     username: process.env.WORKER4_USERNAME || 'thing',
     password: process.env.WORKER4_PASSWORD || 'thing123',
-    name: process.env.WORKER4_NAME || 'Thing'
+    name: process.env.WORKER4_USER || process.env.WORKER4_NAME || 'Thing'
   }
 ];
 
@@ -147,7 +147,7 @@ const states = new Map();
 
 for (const worker of users.filter(user => user.role === 'worker')) {
   const state = initialWorkerState(worker);
-  const old = persisted[worker.id];
+  const old = persisted[worker.id] || persisted[worker.username];
 
   // Restore an active shift after reconnect or a server process restart.
   // The clock is anchored to wall time, so offline time remains accounted for.
@@ -171,6 +171,9 @@ for (const worker of users.filter(user => user.role === 'worker')) {
   }
 
   states.set(worker.id, state);
+  if (worker.username && worker.username !== worker.id) {
+    states.set(worker.username, state);
+  }
 }
 
 function writeJsonAtomic(file, value) {
