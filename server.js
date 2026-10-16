@@ -82,28 +82,28 @@ const users = [
     id: 'worker1',
     username: process.env.WORKER1_USERNAME || 'john',
     password: process.env.WORKER1_PASSWORD || 'john123',
-    name: process.env.WORKER1_USER || process.env.WORKER1_NAME || 'John'
+    name: process.env.WORKER1_USER || process.env.WORKER1_NAME || 'Worker 01'
   },
   {
     role: 'worker',
     id: 'worker2',
     username: process.env.WORKER2_USERNAME || 'mark',
     password: process.env.WORKER2_PASSWORD || 'mark123',
-    name: process.env.WORKER2_USER || process.env.WORKER2_NAME || 'Mark'
+    name: process.env.WORKER2_USER || process.env.WORKER2_NAME || 'Worker 02'
   },
   {
     role: 'worker',
     id: 'worker3',
     username: process.env.WORKER3_USERNAME || 'anne',
     password: process.env.WORKER3_PASSWORD || 'anne123',
-    name: process.env.WORKER3_USER || process.env.WORKER3_NAME || 'Anne'
+    name: process.env.WORKER3_USER || process.env.WORKER3_NAME || 'Worker 03'
   },
   {
     role: 'worker',
     id: 'worker4',
     username: process.env.WORKER4_USERNAME || 'thing',
     password: process.env.WORKER4_PASSWORD || 'thing123',
-    name: process.env.WORKER4_USER || process.env.WORKER4_NAME || 'Thing'
+    name: process.env.WORKER4_USER || process.env.WORKER4_NAME || 'Worker 04'
   }
 ];
 
@@ -227,11 +227,18 @@ function safeWorkerState(state) {
   };
 }
 
+function uniqueWorkerStates() {
+  const map = new Map();
+  for (const state of states.values()) {
+    if (state && state.id && !map.has(state.id)) {
+      map.set(state.id, safeWorkerState(state));
+    }
+  }
+  return [...map.values()];
+}
+
 function broadcastStates() {
-  io.to('admins').emit(
-    'workers-state',
-    [...states.values()].map(safeWorkerState)
-  );
+  io.to('admins').emit('workers-state', uniqueWorkerStates());
 }
 
 function clearDisconnectTimer(state) {
@@ -686,7 +693,7 @@ app.post('/api/admin/tasks/status', requireRole('admin'), (req,res) => {
 app.get('/api/workers', requireRole('admin'), (_req, res) => {
   res.json({
     ok: true,
-    workers: [...states.values()].map(safeWorkerState)
+    workers: uniqueWorkerStates()
   });
 });
 
@@ -845,11 +852,7 @@ io.on('connection', socket => {
 
   if (user.role === 'admin') {
     socket.join('admins');
-
-    socket.emit(
-      'workers-state',
-      [...states.values()].map(safeWorkerState)
-    );
+    socket.emit('workers-state', uniqueWorkerStates());
   } else if (user.role === 'worker' && user.id) {
     const wid = resolveWorkerId(user.username || user.id);
     socket.join('worker:' + wid);
