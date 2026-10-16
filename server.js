@@ -154,6 +154,9 @@ for (const worker of users.filter(user => user.role === 'worker')) {
   if (old && Number.isFinite(Number(old.lastSeenAt))) {
     state.lastSeenAt = Number(old.lastSeenAt);
   }
+  if (old && typeof old.displayName === 'string' && old.displayName.trim()) {
+    state.name = old.displayName.trim().slice(0, 60);
+  }
 
   states.set(worker.id, state);
 }
@@ -169,7 +172,8 @@ function persistState() {
 
   for (const [id, state] of states.entries()) {
     output[id] = {
-      lastSeenAt: state.lastSeenAt
+      lastSeenAt: state.lastSeenAt,
+      displayName: state.name
     };
   }
 
@@ -574,6 +578,19 @@ app.post('/api/worker/tasks/:id/accept', requireRole('worker'), (req,res) => {
   task.assignedWorkerId=req.session.user.id;task.status='in_progress';task.acceptedAt=new Date().toISOString();
   fs.writeFileSync(TASKS_FILE,JSON.stringify(adminTasks,null,2));
   io.to('admins').emit('tasks-updated');res.json({ok:true,task});
+});
+// Update only the public display name. Login username, worker ID, and records never change.
+app.post('/api/admin/workers/:id/display-name', requireRole('admin'), (req, res) => {
+  const state = states.get(req.params.id);
+  if (!state) return res.status(404).json({ok:false,error:'Worker not found'});
+  const name = String(req.body?.name ?? '').trim().replace(/\s+/g, ' ');
+  if (!name || name.length > 60 || /[\x00-\x1f\x7f]/.test(name)) {
+    return res.status(400).json({ok:false,error:'Enter a display name (1–60 characters).'});
+  }
+  state.name = name;
+  persistState();
+  broadcastStates();
+  res.json({ok:true,workerId:state.id,name:state.name});
 });
 app.get('/api/admin/tasks', requireRole('admin'), (_req,res) => res.json({ok:true,tasks:adminTasks}));
 app.post('/api/admin/tasks', requireRole('admin'), (req,res) => {

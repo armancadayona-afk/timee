@@ -450,8 +450,22 @@
       document.getElementById('view-heading').textContent = headings[currentView] || currentView;
       const content = document.getElementById('view-content');
       if(currentView === 'workers') {
-        content.innerHTML = `<div class="view-cards">${workers.map(w=>`<div class="view-tile"><strong>${escapeHtml(w.name)}</strong><p>${w.online?'🟢 Online':'⚪ Offline'} · ${escapeHtml(w.status)}</p><p>Time: ${fmt((w.accumulatedMs||0)+(w.status==='WORKING'&&w.startedAt?Date.now()-w.startedAt:0))}</p><button class="btn-outline" data-worker="${escapeHtml(w.id)}">Select worker</button></div>`).join('')}</div>`;
+        content.innerHTML = `<div class="view-cards">${workers.map(w=>`<div class="view-tile"><strong>${escapeHtml(w.name)}</strong><p>${w.online?'🟢 Online':'⚪ Offline'} · ${escapeHtml(w.status)}</p><p>Time: ${fmt((w.accumulatedMs||0)+(w.status==='WORKING'&&w.startedAt?Date.now()-w.startedAt:0))}</p><div class="kitty-buttons"><button class="btn-outline" data-rename-worker="${escapeHtml(w.id)}">✏️ Rename</button><button class="btn-outline" data-worker="${escapeHtml(w.id)}">Select worker</button></div></div>`).join('')}</div>`;
         content.querySelectorAll('[data-worker]').forEach(b=>b.onclick=()=>{selectedWorkerId=b.dataset.worker;document.getElementById('worker-select').value=selectedWorkerId;document.getElementById('control-worker-select').value=selectedWorkerId;showView('dashboard');updateSelectedWorkerDetails();});
+        content.querySelectorAll('[data-rename-worker]').forEach(b=>b.onclick=async()=>{
+          const worker=workers.find(w=>w.id===b.dataset.renameWorker);
+          if(!worker)return;
+          const name=prompt('New display name for '+worker.name+' (login username stays unchanged):',worker.name);
+          if(name===null)return;
+          const clean=name.trim().replace(/\s+/g,' ');
+          if(!clean||clean.length>60){alert('Please enter a name from 1 to 60 characters.');return;}
+          try {
+            await api('/api/admin/workers/'+encodeURIComponent(worker.id)+'/display-name',{name:clean});
+            worker.name=clean;
+            renderView();
+            // Existing worker selectors and chat headings update from the broadcast too.
+          }catch(err){alert('Could not rename worker: '+err.message);}
+        });
       } else if (currentView === 'tasks') {
         content.innerHTML = `<div class="kitty-section-intro"><div><h2>📋 Tasks</h2><p>Create, assign, and track tasks for your workforce</p></div><button class="btn-pink" id="new-task">＋ Create New Task</button></div><div class="kitty-tabs"><button class="selected" data-filter="open">Available Tasks</button><button data-filter="in_progress">Ongoing Tasks</button><button data-filter="completed">Completed Tasks</button></div><div class="kitty-filter"><input id="task-search" placeholder="🔎 Search tasks..."><select id="task-worker-filter"><option value="">All Workers</option>${workers.map(w=>`<option value="${escapeHtml(w.id)}">${escapeHtml(w.name)}</option>`).join('')}</select></div><div id="task-editor" hidden><form id="task-form" class="kitty-editor"><h3>Create New Task</h3><label>Task Title *</label><input name="title" required maxlength="160" placeholder="Enter task title"><label>Task Description</label><textarea name="description" placeholder="Enter task instructions" maxlength="2000"></textarea><label>Assign Task</label><select name="workerId"><option value="">Open for All</option>${workers.map(w=>`<option value="${escapeHtml(w.id)}">${escapeHtml(w.name)}</option>`).join('')}</select><div class="kitty-buttons"><button type="button" class="btn-outline" id="cancel-task">Cancel</button><button type="submit" class="btn-pink">Create Task</button></div></form></div><p id="tasks-notice"></p><div id="tasks-table" class="kitty-cards">Loading tasks…</div>`;
         const editor=content.querySelector('#task-editor');content.querySelector('#new-task').onclick=()=>{editor.hidden=false;editor.querySelector('input').focus()};content.querySelector('#cancel-task').onclick=()=>editor.hidden=true;
