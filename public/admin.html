@@ -5,7 +5,25 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Hello Kitty Admin Console</title>
   <link rel="stylesheet" href="/styles.css">
-</head>
+<style>
+    /* Four persistent, independent live worker panels */
+    .four-monitor-card { margin-bottom:16px; }
+    .multi-monitor-note {font-size:12px;color:#866274;margin:2px 0 14px;}
+    .multi-monitor-grid {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;}
+    .multi-monitor-tile {border:1px solid #f4c7db;border-radius:15px;padding:12px;background:#fff8fc;min-width:0;}
+    .multi-monitor-head {display:flex;justify-content:space-between;gap:9px;align-items:center;margin-bottom:8px;flex-wrap:wrap;}
+    .multi-monitor-head select {max-width:65%;min-width:115px;padding:7px;border:1px solid #edbad0;border-radius:8px;background:white;}
+    .multi-monitor-badge {font-weight:bold;font-size:11px;color:#a45477;}
+    .multi-monitor-screen {position:relative;aspect-ratio:16/9;background:#302632;border-radius:11px;overflow:hidden;display:flex;align-items:center;justify-content:center;}
+    .multi-monitor-screen video {width:100%;height:100%;object-fit:contain;background:#211d26;}
+    .multi-monitor-empty {position:absolute;color:#f6dbe7;font-size:13px;pointer-events:none;text-align:center;}
+    .multi-monitor-foot {display:flex;justify-content:space-between;align-items:center;margin-top:9px;margin-bottom:7px;gap:7px;font-size:12px;}
+    .multi-monitor-time {font-size:20px;font-weight:800;color:#bc4d7f;font-variant-numeric:tabular-nums;}
+    .multi-monitor-controls {display:flex;gap:6px;flex-wrap:wrap;}
+    .multi-monitor-controls button {font-size:11px;padding:7px 9px;min-height:32px;}
+    .multi-monitor-record {font-size:11px;color:#876477;margin-top:7px;min-height:14px;}
+    @media(max-width:850px){.multi-monitor-grid{grid-template-columns:1fr}}
+</style></head>
 <body>
   <div class="app-container">
     <!-- Top Header Bar -->
@@ -77,8 +95,13 @@
           </div>
         </div>
 
+        <section class="pink-card four-monitor-card" id="four-monitor-section">
+          <div class="card-header"><h2>🎥 Live Worker Monitor · 4 Screens</h2><span class="badge-tag" id="multi-monitor-summary">Choose workers below</span></div>
+          <p class="multi-monitor-note">Each screen stays connected independently when you open another tab. Camera access must be approved on each worker device.</p>
+          <div class="multi-monitor-grid" id="multi-monitor-grid"></div>
+        </section>
         <!-- Row 1: Worker Feed, Worker Timer, Monitor Controls -->
-        <div class="grid-3col">
+        <div class="grid-3col" id="legacy-monitor-controls" style="display:none">
           <!-- Card 1: Worker Feed (Merged Single Live Camera Video Container) -->
           <section class="pink-card">
             <div class="card-header">
@@ -280,13 +303,93 @@
       return [Math.floor(t / 3600), Math.floor(t / 60) % 60, t % 60].map(x => String(x).padStart(2, '0')).join(':');
     }
 
+    // Slot assignments are independent of the selected worker used by tasks and chat.
+    const monitorSlots = Array.from({length:4},(_,i)=>({workerId:null,recorder:null,chunks:[],started:0,muted:true,desired:false,lastAttempt:0}));
+    function monitorSlotFor(id) {return monitorSlots.findIndex(s=>s.workerId===id);}
+    function monitorStatus(index,label,state='idle') {
+      const el=document.getElementById(`monitor-status-${index}`);
+      if(el){el.textContent=label;el.style.color=state==='live'?'#168658':state==='error'?'#b52f46':'#a45477';}
+      const empty=document.getElementById(`monitor-empty-${index}`);
+      if(empty)empty.style.display=state==='live'?'none':'block';
+    }
+    function renderMonitorSlots() {
+      const grid=document.getElementById('multi-monitor-grid'); if(!grid)return;
+      if(!grid.children.length) {
+        grid.innerHTML=monitorSlots.map((slot,i)=>`<article class="multi-monitor-tile" data-slot="${i}">
+          <div class="multi-monitor-head"><select aria-label="Worker for camera ${i+1}" id="monitor-worker-${i}"></select><span class="multi-monitor-badge" id="monitor-status-${i}">Not connected</span></div>
+          <div class="multi-monitor-screen"><video id="monitor-video-${i}" autoplay playsinline muted></video><div class="multi-monitor-empty" id="monitor-empty-${i}">📷 Camera ${i+1}<br>Choose a worker and press Connect</div></div>
+          <div class="multi-monitor-foot"><span id="monitor-worker-status-${i}">No worker selected</span><span class="multi-monitor-time" id="monitor-time-${i}">00:00:00</span></div>
+          <div class="multi-monitor-controls"><button class="btn-pink" data-action="connect" data-slot="${i}">📹 Connect</button><button class="btn-outline" data-action="disconnect" data-slot="${i}">⏹ Disconnect</button><button class="btn-outline" data-action="front" data-slot="${i}">Front</button><button class="btn-outline" data-action="back" data-slot="${i}">Back</button><button class="btn-outline" data-action="audio" data-slot="${i}">🔇 Audio</button><button class="btn-outline" data-action="record" data-slot="${i}">🔴 Record</button></div>
+          <div class="multi-monitor-record" id="monitor-record-${i}">Recording idle</div></article>`).join('');
+        grid.addEventListener('change',e=>{if(!e.target.id.startsWith('monitor-worker-'))return;assignMonitorSlot(Number(e.target.id.slice(-1)),e.target.value);});
+        grid.addEventListener('click',e=>{const btn=e.target.closest('button[data-action]');if(btn)monitorAction(Number(btn.dataset.slot),btn.dataset.action,btn);});
+      }
+      for(let i=0;i<4;i++) {
+        const sel=document.getElementById(`monitor-worker-${i}`),slot=monitorSlots[i];
+        const items=[`<option value="">Select worker · Screen ${i+1}</option>`].concat(workers.map(w=>`<option value="${escapeHtml(w.id)}">${escapeHtml(w.name)} (${w.online?'Online':'Offline'})</option>`));
+        const html=items.join('');if(sel.innerHTML!==html)sel.innerHTML=html;sel.value=slot.workerId||'';
+      }
+      updateMonitorTimers();
+    }
+    function assignMonitorSlot(i,id) {
+      const old=monitorSlots[i].workerId;if(old===id)return;
+      if(id&&monitorSlots.some((s,n)=>n!==i&&s.workerId===id)) {alert('This worker already has a screen.');renderMonitorSlots();return;}
+      if(old)disconnectMonitor(i);
+      monitorSlots[i].desired=false;monitorSlots[i].workerId=id||null;
+      monitorStatus(i,id?'Ready to connect':'Not connected');updateMonitorTimers();
+    }
+    function updateMonitorTimers() {
+      monitorSlots.forEach((slot,i)=>{
+        const w=workers.find(w=>w.id===slot.workerId);
+        const elapsed=w?(Number(w.accumulatedMs)||0)+(w.status==='WORKING'&&w.startedAt?Math.max(0,Date.now()-w.startedAt):0):0;
+        const time=document.getElementById(`monitor-time-${i}`),status=document.getElementById(`monitor-worker-status-${i}`);
+        if(time)time.textContent=fmt(elapsed);
+        if(status)status.textContent=w?`${w.name} · ${w.status||'UNKNOWN'} · ${w.online?'Online':'Offline'}`:'No worker selected';
+      });
+    }
+    function disconnectMonitor(i) {
+      const slot=monitorSlots[i];slot.desired=false;if(slot.recorder?.state==='recording')slot.recorder.stop();
+      if(slot.workerId&&socket?.connected)socket.emit('admin-live-stop',{workerId:slot.workerId});
+      if(slot.workerId)closePeer(slot.workerId);
+      const v=document.getElementById(`monitor-video-${i}`);if(v)v.srcObject=null;
+      monitorStatus(i,'Disconnected');
+    }
+    function monitorAction(i,action,button) {
+      const slot=monitorSlots[i],id=slot.workerId;
+      if(!id){monitorStatus(i,'Select a worker first','error');return;}
+      if(action==='connect') {slot.desired=true;slot.lastAttempt=Date.now();if(!socket?.connected){monitorStatus(i,'Server disconnected','error');return;}if(peers.get(id)?.pc?.connectionState==='connected'){monitorStatus(i,'Already live','live');return;}requestLiveFeed(id);return;}
+      if(action==='disconnect'){disconnectMonitor(i);return;}
+      if(action==='front'||action==='back'){socket?.emit('admin-switch-camera',{workerId:id,camera:action});return;}
+      const v=document.getElementById(`monitor-video-${i}`);
+      if(action==='audio'){slot.muted=!slot.muted;v.muted=slot.muted;button.textContent=slot.muted?'🔇 Audio':'🔊 Audio';return;}
+      if(action==='record') {
+        if(slot.recorder&&slot.recorder.state!=='inactive'){slot.recorder.stop();return;}
+        const stream=v?.srcObject;if(!stream?.getVideoTracks().some(t=>t.readyState==='live')){document.getElementById(`monitor-record-${i}`).textContent='Connect camera before recording';return;}
+        if(!window.MediaRecorder){document.getElementById(`monitor-record-${i}`).textContent='Browser does not support video recording';return;}
+        try {
+          const mime=['video/webm;codecs=vp8,opus','video/webm','video/mp4'].find(m=>MediaRecorder.isTypeSupported(m));
+          const recorder=new MediaRecorder(new MediaStream(stream.getTracks().filter(t=>t.readyState==='live')),mime?{mimeType:mime}:undefined);
+          slot.recorder=recorder;slot.chunks=[];slot.started=Date.now();
+          recorder.ondataavailable=e=>{if(e.data?.size)slot.chunks.push(e.data);};
+          recorder.onstop=()=>{
+            const blob=new Blob(slot.chunks,{type:recorder.mimeType||'video/webm'});
+            if(blob.size){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`${id}_${new Date(slot.started).toISOString().replace(/[:.]/g,'-')}.${recorder.mimeType.includes('mp4')?'mp4':'webm'}`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);}
+            document.getElementById(`monitor-record-${i}`).textContent=blob.size?'Saved to browser Downloads':'No video captured';button.textContent='🔴 Record';slot.recorder=null;slot.chunks=[];
+          };
+          recorder.onerror=e=>{document.getElementById(`monitor-record-${i}`).textContent=e.error?.message||'Recording failed';};
+          recorder.start(1000);button.textContent='⏹ Stop Rec';document.getElementById(`monitor-record-${i}`).textContent='● Recording this screen…';
+        }catch(err){document.getElementById(`monitor-record-${i}`).textContent=err.message;}
+      }
+    }
     function closePeer(id) {
       const p = peers.get(id);
       if (p?.pc) p.pc.close();
       peers.delete(id);
       requested.delete(id);
+      const index=monitorSlotFor(id);
+      if(index>=0){const tileVideo=document.getElementById(`monitor-video-${index}`);if(tileVideo)tileVideo.srcObject=null;monitorStatus(index,'Disconnected');}
       const v = document.getElementById('live-video-player');
-      if (v) v.srcObject = null;
+      if (v && selectedWorkerId===id) v.srcObject = null;
       document.getElementById('live-feed-badge').textContent = 'STOPPED';
       document.getElementById('video-status-dot').style.background = '#8B6B75';
     }
@@ -300,8 +403,7 @@
       document.getElementById('video-status-dot').style.background = '#F59E0B';
       document.getElementById('live-feed-badge').textContent = 'CONNECTING…';
 
-      socket.emit('admin-live-stop', { workerId });
-
+      if(peers.get(workerId)?.pc?.connectionState==='connected')return;
       setTimeout(() => {
         requested.set(workerId, Date.now());
         socket.emit('admin-live-request', { workerId, mode: 'camera' });
@@ -391,6 +493,7 @@
 
       selectedWorkerId = workerSelect.value;
       updateSelectedWorkerDetails();
+      renderMonitorSlots();
       // Preserve active forms and chat while worker heartbeat/state updates arrive.
       // A view is re-rendered only when the administrator navigates to it.
     }
@@ -501,22 +604,22 @@
       selectedWorkerId = e.target.value;
       document.getElementById('control-worker-select').value = selectedWorkerId;
       updateSelectedWorkerDetails();
-      if (selectedWorkerId) requestLiveFeed(selectedWorkerId);
+      // Choosing a worker for tasks/chat never interrupts active camera feeds.
     });
 
     document.getElementById('control-worker-select').addEventListener('change', (e) => {
       selectedWorkerId = e.target.value;
       document.getElementById('worker-select').value = selectedWorkerId;
       updateSelectedWorkerDetails();
-      if (selectedWorkerId) requestLiveFeed(selectedWorkerId);
+      // Choosing a worker for tasks/chat never interrupts active camera feeds.
     });
 
     document.getElementById('btn-toggle-live').onclick = () => {
-      if (selectedWorkerId) requestLiveFeed(selectedWorkerId);
+      // Choosing a worker for tasks/chat never interrupts active camera feeds.
     };
 
     document.getElementById('btn-start-live-control').onclick = () => {
-      if (selectedWorkerId) requestLiveFeed(selectedWorkerId);
+      // Choosing a worker for tasks/chat never interrupts active camera feeds.
     };
 
     document.getElementById('btn-switch-cam-front').onclick = () => {
@@ -679,6 +782,14 @@
       socket.on('workers-state', data => {
         workers = data;
         updateUI();
+        monitorSlots.forEach((slot,i)=>{
+          if(!slot.desired||!slot.workerId||!socket.connected)return;
+          if(!workers.some(w=>w.id===slot.workerId&&w.online))return;
+          const pc=peers.get(slot.workerId)?.pc;
+          if(pc&&['connected','connecting','new'].includes(pc.connectionState))return;
+          if(Date.now()-slot.lastAttempt<12000)return;
+          slot.lastAttempt=Date.now();requestLiveFeed(slot.workerId);
+        });
       });
 
       socket.on('chat-history', ({ workerId, messages }) => {
@@ -711,17 +822,20 @@
 
         pc.ontrack = e => {
           console.log('WebRTC ontrack received stream:', e);
-          const videoElem = document.getElementById('live-video-player');
-          if (videoElem) {
-            videoElem.srcObject = e.streams[0] || new MediaStream(e.track ? [e.track] : []);
-            videoElem.muted = !audioEnabled;
-            videoElem.play().catch(err => console.log('Autoplay error:', err));
-
-            const worker = workers.find(w => w.id === p.workerId);
-            const name = worker ? worker.name : p.workerId;
-            document.getElementById('video-feed-label').textContent = `LIVE CAMERA • ${name}`;
-            document.getElementById('video-status-dot').style.background = '#10B981';
-            document.getElementById('live-feed-badge').textContent = 'LIVE 🟢';
+          const stream=e.streams[0] || new MediaStream(e.track ? [e.track] : []);
+          const index=monitorSlotFor(p.workerId);
+          if(index>=0){
+            const video=document.getElementById(`monitor-video-${index}`);
+            if(video){video.srcObject=stream;video.muted=monitorSlots[index].muted;video.play().catch(()=>{});}
+            monitorStatus(index,'LIVE 🟢','live');
+          }
+          if(selectedWorkerId===p.workerId){
+            const videoElem=document.getElementById('live-video-player');
+            if(videoElem){videoElem.srcObject=stream;videoElem.muted=!audioEnabled;videoElem.play().catch(()=>{});}
+            const worker=workers.find(w=>w.id===p.workerId);
+            document.getElementById('video-feed-label').textContent=`LIVE CAMERA • ${worker?.name||p.workerId}`;
+            document.getElementById('video-status-dot').style.background='#10B981';
+            document.getElementById('live-feed-badge').textContent='LIVE 🟢';
           }
         };
 
@@ -733,6 +847,8 @@
 
         pc.onconnectionstatechange = () => {
           console.log('WebRTC state:', pc.connectionState);
+          const index=monitorSlotFor(p.workerId);
+          if(index>=0)monitorStatus(index,pc.connectionState==='connected'?'LIVE 🟢':pc.connectionState.toUpperCase(),pc.connectionState==='connected'?'live':pc.connectionState==='failed'?'error':'idle');
           if (pc.connectionState === 'connected') {
             document.getElementById('live-feed-badge').textContent = 'LIVE 🟢';
             document.getElementById('video-status-dot').style.background = '#10B981';
@@ -777,6 +893,7 @@
 
       socket.on('live-error', p => {
         closePeer(p.workerId);
+        const index=monitorSlotFor(p.workerId);if(index>=0)monitorStatus(index,p.message||'Camera request failed','error');
         document.getElementById('video-feed-label').textContent = p.message || 'Camera request failed';
         document.getElementById('video-status-dot').style.background = '#EF4444';
       });
@@ -788,6 +905,7 @@
       setInterval(() => {
         for (const [id, at] of requested) if (Date.now() - at > 30000) requested.delete(id);
         updateSelectedWorkerDetails();
+        updateMonitorTimers();
       }, 500);
     })().catch(() => {});
   </script>
