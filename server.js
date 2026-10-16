@@ -149,13 +149,25 @@ for (const worker of users.filter(user => user.role === 'worker')) {
   const state = initialWorkerState(worker);
   const old = persisted[worker.id];
 
-  // Do not restore a previously running live/timer state after a server restart.
-  // Historical shift records remain in sessions.json.
+  // Restore an active shift after reconnect or a server process restart.
+  // The clock is anchored to wall time, so offline time remains accounted for.
   if (old && Number.isFinite(Number(old.lastSeenAt))) {
     state.lastSeenAt = Number(old.lastSeenAt);
   }
   if (old && typeof old.displayName === 'string' && old.displayName.trim()) {
     state.name = old.displayName.trim().slice(0, 60);
+  }
+  if (old && typeof old.sessionId === 'string' && old.sessionId &&
+      workSessions.some(record => record.id === old.sessionId && record.endedAt === null)) {
+    state.sessionId = old.sessionId;
+    state.accumulatedMs = Math.max(0, Number(old.accumulatedMs) || 0);
+    if (old.status === 'WORKING' && Number.isFinite(old.startedAt) && old.startedAt > 0) {
+      state.status = 'WORKING';
+      state.startedAt = old.startedAt;
+    } else {
+      state.status = 'PAUSED';
+      state.startedAt = null;
+    }
   }
 
   states.set(worker.id, state);
@@ -173,7 +185,11 @@ function persistState() {
   for (const [id, state] of states.entries()) {
     output[id] = {
       lastSeenAt: state.lastSeenAt,
-      displayName: state.name
+      displayName: state.name,
+      sessionId: state.sessionId,
+      status: state.status,
+      startedAt: state.startedAt,
+      accumulatedMs: state.accumulatedMs
     };
   }
 
@@ -405,29 +421,19 @@ app.post('/api/login', loginRateLimit, (req, res) => {
   if (user.role === 'worker') {
     const state = states.get(user.id);
 
-    // Logging in does not start the timer. If a prior session is still marked
-    // running, close it so the Worker explicitly starts the next shift.
-    if (state.status === 'WORKING' || state.sessionId) {
-      const oldSocketId = finishShift(state, 'relogin', 'STOPPED');
-
-      if (oldSocketId) {
-        io.to(oldSocketId).emit('session-replaced');
-        io.sockets.sockets.get(oldSocketId)?.disconnect(true);
-      }
-    } else {
-      const oldSocketId = state.socketId;
+    // Authentication/reconnect must not end an existing shift.
+    // Socket registration handles replacing the prior transport connection.
+    const oldSocketId = state.socketId;
+    if (oldSocketId) {
       stopWorkerLive(state, 'relogin', true);
-      state.status = 'STOPPED';
-      state.online = false;
-      state.socketId = null;
-      state.startedAt = null;
-      state.accumulatedMs = 0;
-
-      if (oldSocketId) {
-        io.to(oldSocketId).emit('session-replaced');
-        io.sockets.sockets.get(oldSocketId)?.disconnect(true);
-      }
+      io.to(oldSocketId).emit('session-replaced');
+      io.sockets.sockets.get(oldSocketId)?.disconnect(true);
     }
+    state.online = false;
+    state.socketId = null;
+    state.captureReady = false;
+    clearDisconnectTimer(state);
+    persistState();
 
     broadcastStates();
   }
@@ -1415,21 +1421,10 @@ io.on('connection', socket => {
         state.socketId = null;
         broadcastStates();
 
+        // Going offline is a connectivity event, not a shift stop.
+        // Leave the elapsed-time anchor and session ID untouched.
         clearDisconnectTimer(state);
-
-        state.disconnectTimer = setTimeout(() => {
-          if (
-            !state.socketId &&
-            state.sessionId
-          ) {
-            finishShift(
-              state,
-              'disconnect-timeout',
-              'STOPPED'
-            );
-            broadcastStates();
-          }
-        }, 30000);
+        persistState();
       }
     }
 
