@@ -45,7 +45,7 @@
           <li class="nav-item" data-view="tasks" role="button" tabindex="0">📋 <span>Tasks</span></li>
           <li class="nav-item" data-view="devices" role="button" tabindex="0">📱 <span>Devices</span></li>
           <li class="nav-item" data-view="chat" role="button" tabindex="0">💬 <span>Chat</span></li>
-          <li class="nav-item" data-view="reports" role="button" tabindex="0">📈 <span>Reports</span></li>
+          <li class="nav-item" data-view="reports" role="button" tabindex="0">📈 <span>Earning</span></li>
           <li class="nav-item" data-view="settings" role="button" tabindex="0">⚙️ <span>Settings</span></li>
           <li class="nav-item" id="btn-logout">🚪 <span>Log Out</span></li>
         </ul>
@@ -143,6 +143,8 @@
               <button class="btn-outline" id="btn-mute">🎙 Mute Audio</button>
             </div>
 
+            <div id="record-status" role="status" aria-live="polite" style="font-size:11px;color:var(--text-muted);">Recording idle</div>
+
             <div style="margin-top:4px;">
               <label style="font-size:11px; font-weight:700; color:var(--text-muted); display:block; margin-bottom:6px;">Quick Actions</label>
               <div class="timer-btn-grid">
@@ -152,7 +154,7 @@
             </div>
 
             <div style="font-size:11px; color:var(--text-muted); background:#FFF0F5; padding:8px; border-radius:10px; margin-top:4px;">
-              ℹ Full control is available for authorized admins only.
+              ℹ Monitor controls require an administrator login. Recordings save to this browser when stopped.
             </div>
           </section>
         </div>
@@ -306,6 +308,14 @@
       }, 300);
     }
 
+    function refreshKittyChat() {
+      if(currentView !== 'chat') return;
+      const target=document.getElementById('kitty-chat-stream');
+      if(!target)return;
+      const msgs=chatHistoryMap.get(selectedWorkerId)||[];
+      target.innerHTML=msgs.length?msgs.map(m=>`<div class="kitty-message ${m.sender==='admin'||m.from==='admin'||m.role==='admin'?'sent':''}">${escapeHtml(m.text||m.message||'')}<small>${escapeHtml(m.sender||m.from||'')}</small></div>`).join(''):'<p class="kitty-empty">No messages yet</p>';
+      target.scrollTop=target.scrollHeight;
+    }
     function renderChatForWorker(workerId) {
       const stream = document.getElementById('chat-stream');
       stream.innerHTML = '';
@@ -443,20 +453,22 @@
         content.innerHTML = `<div class="view-cards">${workers.map(w=>`<div class="view-tile"><strong>${escapeHtml(w.name)}</strong><p>${w.online?'🟢 Online':'⚪ Offline'} · ${escapeHtml(w.status)}</p><p>Time: ${fmt((w.accumulatedMs||0)+(w.status==='WORKING'&&w.startedAt?Date.now()-w.startedAt:0))}</p><button class="btn-outline" data-worker="${escapeHtml(w.id)}">Select worker</button></div>`).join('')}</div>`;
         content.querySelectorAll('[data-worker]').forEach(b=>b.onclick=()=>{selectedWorkerId=b.dataset.worker;document.getElementById('worker-select').value=selectedWorkerId;document.getElementById('control-worker-select').value=selectedWorkerId;showView('dashboard');updateSelectedWorkerDetails();});
       } else if (currentView === 'tasks') {
-        content.innerHTML = `<form id="task-form" class="view-form"><input name="title" required maxlength="160" placeholder="Task title"><textarea name="description" placeholder="Task details" maxlength="2000"></textarea><select name="workerId"><option value="">Open to everyone</option>${workers.map(w=>`<option value="${escapeHtml(w.id)}">${escapeHtml(w.name)}</option>`).join('')}</select><button class="btn-pink" type="submit">Create task</button></form><p id="tasks-notice"></p><div id="tasks-table">Loading tasks…</div>`;
-        content.querySelector('#task-form').onsubmit=async e=>{e.preventDefault();const data=Object.fromEntries(new FormData(e.target));try{await api('/api/admin/tasks',data);renderView()}catch(err){content.querySelector('#tasks-notice').textContent=err.message;}};
-        api('/api/admin/tasks').then(d=>{if(currentView!=='tasks'||!document.getElementById('tasks-table'))return;document.getElementById('tasks-table').innerHTML=d.tasks.length?d.tasks.map(t=>`<div class="view-tile"><strong>${escapeHtml(t.title)}</strong> · ${escapeHtml(t.status)}<p>${escapeHtml(t.description||'')}<br>Assigned: ${escapeHtml(workers.find(w=>w.id===t.workerId)?.name||'Everyone')}</p><button class="btn-outline" data-task="${escapeHtml(t.id)}">${t.status==='completed'?'Reopen':'Mark completed'}</button></div>`).join(''):'No tasks yet.';document.querySelectorAll('[data-task]').forEach(b=>b.onclick=async()=>{const t=d.tasks.find(t=>t.id===b.dataset.task);await api('/api/admin/tasks/status',{id:t.id,status:t.status==='completed'?'open':'completed'});renderView()})}).catch(err=>{document.getElementById('tasks-table').textContent=err.message});
+        content.innerHTML = `<div class="kitty-section-intro"><div><h2>📋 Tasks</h2><p>Create, assign, and track tasks for your workforce</p></div><button class="btn-pink" id="new-task">＋ Create New Task</button></div><div class="kitty-tabs"><button class="selected" data-filter="open">Available Tasks</button><button data-filter="in_progress">Ongoing Tasks</button><button data-filter="completed">Completed Tasks</button></div><div class="kitty-filter"><input id="task-search" placeholder="🔎 Search tasks..."><select id="task-worker-filter"><option value="">All Workers</option>${workers.map(w=>`<option value="${escapeHtml(w.id)}">${escapeHtml(w.name)}</option>`).join('')}</select></div><div id="task-editor" hidden><form id="task-form" class="kitty-editor"><h3>Create New Task</h3><label>Task Title *</label><input name="title" required maxlength="160" placeholder="Enter task title"><label>Task Description</label><textarea name="description" placeholder="Enter task instructions" maxlength="2000"></textarea><label>Assign Task</label><select name="workerId"><option value="">Open for All</option>${workers.map(w=>`<option value="${escapeHtml(w.id)}">${escapeHtml(w.name)}</option>`).join('')}</select><div class="kitty-buttons"><button type="button" class="btn-outline" id="cancel-task">Cancel</button><button type="submit" class="btn-pink">Create Task</button></div></form></div><p id="tasks-notice"></p><div id="tasks-table" class="kitty-cards">Loading tasks…</div>`;
+        const editor=content.querySelector('#task-editor');content.querySelector('#new-task').onclick=()=>{editor.hidden=false;editor.querySelector('input').focus()};content.querySelector('#cancel-task').onclick=()=>editor.hidden=true;
+        let allTasks=[],filter='open';
+        function drawTasks(){const q=content.querySelector('#task-search').value.toLowerCase(),wid=content.querySelector('#task-worker-filter').value;const filtered=allTasks.filter(t=>(filter==='open'?['open','available'].includes(t.status):filter==='in_progress'?['active','in_progress','accepted','ongoing'].includes(t.status):t.status==='completed')&&(!wid||t.workerId===wid)&&String(t.title+' '+(t.description||'')).toLowerCase().includes(q));content.querySelector('#tasks-table').innerHTML=filtered.length?filtered.map(t=>`<article class="kitty-task"><div class="kitty-task-title"><strong>📋 ${escapeHtml(t.title)}</strong><span class="kitty-chip">${escapeHtml(t.status)}</span></div><p>${escapeHtml(t.description||'No description provided')}</p><p>◷ Estimated time: not specified</p><p>👤 Assigned To: ${escapeHtml(workers.find(w=>w.id===t.workerId)?.name||'Unassigned — open for all')}</p><div class="kitty-buttons"><button class="btn-outline" data-detail="${escapeHtml(t.id)}">View Details</button><button class="btn-pink" data-task="${escapeHtml(t.id)}">${t.status==='completed'?'Reopen Task':'Mark Completed'}</button></div></article>`).join(''):'<p class="kitty-empty">No tasks in this category.</p>';content.querySelectorAll('[data-detail]').forEach(btn=>btn.onclick=()=>{let t=allTasks.find(t=>t.id===btn.dataset.detail);alert(t.title+'\n\n'+(t.description||'No description')+'\nStatus: '+t.status)});content.querySelectorAll('[data-task]').forEach(btn=>btn.onclick=async()=>{let t=allTasks.find(t=>t.id===btn.dataset.task);try{await api('/api/admin/tasks/status',{id:t.id,status:t.status==='completed'?'open':'completed'});loadTasks()}catch(e){content.querySelector('#tasks-notice').textContent=e.message}})}
+        async function loadTasks(){try{allTasks=(await api('/api/admin/tasks')).tasks;drawTasks()}catch(e){content.querySelector('#tasks-notice').textContent=e.message}}
+        content.querySelectorAll('[data-filter]').forEach(btn=>btn.onclick=()=>{filter=btn.dataset.filter;content.querySelectorAll('[data-filter]').forEach(x=>x.classList.toggle('selected',x===btn));drawTasks()});content.querySelector('#task-search').oninput=drawTasks;content.querySelector('#task-worker-filter').onchange=drawTasks;
+        content.querySelector('#task-form').onsubmit=async e=>{e.preventDefault();const data=Object.fromEntries(new FormData(e.target));try{await api('/api/admin/tasks',data);e.target.reset();editor.hidden=true;loadTasks()}catch(err){content.querySelector('#tasks-notice').textContent=err.message}};loadTasks();
       } else if (currentView === 'devices') {
-        content.innerHTML = `<div class="view-form">${workerPicker()}<p>Select a worker, then run a supported command in the dashboard terminal. Commands query the actual connected worker browser, not an Android shell.</p><button class="btn-pink" id="open-terminal">Open terminal</button></div>`;
-        content.querySelector('#open-terminal').onclick=()=>{selectedWorkerId=content.querySelector('#panel-worker').value;document.getElementById('worker-select').value=selectedWorkerId;document.getElementById('control-worker-select').value=selectedWorkerId;showView('dashboard');document.getElementById('terminal-command').focus();};
+        content.innerHTML=`<div class="kitty-section-intro"><div><h2>📱 Devices</h2><p>Monitor connected workers and their devices</p></div></div><div class="kitty-stats"><div><b>${workers.length}</b><span>Total Devices</span></div><div><b>${workers.filter(w=>w.online).length}</b><span>Online Devices</span></div><div><b>${workers.filter(w=>!w.online).length}</b><span>Offline Devices</span></div></div><h3>Device List</h3><input id="device-search" placeholder="🔎 Search devices or workers..."><div id="device-grid" class="kitty-cards"></div><p class="kitty-help">Live video and supported device commands remain available in the Dashboard. Device IP addresses and storage statistics are not exposed by this server.</p>`;
+        const draw=()=>{const q=content.querySelector('#device-search').value.toLowerCase();content.querySelector('#device-grid').innerHTML=workers.filter(w=>w.name.toLowerCase().includes(q)).map(w=>`<article class="kitty-task"><div class="kitty-task-title"><strong>📱 ${escapeHtml(w.name)}'s Device</strong><span class="kitty-chip ${w.online?'online':'offline'}">${w.online?'● Online':'● Offline'}</span></div><div class="kitty-device-preview">${w.online?'🎥 Live feed available from Dashboard':'📷 No camera feed — device offline'}</div><p>Worker status: ${escapeHtml(w.status||'Unknown')}</p><button class="btn-pink" data-device="${escapeHtml(w.id)}">Open Live Monitor</button></article>`).join('')||'<p class="kitty-empty">No matching devices</p>';content.querySelectorAll('[data-device]').forEach(b=>b.onclick=()=>{selectedWorkerId=b.dataset.device;document.getElementById('worker-select').value=selectedWorkerId;document.getElementById('control-worker-select').value=selectedWorkerId;showView('dashboard');updateSelectedWorkerDetails()})};content.querySelector('#device-search').oninput=draw;draw();
       } else if (currentView === 'chat') {
-        content.innerHTML = `<div class="view-form">${workerPicker()}<button class="btn-pink" id="open-chat">Open selected worker chat</button></div>`;
-        content.querySelector('#open-chat').onclick=()=>{selectedWorkerId=content.querySelector('#panel-worker').value;document.getElementById('worker-select').value=selectedWorkerId;showView('dashboard');loadChatHistory(selectedWorkerId);document.getElementById('chat-text-input').focus()};
+        content.innerHTML=`<div class="kitty-section-intro"><div><h2>💬 Chat</h2><p>Communicate with your workers in real time</p></div></div><div class="kitty-chat-layout"><div class="kitty-chat-contacts"><h3>Conversations</h3><input id="chat-search" placeholder="🔎 Search workers..."><div id="chat-contacts"></div></div><div class="kitty-chat-main"><div class="kitty-chat-head" id="chat-head">Select a worker</div><div id="kitty-chat-stream" class="kitty-chat-stream"></div><form id="kitty-chat-form" class="kitty-chat-compose"><input id="kitty-chat-input" placeholder="Type a message..." required maxlength="3000"><button class="btn-pink">➤</button></form></div></div>`;
+        let chatWid=selectedWorkerId||workers[0]?.id||'';const renderContacts=()=>{const q=content.querySelector('#chat-search').value.toLowerCase();content.querySelector('#chat-contacts').innerHTML=workers.filter(w=>w.name.toLowerCase().includes(q)).map(w=>`<button class="kitty-contact ${w.id===chatWid?'selected':''}" data-chatworker="${escapeHtml(w.id)}">👤 <b>${escapeHtml(w.name)}</b><small>${w.online?'🟢 Online':'⚪ Offline'}</small></button>`).join('');content.querySelectorAll('[data-chatworker]').forEach(b=>b.onclick=()=>{chatWid=b.dataset.chatworker;selectedWorkerId=chatWid;renderContacts();renderMessages();loadChatHistory(chatWid)})};const renderMessages=()=>{const w=workers.find(w=>w.id===chatWid);content.querySelector('#chat-head').textContent=w?`${w.name} · ${w.online?'Online':'Offline'}`:'Select a worker';const msgs=chatHistoryMap.get(chatWid)||[];const box=content.querySelector('#kitty-chat-stream');box.innerHTML=msgs.length?msgs.map(m=>`<div class="kitty-message ${m.sender==='admin'||m.from==='admin'||m.role==='admin'?'sent':''}">${escapeHtml(m.text||m.message||'')}<small>${escapeHtml(m.sender||m.from||'')}</small></div>`).join(''):'<p class="kitty-empty">No messages yet</p>';box.scrollTop=box.scrollHeight};content.querySelector('#chat-search').oninput=renderContacts;content.querySelector('#kitty-chat-form').onsubmit=e=>{e.preventDefault();const input=content.querySelector('#kitty-chat-input');if(!chatWid||!socket?.connected)return;socket.emit('send-chat-message',{workerId:chatWid,text:input.value.trim()});input.value=''};content.dataset.chatWorker=chatWid;renderContacts();renderMessages();if(chatWid)loadChatHistory(chatWid);
       } else if (currentView === 'reports') {
-        content.innerHTML=`<div class="view-form">${workerPicker()}<button class="btn-pink" id="load-reports">Load work sessions</button><button class="btn-outline" id="export-reports">Export CSV</button></div><div id="report-results">Choose a worker to view recorded sessions.</div>`;
-        let reportRows=[];
-        content.querySelector('#load-reports').onclick=async()=>{try{const d=await api('/api/work-sessions/'+encodeURIComponent(content.querySelector('#panel-worker').value));reportRows=d.sessions;content.querySelector('#report-results').innerHTML=reportRows.length?reportRows.map(r=>`<div class="view-tile">${escapeHtml(JSON.stringify(r))}</div>`).join(''):'No sessions for this worker.'}catch(e){content.querySelector('#report-results').textContent=e.message}};
-        content.querySelector('#export-reports').onclick=()=>{if(!reportRows.length){content.querySelector('#load-reports').click();return}const keys=[...new Set(reportRows.flatMap(Object.keys))];const csv=[keys,...reportRows.map(r=>keys.map(k=>r[k]??''))].map(row=>row.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(',')).join('\r\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='worker-sessions.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)};
+        content.innerHTML=`<div class="kitty-section-intro"><div><h2>📈 Earning</h2><p>Worker hours and recorded sessions</p></div><button class="btn-pink" id="export-reports">⇩ Export Report</button></div><div class="kitty-stats"><div><b id="stat-hours">—</b><span>Total Hours</span></div><div><b id="stat-sessions">—</b><span>Work Sessions</span></div><div><b id="stat-workers">${workers.length}</b><span>Registered Workers</span></div></div><div class="kitty-filter"><select id="panel-worker"><option value="">All Workers</option>${workers.map(w=>`<option value="${escapeHtml(w.id)}">${escapeHtml(w.name)}</option>`).join('')}</select><button class="btn-outline" id="load-reports">Refresh Sessions</button></div><h3>Session Details</h3><div id="report-results" class="kitty-report-table">Loading…</div><p class="kitty-help">Earnings are not calculated because the current server does not store approved task payments or pay rates. No sample money amounts are displayed.</p>`;
+        let reportRows=[];const load=async()=>{try{const wid=content.querySelector('#panel-worker').value;const names=wid?workers.filter(w=>w.id===wid):workers;const results=await Promise.all(names.map(async w=>{const d=await api('/api/work-sessions/'+encodeURIComponent(w.id));return (d.sessions||[]).map(r=>({...r,workerName:w.name}))}));reportRows=results.flat();content.querySelector('#stat-sessions').textContent=reportRows.length;const ms=reportRows.reduce((sum,r)=>sum+(Number(r.durationMs)||0),0);content.querySelector('#stat-hours').textContent=ms?(ms/3600000).toFixed(1):'—';content.querySelector('#report-results').innerHTML=reportRows.length?`<div class="kitty-table-scroll"><table><thead><tr><th>Worker</th><th>Session data</th></tr></thead><tbody>${reportRows.map(r=>`<tr><td>${escapeHtml(r.workerName)}</td><td>${escapeHtml(JSON.stringify(r))}</td></tr>`).join('')}</tbody></table></div>`:'<p class="kitty-empty">No recorded sessions found</p>'}catch(err){content.querySelector('#report-results').textContent=err.message}};content.querySelector('#panel-worker').onchange=load;content.querySelector('#load-reports').onclick=load;content.querySelector('#export-reports').onclick=()=>{if(!reportRows.length){alert('No sessions to export');return}const keys=[...new Set(reportRows.flatMap(Object.keys))],csv=[keys,...reportRows.map(r=>keys.map(k=>r[k]??''))].map(row=>row.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(',')).join('\r\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='worker-sessions.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)};load();
       } else if (currentView === 'settings') {
         content.innerHTML=`<form id="settings-form" class="view-form"><label><input type="checkbox" id="compact-mode" ${localStorage.getItem('kitty-compact')==='1'?'checked':''}> Compact dashboard cards</label><label><input type="checkbox" id="confirm-stop" ${localStorage.getItem('kitty-confirm-stop')!=='0'?'checked':''}> Confirm before stopping a worker timer</label><button class="btn-pink" type="submit">Save preferences</button></form><p>Settings on this page are saved locally in this browser.</p>`;
         content.querySelector('form').onsubmit=e=>{e.preventDefault();localStorage.setItem('kitty-compact',document.getElementById('compact-mode').checked?'1':'0');localStorage.setItem('kitty-confirm-stop',document.getElementById('confirm-stop').checked?'1':'0');document.body.classList.toggle('compact',document.getElementById('compact-mode').checked);alert('Preferences saved')};
@@ -518,6 +530,90 @@
       socket.emit('admin-timer-control', { workerId: selectedWorkerId, action: 'stop' });
     };
 
+    // Records the already-authorized remote WebRTC media stream in the admin browser.
+    // This doesn't renegotiate, replace, or otherwise modify the live camera feed.
+    let videoRecorder = null;
+    let recordStream = null;
+    let recordingChunks = [];
+    let recordingWorkerName = '';
+    let recordingStarted = 0;
+    let recordingMime = '';
+    const recordButton = document.getElementById('btn-record');
+    const recordStatus = document.getElementById('record-status');
+    function recordMessage(message) { recordStatus.textContent = message; }
+    function recordReset() {
+      recordButton.textContent = '🔴 Record Video';
+      recordButton.classList.remove('btn-pink');
+      recordButton.classList.add('btn-outline');
+    }
+    function stopRecording() {
+      if (videoRecorder && videoRecorder.state !== 'inactive') {
+        recordMessage('Finalizing recording…');
+        videoRecorder.stop();
+      }
+    }
+    recordButton.onclick = () => {
+      if (videoRecorder && videoRecorder.state !== 'inactive') { stopRecording(); return; }
+      if (!window.MediaRecorder) { recordMessage('Recording is not supported in this browser. Use the latest Chrome or Edge.'); return; }
+      const feed = document.getElementById('live-video-player');
+      const source = feed.srcObject;
+      const videoTracks = source?.getVideoTracks?.() || [];
+      if (!videoTracks.some(t => t.readyState === 'live')) {
+        recordMessage('Connect the live camera and wait for video before recording.');
+        return;
+      }
+      if (feed.readyState < 2) { recordMessage('Wait for the live camera to display video before recording.'); return; }
+      const options = ['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm','video/mp4']
+        .find(m => MediaRecorder.isTypeSupported(m));
+      try {
+        recordStream = new MediaStream(source.getTracks().filter(t => t.readyState === 'live'));
+        recordingChunks = [];
+        recordingMime = options || '';
+        const recorder = new MediaRecorder(recordStream, options ? {mimeType: options} : undefined);
+        videoRecorder = recorder;
+        recordingWorkerName = workers.find(w => w.id === selectedWorkerId)?.name || 'worker';
+        recordingStarted = Date.now();
+        recorder.ondataavailable = e => { if (e.data?.size) recordingChunks.push(e.data); };
+        recorder.onerror = e => { recordMessage('Recording error: ' + (e.error?.message || 'unknown error')); };
+        recorder.onstop = () => {
+          if (videoRecorder !== recorder) return;
+          const chunks = recordingChunks;
+          const mime = recorder.mimeType || recordingMime || 'video/webm';
+          const blob = new Blob(chunks, {type: mime});
+          recordReset();
+          videoRecorder = null;
+          recordStream = null;
+          recordingChunks = [];
+          if (!blob.size) { recordMessage('No video was captured. Check that the camera stayed connected.'); return; }
+          const ext = mime.includes('mp4') ? 'mp4' : 'webm';
+          const cleanName = recordingWorkerName.replace(/[^a-z0-9_-]+/gi,'_');
+          const fileName = `${cleanName}_${new Date(recordingStarted).toISOString().replace(/[:.]/g,'-')}.${ext}`;
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = fileName;
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 60000);
+          recordMessage(`Saved ${fileName} (${(blob.size / 1048576).toFixed(1)} MB) to your browser downloads.`);
+        };
+        recorder.start(1000);
+        recordButton.textContent = '⏹ Stop Recording';
+        recordButton.classList.add('btn-pink');
+        recordButton.classList.remove('btn-outline');
+        recordMessage('● Recording camera' + (recordStream.getAudioTracks().length ? ' + microphone audio' : ' (no audio track available)') + ' — click Stop Recording to save.');
+        for (const track of recordStream.getTracks()) {
+          track.addEventListener('ended', () => { if (recorder.state !== 'inactive') stopRecording(); }, {once:true});
+        }
+      } catch (err) {
+        videoRecorder = null;
+        recordStream = null;
+        recordReset();
+        recordMessage('Cannot start recording: ' + err.message);
+      }
+    };
+
     document.getElementById('btn-mute').onclick = () => {
       audioEnabled = !audioEnabled;
       const v = document.getElementById('live-video-player');
@@ -575,6 +671,7 @@
         chatHistoryMap.set(workerId, messages || []);
         if (workerId === selectedWorkerId) {
           renderChatForWorker(workerId);
+          refreshKittyChat();
         }
       });
 
@@ -585,6 +682,7 @@
 
         if (msg.workerId === selectedWorkerId) {
           renderChatForWorker(selectedWorkerId);
+          refreshKittyChat();
         }
       });
 
