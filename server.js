@@ -107,6 +107,14 @@ const users = [
   }
 ];
 
+function resolveWorkerId(input) {
+  if (!input) return '';
+  const s = String(input).trim().toLowerCase();
+  if (['all', 'open', 'unassigned', 'none', 'null', 'undefined'].includes(s)) return '';
+  const u = users.find(u => u.role === 'worker' && (u.id.toLowerCase() === s || u.username.toLowerCase() === s));
+  return u ? u.username : s;
+}
+
 const LIVE_NONE = 'NONE';
 const LIVE_CAMERA_PENDING = 'CAMERA_PENDING';
 const LIVE_CAMERA = 'CAMERA';
@@ -566,17 +574,26 @@ app.post('/api/worker/stop', requireRole('worker'), (req, res) => {
 // Persistent administrator task list.
 const TASKS_FILE = path.join(DATA_DIR, 'admin-tasks.json');
 const adminTasks = readJson(TASKS_FILE, []);
+
 app.get('/api/worker/tasks', requireRole('worker'), (req,res) => {
-  const wid = req.session.user.id;
-  const userSessions = workSessions.filter(s => s.workerId === wid);
+  const wid = resolveWorkerId(req.session.user.username || req.session.user.id);
+  const userSessions = workSessions.filter(s => resolveWorkerId(s.workerId) === wid);
   const totalMs = userSessions.reduce((sum, s) => sum + (Number(s.durationMs) || 0), 0);
   const totalHours = (totalMs / 3600000).toFixed(1);
   const workDays = new Set(userSessions.map(s => new Date(s.startedAt).toDateString())).size;
-  const completedTasks = adminTasks.filter(t => (t.workerId === wid || t.assignedWorkerId === wid) && ['submitted', 'completed'].includes(t.status)).length;
+
+  const myTasks = adminTasks.filter(t => {
+    const target = resolveWorkerId(t.workerId);
+    const assigned = resolveWorkerId(t.assignedWorkerId);
+    if (!target && !assigned) return true; // Open for all
+    return target === wid || assigned === wid;
+  });
+
+  const completedTasks = myTasks.filter(t => ['submitted', 'completed'].includes(t.status)).length;
 
   res.json({
     ok: true,
-    tasks: adminTasks.filter(t => !t.workerId || t.workerId === wid),
+    tasks: myTasks,
     stats: {
       totalMs,
       totalHours,
@@ -585,32 +602,43 @@ app.get('/api/worker/tasks', requireRole('worker'), (req,res) => {
     }
   });
 });
+
 app.post('/api/worker/tasks/:id/submit', requireRole('worker'), (req,res) => {
-  const task=adminTasks.find(t=>t.id===req.params.id && (!t.workerId || t.workerId===req.session.user.id));
-  if(!task) return res.status(404).json({error:'Task not found'});
-  if(task.status==='completed') return res.status(409).json({error:'Task already completed'});
-  if(task.status!=='open' && task.assignedWorkerId!==req.session.user.id) return res.status(409).json({error:'Task is not available'});
-  if(task.assignedWorkerId && task.assignedWorkerId!==req.session.user.id) return res.status(409).json({error:'Task claimed by another worker'});
-  task.assignedWorkerId=req.session.user.id;task.status='submitted';task.submittedAt=new Date().toISOString();
-  fs.writeFileSync(TASKS_FILE,JSON.stringify(adminTasks,null,2));
-  io.emit('tasks-updated');res.json({ok:true,task});
+  const wid = resolveWorkerId(req.session.user.username || req.session.user.id);
+  const task = adminTasks.find(t => t.id === req.params.id && (!resolveWorkerId(t.workerId) || resolveWorkerId(t.workerId) === wid || resolveWorkerId(t.assignedWorkerId) === wid));
+  if (!task) return res.status(404).json({error: 'Task not found'});
+  if (task.status === 'completed') return res.status(409).json({error: 'Task already completed'});
+
+  task.assignedWorkerId = wid;
+  task.status = 'submitted';
+  task.submittedAt = new Date().toISOString();
+  fs.writeFileSync(TASKS_FILE, JSON.stringify(adminTasks, null, 2));
+  io.emit('tasks-updated');
+  res.json({ok: true, task});
 });
+
 app.post('/api/worker/tasks/:id/accept', requireRole('worker'), (req,res) => {
-  const task=adminTasks.find(t=>t.id===req.params.id && (!t.workerId || t.workerId===req.session.user.id));
-  if(!task) return res.status(404).json({error:'Task not found'});
-  if(task.status!=='open' || (task.assignedWorkerId && task.assignedWorkerId!==req.session.user.id)) return res.status(409).json({error:'Task unavailable'});
-  if(adminTasks.some(t=>t.assignedWorkerId===req.session.user.id && t.status==='in_progress')) return res.status(409).json({error:'Submit your current task first'});
-  task.assignedWorkerId=req.session.user.id;task.status='in_progress';task.acceptedAt=new Date().toISOString();
-  fs.writeFileSync(TASKS_FILE,JSON.stringify(adminTasks,null,2));
-  io.emit('tasks-updated');res.json({ok:true,task});
+  const wid = resolveWorkerId(req.session.user.username || req.session.user.id);
+  const task = adminTasks.find(t => t.id === req.params.id && (!resolveWorkerId(t.workerId) || resolveWorkerId(t.workerId) === wid));
+  if (!task) return res.status(404).json({error: 'Task not found'});
+  if (task.status !== 'open') return res.status(409).json({error: 'Task unavailable'});
+
+  task.assignedWorkerId = wid;
+  task.status = 'in_progress';
+  task.acceptedAt = new Date().toISOString();
+  fs.writeFileSync(TASKS_FILE, JSON.stringify(adminTasks, null, 2));
+  io.emit('tasks-updated');
+  res.json({ok: true, task});
 });
+
 // Update only the public display name. Login username, worker ID, and records never change.
 app.post('/api/admin/workers/:id/display-name', requireRole('admin'), (req, res) => {
-  const state = states.get(req.params.id);
-  if (!state) return res.status(404).json({ok:false,error:'Worker not found'});
+  const wid = resolveWorkerId(req.params.id);
+  const state = states.get(wid) || states.get(req.params.id);
+  if (!state) return res.status(404).json({ok: false, error: 'Worker not found'});
   const name = String(req.body?.name ?? '').trim().replace(/\s+/g, ' ');
   if (!name || name.length > 60 || /[\x00-\x1f\x7f]/.test(name)) {
-    return res.status(400).json({ok:false,error:'Enter a display name (1–60 characters).'});
+    return res.status(400).json({ok: false, error: 'Enter a display name (1–60 characters).'});
   }
   state.name = name;
   persistState();
@@ -618,27 +646,41 @@ app.post('/api/admin/workers/:id/display-name', requireRole('admin'), (req, res)
   if (state.socketId) {
     io.to(state.socketId).emit('name-updated', { name: state.name });
   }
-  res.json({ok:true,workerId:state.id,name:state.name});
+  io.to('worker:' + wid).emit('name-updated', { name: state.name });
+  res.json({ok: true, workerId: state.id, name: state.name});
 });
-app.get('/api/admin/tasks', requireRole('admin'), (_req,res) => res.json({ok:true,tasks:adminTasks}));
+
+app.get('/api/admin/tasks', requireRole('admin'), (_req,res) => res.json({ok: true, tasks: adminTasks}));
+
 app.post('/api/admin/tasks', requireRole('admin'), (req,res) => {
-  const title = String(req.body?.title || '').trim().slice(0,160);
-  const description = String(req.body?.description || '').trim().slice(0,2000);
-  const workerId = String(req.body?.workerId || '');
-  if (!title) return res.status(400).json({error:'Title required'});
-  if (workerId && !states.has(workerId)) return res.status(400).json({error:'Unknown worker'});
-  const task = {id:crypto.randomUUID(),title,description,workerId,status:'open',createdAt:new Date().toISOString()};
-  adminTasks.unshift(task); fs.writeFileSync(TASKS_FILE,JSON.stringify(adminTasks,null,2));
+  const title = String(req.body?.title || '').trim().slice(0, 160);
+  const description = String(req.body?.description || '').trim().slice(0, 2000);
+  const workerId = resolveWorkerId(req.body?.workerId);
+
+  if (!title) return res.status(400).json({error: 'Title required'});
+
+  const task = {
+    id: crypto.randomUUID(),
+    title,
+    description,
+    workerId,
+    status: 'open',
+    createdAt: new Date().toISOString()
+  };
+  adminTasks.unshift(task);
+  fs.writeFileSync(TASKS_FILE, JSON.stringify(adminTasks, null, 2));
   io.emit('tasks-updated');
-  res.json({ok:true,task});
+  res.json({ok: true, task});
 });
-app.post('/api/admin/tasks/status',requireRole('admin'),(req,res)=>{
-  const task=adminTasks.find(t=>t.id===req.body?.id);
-  if(!task || !['open','completed'].includes(req.body?.status)) return res.status(400).json({error:'Invalid task or status'});
-  task.status=req.body.status;task.updatedAt=new Date().toISOString();
-  fs.writeFileSync(TASKS_FILE,JSON.stringify(adminTasks,null,2));
+
+app.post('/api/admin/tasks/status', requireRole('admin'), (req,res) => {
+  const task = adminTasks.find(t => t.id === req.body?.id);
+  if (!task || !['open', 'completed'].includes(req.body?.status)) return res.status(400).json({error: 'Invalid task or status'});
+  task.status = req.body.status;
+  task.updatedAt = new Date().toISOString();
+  fs.writeFileSync(TASKS_FILE, JSON.stringify(adminTasks, null, 2));
   io.emit('tasks-updated');
-  res.json({ok:true,task});
+  res.json({ok: true, task});
 });
 
 app.get('/api/workers', requireRole('admin'), (_req, res) => {
@@ -649,17 +691,9 @@ app.get('/api/workers', requireRole('admin'), (_req, res) => {
 });
 
 app.get('/api/work-sessions/:workerId', requireRole('admin'), (req, res) => {
-  const workerId = req.params.workerId;
-
-  if (!states.has(workerId)) {
-    return res.status(404).json({
-      ok: false,
-      error: 'Unknown worker'
-    });
-  }
-
+  const wid = resolveWorkerId(req.params.workerId);
   const sessions = workSessions
-    .filter(item => item.workerId === workerId)
+    .filter(item => resolveWorkerId(item.workerId) === wid)
     .slice(-50)
     .reverse();
 
@@ -672,8 +706,10 @@ app.get('/api/work-sessions/:workerId', requireRole('admin'), (req, res) => {
 const chatMessages = [];
 
 app.get('/api/chat/:workerId', requireAuth, (req, res) => {
-  const targetWorkerId = req.session.user.role === 'worker' ? req.session.user.id : req.params.workerId;
-  const history = chatMessages.filter(m => m.workerId === targetWorkerId);
+  const user = req.session.user;
+  const rawId = user.role === 'worker' ? (user.username || user.id) : req.params.workerId;
+  const targetId = resolveWorkerId(rawId);
+  const history = chatMessages.filter(m => resolveWorkerId(m.workerId) === targetId);
   res.json({ ok: true, messages: history });
 });
 
@@ -682,12 +718,13 @@ app.post('/api/chat/send', requireAuth, (req, res) => {
   const messageText = String(text || '').trim();
   if (!messageText) return res.status(400).json({ ok: false, error: 'Message cannot be empty' });
 
-  const targetWorkerId = req.session.user.role === 'worker' ? req.session.user.id : workerId;
-  if (!targetWorkerId) return res.status(400).json({ ok: false, error: 'Target worker required' });
+  const rawTarget = req.session.user.role === 'worker' ? (req.session.user.username || req.session.user.id) : workerId;
+  const targetId = resolveWorkerId(rawTarget);
+  if (!targetId && req.session.user.role === 'admin') return res.status(400).json({ ok: false, error: 'Target worker required' });
 
   const msg = {
     id: crypto.randomUUID(),
-    workerId: targetWorkerId,
+    workerId: targetId,
     senderRole: req.session.user.role,
     senderName: req.session.user.name || req.session.user.username,
     text: messageText,
@@ -697,10 +734,15 @@ app.post('/api/chat/send', requireAuth, (req, res) => {
   chatMessages.push(msg);
 
   io.to('admins').emit('chat-message', msg);
-  const workerState = states.get(targetWorkerId);
+  io.to('worker:' + targetId).emit('chat-message', msg);
+
+  const workerState = states.get(targetId) || states.get(workerId);
   if (workerState && workerState.socketId) {
     io.to(workerState.socketId).emit('chat-message', msg);
   }
+
+  res.json({ ok: true, message: msg });
+});
 
   res.json({ ok: true, message: msg });
 });
@@ -812,7 +854,11 @@ io.on('connection', socket => {
       [...states.values()].map(safeWorkerState)
     );
   } else if (user.role === 'worker' && user.id) {
-    const state = states.get(user.id);
+    const wid = resolveWorkerId(user.username || user.id);
+    socket.join('worker:' + wid);
+    socket.join('worker:' + user.id);
+
+    const state = states.get(wid) || states.get(user.id);
 
     if (!state) {
       socket.emit('timer-stopped', {
