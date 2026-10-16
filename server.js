@@ -82,28 +82,28 @@ const users = [
     id: 'worker1',
     username: process.env.WORKER1_USERNAME || 'john',
     password: process.env.WORKER1_PASSWORD || 'john123',
-    name: process.env.WORKER1_USER || process.env.WORKER1_NAME || 'Worker 01'
+    name: process.env.WORKER1_USER || process.env.WORKER1_NAME || 'John'
   },
   {
     role: 'worker',
     id: 'worker2',
     username: process.env.WORKER2_USERNAME || 'mark',
     password: process.env.WORKER2_PASSWORD || 'mark123',
-    name: process.env.WORKER2_USER || process.env.WORKER2_NAME || 'Worker 02'
+    name: process.env.WORKER2_USER || process.env.WORKER2_NAME || 'Mark'
   },
   {
     role: 'worker',
     id: 'worker3',
     username: process.env.WORKER3_USERNAME || 'anne',
     password: process.env.WORKER3_PASSWORD || 'anne123',
-    name: process.env.WORKER3_USER || process.env.WORKER3_NAME || 'Worker 03'
+    name: process.env.WORKER3_USER || process.env.WORKER3_NAME || 'Anne'
   },
   {
     role: 'worker',
     id: 'worker4',
     username: process.env.WORKER4_USERNAME || 'thing',
     password: process.env.WORKER4_PASSWORD || 'thing123',
-    name: process.env.WORKER4_USER || process.env.WORKER4_NAME || 'Worker 04'
+    name: process.env.WORKER4_USER || process.env.WORKER4_NAME || 'Thing'
   }
 ];
 
@@ -578,15 +578,28 @@ app.post('/api/worker/stop', requireRole('worker'), (req, res) => {
   });
 });
 
-// Persistent administrator task list.
+// Persistent administrator task list and earnings/bonus records.
 const TASKS_FILE = path.join(DATA_DIR, 'admin-tasks.json');
+const EARNINGS_FILE = path.join(DATA_DIR, 'admin-earnings.json');
+const CHAT_FILE = path.join(DATA_DIR, 'chat-messages.json');
+
 const adminTasks = readJson(TASKS_FILE, []);
+const adminEarnings = readJson(EARNINGS_FILE, []);
+const chatMessages = readJson(CHAT_FILE, []);
+
+function persistEarnings() {
+  writeJsonAtomic(EARNINGS_FILE, adminEarnings);
+}
+
+function persistChat() {
+  writeJsonAtomic(CHAT_FILE, chatMessages.slice(-2000));
+}
 
 app.get('/api/worker/tasks', requireRole('worker'), (req,res) => {
   const wid = resolveWorkerId(req.session.user.username || req.session.user.id);
   const userSessions = workSessions.filter(s => resolveWorkerId(s.workerId) === wid);
   const totalMs = userSessions.reduce((sum, s) => sum + (Number(s.durationMs) || 0), 0);
-  const totalHours = (totalMs / 3600000).toFixed(1);
+  const totalHours = (totalMs / 3600000);
   const workDays = new Set(userSessions.map(s => new Date(s.startedAt).toDateString())).size;
 
   const myTasks = adminTasks.filter(t => {
@@ -598,14 +611,22 @@ app.get('/api/worker/tasks', requireRole('worker'), (req,res) => {
 
   const completedTasks = myTasks.filter(t => ['submitted', 'completed'].includes(t.status)).length;
 
+  const myManualEarnings = adminEarnings.filter(e => resolveWorkerId(e.workerId) === wid);
+  const bonusAmount = myManualEarnings.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+  const manualHours = myManualEarnings.reduce((sum, e) => sum + (Number(e.hours) || 0), 0);
+
+  const grandTotalHours = (totalHours + manualHours).toFixed(1);
+
   res.json({
     ok: true,
     tasks: myTasks,
+    manualEarnings: myManualEarnings,
     stats: {
       totalMs,
-      totalHours,
+      totalHours: grandTotalHours,
       workDays,
-      completedTasks
+      completedTasks,
+      bonusAmount: bonusAmount.toFixed(2)
     }
   });
 });
@@ -690,6 +711,60 @@ app.post('/api/admin/tasks/status', requireRole('admin'), (req,res) => {
   res.json({ok: true, task});
 });
 
+// Admin Manual Earnings & Bonus Endpoints
+app.get('/api/admin/earnings', requireRole('admin'), (req, res) => {
+  res.json({ ok: true, earnings: adminEarnings });
+});
+
+app.post('/api/admin/earnings', requireRole('admin'), (req, res) => {
+  const { workerId, type, title, amount, hours, description } = req.body || {};
+  const wid = resolveWorkerId(workerId);
+  const cleanTitle = String(title || '').trim().slice(0, 160);
+  const numAmount = Number(amount) || 0;
+  const numHours = Number(hours) || 0;
+
+  if (!cleanTitle) return res.status(400).json({ error: 'Title / Reason is required' });
+  if (!wid) return res.status(400).json({ error: 'Worker selection required' });
+
+  const workerUser = users.find(u => u.username === wid || u.id === wid);
+  const workerState = states.get(wid);
+  const workerName = workerState?.name || workerUser?.name || wid;
+
+  const record = {
+    id: crypto.randomUUID(),
+    workerId: wid,
+    workerName: workerName,
+    type: type === 'bonus' ? 'bonus' : 'completed_task',
+    title: cleanTitle,
+    amount: numAmount,
+    hours: numHours,
+    description: String(description || '').trim().slice(0, 1000),
+    createdAt: new Date().toISOString()
+  };
+
+  adminEarnings.unshift(record);
+  persistEarnings();
+
+  io.emit('tasks-updated');
+  io.emit('earnings-updated', record);
+
+  res.json({ ok: true, record });
+});
+
+app.post('/api/admin/earnings/delete', requireRole('admin'), (req, res) => {
+  const { id } = req.body || {};
+  const targetId = id || req.params.id;
+  const idx = adminEarnings.findIndex(e => e.id === targetId);
+  if (idx === -1) return res.status(404).json({ error: 'Record not found' });
+  const removed = adminEarnings.splice(idx, 1)[0];
+  persistEarnings();
+
+  io.emit('tasks-updated');
+  io.emit('earnings-updated');
+
+  res.json({ ok: true, removed });
+});
+
 app.get('/api/workers', requireRole('admin'), (_req, res) => {
   res.json({
     ok: true,
@@ -709,8 +784,6 @@ app.get('/api/work-sessions/:workerId', requireRole('admin'), (req, res) => {
     sessions
   });
 });
-
-const chatMessages = [];
 
 app.get('/api/chat/:workerId', requireAuth, (req, res) => {
   const user = req.session.user;
@@ -739,6 +812,7 @@ app.post('/api/chat/send', requireAuth, (req, res) => {
   };
 
   chatMessages.push(msg);
+  persistChat();
 
   io.to('admins').emit('chat-message', msg);
   io.to('worker:' + targetId).emit('chat-message', msg);
