@@ -1,0 +1,24 @@
+[
+  {
+    "id": "51e866e4-9104-451a-af65-887e3845782c",
+    "title": "Important Project Inspection",
+    "description": "Review site data",
+    "workerId": "john",
+    "status": "submitted",
+    "createdAt": "2026-10-16T20:12:26.959Z",
+    "assignedWorkerId": "john",
+    "acceptedAt": "2026-10-16T20:12:27.097Z",
+    "submittedAt": "2026-10-16T20:12:27.106Z"
+  },
+  {
+    "id": "22fdc409-4779-471c-9db7-d6a80d769d6e",
+    "title": "Important Project Inspection",
+    "description": "Review site data",
+    "workerId": "john",
+    "status": "submitted",
+    "createdAt": "2026-10-16T19:36:27.853Z",
+    "assignedWorkerId": "john",
+    "acceptedAt": "2026-10-16T19:36:27.865Z",
+    "submittedAt": "2026-10-16T19:36:27.871Z"
+  }
+]

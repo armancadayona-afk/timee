@@ -1,0 +1,18 @@
+[
+  {
+    "id": "0a0f878c-0ae2-41d5-9d8d-f230f8c8e62d",
+    "workerId": "john",
+    "senderRole": "admin",
+    "senderName": "Administrator",
+    "text": "Hello Worker 01! Check task #1.",
+    "timestamp": 1792189403828
+  },
+  {
+    "id": "0640327f-6cda-4068-a7a7-b5f53671d7ed",
+    "workerId": "john",
+    "senderRole": "worker",
+    "senderName": "john",
+    "text": "Hello Admin! Working on task #1.",
+    "timestamp": 1792189403834
+  }
+]

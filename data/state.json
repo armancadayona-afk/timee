@@ -1,0 +1,66 @@
+{
+  "worker1": {
+    "lastSeenAt": 0,
+    "displayName": "john",
+    "sessionId": null,
+    "status": "OFFLINE",
+    "startedAt": null,
+    "accumulatedMs": 0
+  },
+  "john": {
+    "lastSeenAt": 0,
+    "displayName": "john",
+    "sessionId": null,
+    "status": "OFFLINE",
+    "startedAt": null,
+    "accumulatedMs": 0
+  },
+  "worker2": {
+    "lastSeenAt": 0,
+    "displayName": "OPO",
+    "sessionId": null,
+    "status": "OFFLINE",
+    "startedAt": null,
+    "accumulatedMs": 0
+  },
+  "mark": {
+    "lastSeenAt": 0,
+    "displayName": "OPO",
+    "sessionId": null,
+    "status": "OFFLINE",
+    "startedAt": null,
+    "accumulatedMs": 0
+  },
+  "worker3": {
+    "lastSeenAt": 0,
+    "displayName": "KOH",
+    "sessionId": null,
+    "status": "OFFLINE",
+    "startedAt": null,
+    "accumulatedMs": 0
+  },
+  "anne": {
+    "lastSeenAt": 0,
+    "displayName": "KOH",
+    "sessionId": null,
+    "status": "OFFLINE",
+    "startedAt": null,
+    "accumulatedMs": 0
+  },
+  "worker4": {
+    "lastSeenAt": 0,
+    "displayName": "MOH",
+    "sessionId": null,
+    "status": "OFFLINE",
+    "startedAt": null,
+    "accumulatedMs": 0
+  },
+  "thing": {
+    "lastSeenAt": 0,
+    "displayName": "MOH",
+    "sessionId": null,
+    "status": "OFFLINE",
+    "startedAt": null,
+    "accumulatedMs": 0
+  }
+}
