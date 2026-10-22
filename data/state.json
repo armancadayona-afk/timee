@@ -1,7 +1,7 @@
 {
   "worker1": {
     "lastSeenAt": 0,
-    "displayName": "john",
+    "displayName": "Worker 1",
     "sessionId": null,
     "status": "OFFLINE",
     "startedAt": null,
@@ -9,7 +9,7 @@
   },
   "john": {
     "lastSeenAt": 0,
-    "displayName": "john",
+    "displayName": "Worker 1",
     "sessionId": null,
     "status": "OFFLINE",
     "startedAt": null,
@@ -17,7 +17,7 @@
   },
   "worker2": {
     "lastSeenAt": 0,
-    "displayName": "OPO",
+    "displayName": "Worker 2",
     "sessionId": null,
     "status": "OFFLINE",
     "startedAt": null,
@@ -25,7 +25,7 @@
   },
   "mark": {
     "lastSeenAt": 0,
-    "displayName": "OPO",
+    "displayName": "Worker 2",
     "sessionId": null,
     "status": "OFFLINE",
     "startedAt": null,
@@ -33,7 +33,7 @@
   },
   "worker3": {
     "lastSeenAt": 0,
-    "displayName": "KOH",
+    "displayName": "Worker 3",
     "sessionId": null,
     "status": "OFFLINE",
     "startedAt": null,
@@ -41,7 +41,7 @@
   },
   "anne": {
     "lastSeenAt": 0,
-    "displayName": "KOH",
+    "displayName": "Worker 3",
     "sessionId": null,
     "status": "OFFLINE",
     "startedAt": null,
@@ -49,7 +49,7 @@
   },
   "worker4": {
     "lastSeenAt": 0,
-    "displayName": "MOH",
+    "displayName": "Worker 4",
     "sessionId": null,
     "status": "OFFLINE",
     "startedAt": null,
@@ -57,7 +57,7 @@
   },
   "thing": {
     "lastSeenAt": 0,
-    "displayName": "MOH",
+    "displayName": "Worker 4",
     "sessionId": null,
     "status": "OFFLINE",
     "startedAt": null,

@@ -82,28 +82,28 @@ const users = [
     id: 'worker1',
     username: process.env.WORKER1_USERNAME || 'john',
     password: process.env.WORKER1_PASSWORD || 'john123',
-    name: process.env.WORKER1_USER || process.env.WORKER1_NAME || 'John'
+    name: 'Worker 1'
   },
   {
     role: 'worker',
     id: 'worker2',
     username: process.env.WORKER2_USERNAME || 'mark',
     password: process.env.WORKER2_PASSWORD || 'mark123',
-    name: process.env.WORKER2_USER || process.env.WORKER2_NAME || 'Mark'
+    name: 'Worker 2'
   },
   {
     role: 'worker',
     id: 'worker3',
     username: process.env.WORKER3_USERNAME || 'anne',
     password: process.env.WORKER3_PASSWORD || 'anne123',
-    name: process.env.WORKER3_USER || process.env.WORKER3_NAME || 'Anne'
+    name: 'Worker 3'
   },
   {
     role: 'worker',
     id: 'worker4',
     username: process.env.WORKER4_USERNAME || 'thing',
     password: process.env.WORKER4_PASSWORD || 'thing123',
-    name: process.env.WORKER4_USER || process.env.WORKER4_NAME || 'Thing'
+    name: 'Worker 4'
   }
 ];
 
@@ -161,9 +161,6 @@ for (const worker of users.filter(user => user.role === 'worker')) {
   // The clock is anchored to wall time, so offline time remains accounted for.
   if (old && Number.isFinite(Number(old.lastSeenAt))) {
     state.lastSeenAt = Number(old.lastSeenAt);
-  }
-  if (old && typeof old.displayName === 'string' && old.displayName.trim()) {
-    state.name = old.displayName.trim().slice(0, 60);
   }
   if (old && typeof old.sessionId === 'string' && old.sessionId &&
       workSessions.some(record => record.id === old.sessionId && record.endedAt === null)) {
@@ -302,6 +299,25 @@ function startShift(state) {
 
   persistState();
   persistSessions();
+}
+
+function resetWorkerTimer(state) {
+  if (!state) return;
+  clearDisconnectTimer(state);
+  const durationMs = timerState.elapsed(state);
+  const record = workSessions.find(item => item.id === state.sessionId && item.endedAt === null);
+  if (record) {
+    record.endedAt = Date.now();
+    record.durationMs = durationMs;
+    record.reason = 'admin-reset';
+    persistSessions();
+  }
+  // Reset only timer state. Do not stop the worker socket or the active WebRTC feed.
+  state.status = 'STOPPED';
+  state.startedAt = null;
+  state.accumulatedMs = 0;
+  state.sessionId = null;
+  persistState();
 }
 
 function finishShift(state, reason = 'stopped', nextStatus = 'STOPPED') {
@@ -578,254 +594,11 @@ app.post('/api/worker/stop', requireRole('worker'), (req, res) => {
   });
 });
 
-// Persistent administrator task list and earnings/bonus records.
-const TASKS_FILE = path.join(DATA_DIR, 'admin-tasks.json');
-const EARNINGS_FILE = path.join(DATA_DIR, 'admin-earnings.json');
-const CHAT_FILE = path.join(DATA_DIR, 'chat-messages.json');
-
-const adminTasks = readJson(TASKS_FILE, []);
-const adminEarnings = readJson(EARNINGS_FILE, []);
-const chatMessages = readJson(CHAT_FILE, []);
-
-function persistEarnings() {
-  writeJsonAtomic(EARNINGS_FILE, adminEarnings);
-}
-
-function persistChat() {
-  writeJsonAtomic(CHAT_FILE, chatMessages.slice(-2000));
-}
-
-app.get('/api/worker/tasks', requireRole('worker'), (req,res) => {
-  const wid = resolveWorkerId(req.session.user.username || req.session.user.id);
-  const userSessions = workSessions.filter(s => resolveWorkerId(s.workerId) === wid);
-  const totalMs = userSessions.reduce((sum, s) => sum + (Number(s.durationMs) || 0), 0);
-  const totalHours = (totalMs / 3600000);
-  const workDays = new Set(userSessions.map(s => new Date(s.startedAt).toDateString())).size;
-
-  const myTasks = adminTasks.filter(t => {
-    const target = resolveWorkerId(t.workerId);
-    const assigned = resolveWorkerId(t.assignedWorkerId);
-    if (!target && !assigned) return true; // Open for all
-    return target === wid || assigned === wid;
-  });
-
-  const completedTasks = myTasks.filter(t => ['submitted', 'completed'].includes(t.status)).length;
-
-  const myManualEarnings = adminEarnings.filter(e => resolveWorkerId(e.workerId) === wid);
-  const bonusAmount = myManualEarnings.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
-  const manualHours = myManualEarnings.reduce((sum, e) => sum + (Number(e.hours) || 0), 0);
-
-  const grandTotalHours = (totalHours + manualHours).toFixed(1);
-
-  res.json({
-    ok: true,
-    tasks: myTasks,
-    manualEarnings: myManualEarnings,
-    stats: {
-      totalMs,
-      totalHours: grandTotalHours,
-      workDays,
-      completedTasks,
-      bonusAmount: bonusAmount.toFixed(2)
-    }
-  });
-});
-
-app.post('/api/worker/tasks/:id/submit', requireRole('worker'), (req,res) => {
-  const wid = resolveWorkerId(req.session.user.username || req.session.user.id);
-  const task = adminTasks.find(t => t.id === req.params.id && (!resolveWorkerId(t.workerId) || resolveWorkerId(t.workerId) === wid) && (!resolveWorkerId(t.assignedWorkerId) || resolveWorkerId(t.assignedWorkerId) === wid));
-  if (!task) return res.status(404).json({error: 'Task not found or assigned to another worker'});
-  if (task.status === 'completed') return res.status(409).json({error: 'Task already completed'});
-  if (task.status !== 'in_progress' || resolveWorkerId(task.assignedWorkerId) !== wid) return res.status(409).json({error: 'Accept this task before submitting it'});
-
-  task.assignedWorkerId = wid;
-  task.status = 'submitted';
-  task.submittedAt = new Date().toISOString();
-  fs.writeFileSync(TASKS_FILE, JSON.stringify(adminTasks, null, 2));
-  io.emit('tasks-updated');
-  res.json({ok: true, task});
-});
-
-app.post('/api/worker/tasks/:id/accept', requireRole('worker'), (req,res) => {
-  const wid = resolveWorkerId(req.session.user.username || req.session.user.id);
-  const task = adminTasks.find(t => t.id === req.params.id && (!resolveWorkerId(t.workerId) || resolveWorkerId(t.workerId) === wid));
-  if (!task) return res.status(404).json({error: 'Task not found'});
-  if (task.status !== 'open') return res.status(409).json({error: 'Task unavailable'});
-
-  task.assignedWorkerId = wid;
-  task.status = 'in_progress';
-  task.acceptedAt = new Date().toISOString();
-  fs.writeFileSync(TASKS_FILE, JSON.stringify(adminTasks, null, 2));
-  io.emit('tasks-updated');
-  res.json({ok: true, task});
-});
-
-// Update only the public display name. Login username, worker ID, and records never change.
-app.post('/api/admin/workers/:id/display-name', requireRole('admin'), (req, res) => {
-  const wid = resolveWorkerId(req.params.id);
-  const state = states.get(wid) || states.get(req.params.id);
-  if (!state) return res.status(404).json({ok: false, error: 'Worker not found'});
-  const name = String(req.body?.name ?? '').trim().replace(/\s+/g, ' ');
-  if (!name || name.length > 60 || /[\x00-\x1f\x7f]/.test(name)) {
-    return res.status(400).json({ok: false, error: 'Enter a display name (1–60 characters).'});
-  }
-  state.name = name;
-  persistState();
-  broadcastStates();
-  if (state.socketId) {
-    io.to(state.socketId).emit('name-updated', { name: state.name });
-  }
-  io.to('worker:' + wid).emit('name-updated', { name: state.name });
-  res.json({ok: true, workerId: state.id, name: state.name});
-});
-
-app.get('/api/admin/tasks', requireRole('admin'), (_req,res) => res.json({ok: true, tasks: adminTasks}));
-
-app.post('/api/admin/tasks', requireRole('admin'), (req,res) => {
-  const title = String(req.body?.title || '').trim().slice(0, 160);
-  const description = String(req.body?.description || '').trim().slice(0, 2000);
-  const workerId = resolveWorkerId(req.body?.workerId);
-
-  if (!title) return res.status(400).json({error: 'Title required'});
-
-  const task = {
-    id: crypto.randomUUID(),
-    title,
-    description,
-    workerId,
-    status: 'open',
-    createdAt: new Date().toISOString()
-  };
-  adminTasks.unshift(task);
-  fs.writeFileSync(TASKS_FILE, JSON.stringify(adminTasks, null, 2));
-  io.emit('tasks-updated');
-  res.json({ok: true, task});
-});
-
-app.post('/api/admin/tasks/status', requireRole('admin'), (req,res) => {
-  const task = adminTasks.find(t => t.id === req.body?.id);
-  if (!task || !['open', 'completed'].includes(req.body?.status)) return res.status(400).json({error: 'Invalid task or status'});
-  task.status = req.body.status;
-  task.updatedAt = new Date().toISOString();
-  fs.writeFileSync(TASKS_FILE, JSON.stringify(adminTasks, null, 2));
-  io.emit('tasks-updated');
-  res.json({ok: true, task});
-});
-
-// Admin Manual Earnings & Bonus Endpoints
-app.get('/api/admin/earnings', requireRole('admin'), (req, res) => {
-  res.json({ ok: true, earnings: adminEarnings });
-});
-
-app.post('/api/admin/earnings', requireRole('admin'), (req, res) => {
-  const { workerId, type, title, amount, hours, description } = req.body || {};
-  const wid = resolveWorkerId(workerId);
-  const cleanTitle = String(title || '').trim().slice(0, 160);
-  const numAmount = Number(amount) || 0;
-  const numHours = Number(hours) || 0;
-
-  if (!cleanTitle) return res.status(400).json({ error: 'Title / Reason is required' });
-  if (!wid) return res.status(400).json({ error: 'Worker selection required' });
-
-  const workerUser = users.find(u => u.username === wid || u.id === wid);
-  const workerState = states.get(wid);
-  const workerName = workerState?.name || workerUser?.name || wid;
-
-  const record = {
-    id: crypto.randomUUID(),
-    workerId: wid,
-    workerName: workerName,
-    type: type === 'bonus' ? 'bonus' : 'completed_task',
-    title: cleanTitle,
-    amount: numAmount,
-    hours: numHours,
-    description: String(description || '').trim().slice(0, 1000),
-    createdAt: new Date().toISOString()
-  };
-
-  adminEarnings.unshift(record);
-  persistEarnings();
-
-  io.emit('tasks-updated');
-  io.emit('earnings-updated', record);
-
-  res.json({ ok: true, record });
-});
-
-app.post('/api/admin/earnings/delete', requireRole('admin'), (req, res) => {
-  const { id } = req.body || {};
-  const targetId = id || req.params.id;
-  const idx = adminEarnings.findIndex(e => e.id === targetId);
-  if (idx === -1) return res.status(404).json({ error: 'Record not found' });
-  const removed = adminEarnings.splice(idx, 1)[0];
-  persistEarnings();
-
-  io.emit('tasks-updated');
-  io.emit('earnings-updated');
-
-  res.json({ ok: true, removed });
-});
-
 app.get('/api/workers', requireRole('admin'), (_req, res) => {
   res.json({
     ok: true,
     workers: uniqueWorkerStates()
   });
-});
-
-app.get('/api/work-sessions/:workerId', requireRole('admin'), (req, res) => {
-  const wid = resolveWorkerId(req.params.workerId);
-  const sessions = workSessions
-    .filter(item => resolveWorkerId(item.workerId) === wid)
-    .slice(-50)
-    .reverse();
-
-  res.json({
-    ok: true,
-    sessions
-  });
-});
-
-app.get('/api/chat/:workerId', requireAuth, (req, res) => {
-  const user = req.session.user;
-  const rawId = user.role === 'worker' ? (user.username || user.id) : req.params.workerId;
-  const targetId = resolveWorkerId(rawId);
-  const history = chatMessages.filter(m => resolveWorkerId(m.workerId) === targetId);
-  res.json({ ok: true, messages: history });
-});
-
-app.post('/api/chat/send', requireAuth, (req, res) => {
-  const { workerId, text } = req.body || {};
-  const messageText = String(text || '').trim();
-  if (!messageText) return res.status(400).json({ ok: false, error: 'Message cannot be empty' });
-
-  const rawTarget = req.session.user.role === 'worker' ? (req.session.user.username || req.session.user.id) : workerId;
-  const targetId = resolveWorkerId(rawTarget);
-  if (!targetId && req.session.user.role === 'admin') return res.status(400).json({ ok: false, error: 'Target worker required' });
-
-  const targetState = states.get(targetId) || states.get(workerId);
-  const conversationWorkerId = targetState?.id || targetId;
-  const msg = {
-    id: crypto.randomUUID(),
-    workerId: conversationWorkerId,
-    senderRole: req.session.user.role,
-    senderName: req.session.user.name || req.session.user.username,
-    text: messageText,
-    timestamp: Date.now()
-  };
-
-  chatMessages.push(msg);
-  persistChat();
-
-  io.to('admins').emit('chat-message', msg);
-  io.to('worker:' + targetId).emit('chat-message', msg);
-
-  const workerState = states.get(targetId) || states.get(workerId);
-  if (workerState && workerState.socketId) {
-    io.to(workerState.socketId).emit('chat-message', msg);
-  }
-
-  res.json({ ok: true, message: msg });
 });
 
 app.post('/api/admin/worker/timer', requireRole('admin'), (req, res) => {
@@ -853,6 +626,8 @@ app.post('/api/admin/worker/timer', requireRole('admin'), (req, res) => {
     if (state.status === 'PAUSED') {
       timerState.resume(state);
     }
+  } else if (action === 'reset') {
+    resetWorkerTimer(state);
   } else if (action === 'stop') {
     if (state.sessionId) {
       const socketId = finishShift(state, 'admin-stop', 'STOPPED');
@@ -1226,6 +1001,8 @@ io.on('connection', socket => {
         if (state.status === 'PAUSED') {
           timerState.resume(state);
         }
+      } else if (action === 'reset') {
+        resetWorkerTimer(state);
       } else if (action === 'stop') {
         if (state.sessionId) {
           const socketId = finishShift(state, 'admin-stop', 'STOPPED');
@@ -1516,47 +1293,6 @@ io.on('connection', socket => {
       });
     }
   );
-
-  socket.on('send-chat-message', ({ workerId, text } = {}) => {
-    const messageText = String(text || '').trim();
-    if (!messageText) return;
-
-    const targetWorkerId = user.role === 'worker' ? user.id : workerId;
-    if (!targetWorkerId) return;
-
-    const msg = {
-      id: crypto.randomUUID(),
-      workerId: targetWorkerId,
-      senderRole: user.role,
-      senderName: user.name || user.username,
-      text: messageText,
-      timestamp: Date.now()
-    };
-
-    const normalizedWorkerId = resolveWorkerId(targetWorkerId);
-    if (!normalizedWorkerId) return;
-    const targetState = states.get(normalizedWorkerId) || states.get(targetWorkerId);
-    msg.workerId = targetState?.id || normalizedWorkerId;
-    chatMessages.push(msg);
-    persistChat();
-
-    // One canonical event path for both admin and worker clients.
-    io.to('admins').emit('chat-message', msg);
-    io.to('worker:' + normalizedWorkerId).emit('chat-message', msg);
-    const workerState = states.get(normalizedWorkerId);
-    if (workerState?.socketId) io.to(workerState.socketId).emit('chat-message', msg);
-  });
-
-  socket.on('get-chat-history', ({ workerId } = {}) => {
-    const requestedWorkerKey = user.role === 'worker' ? user.id : workerId;
-    const targetWorkerId = resolveWorkerId(user.role === 'worker' ? (user.username || user.id) : workerId);
-    if (!targetWorkerId || (user.role !== 'admin' && targetWorkerId !== resolveWorkerId(user.username || user.id))) {
-      socket.emit('chat-history', { workerId: requestedWorkerKey || '', messages: [] });
-      return;
-    }
-    const history = chatMessages.filter(m => resolveWorkerId(m.workerId) === targetWorkerId);
-    socket.emit('chat-history', { workerId: requestedWorkerKey, messages: history });
-  });
 
   socket.on('disconnect', () => {
     if (user.role === 'worker' && user.id) {
