@@ -1,0 +1,944 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WorkWise - Admin</title>
+  <link rel="stylesheet" href="/styles.css">
+<style>
+    /* Four persistent, independent live worker panels */
+    .four-monitor-card { margin-bottom:16px; }
+    .multi-monitor-note {font-size:12px;color:#866274;margin:2px 0 14px;}
+    .multi-monitor-grid {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;}
+    .multi-monitor-tile {border:1px solid #f4c7db;border-radius:15px;padding:12px;background:#fff8fc;min-width:0;}
+    .multi-monitor-head {display:flex;justify-content:space-between;gap:9px;align-items:center;margin-bottom:8px;flex-wrap:wrap;}
+    .multi-monitor-head select {max-width:65%;min-width:115px;padding:7px;border:1px solid #edbad0;border-radius:8px;background:white;}
+    .multi-monitor-badge {font-weight:bold;font-size:11px;color:#a45477;}
+    .multi-monitor-screen {position:relative;aspect-ratio:16/9;background:#302632;border-radius:11px;overflow:hidden;display:flex;align-items:center;justify-content:center;}
+    .multi-monitor-screen video {width:100%;height:100%;object-fit:contain;background:#211d26;}
+    .multi-monitor-empty {position:absolute;color:#f6dbe7;font-size:13px;pointer-events:none;text-align:center;}
+    .multi-monitor-foot {display:flex;justify-content:space-between;align-items:center;margin-top:9px;margin-bottom:7px;gap:7px;font-size:12px;}
+    .multi-monitor-time {font-size:20px;font-weight:800;color:#bc4d7f;font-variant-numeric:tabular-nums;}
+    .multi-monitor-controls {display:flex;gap:6px;flex-wrap:wrap;}
+    .multi-monitor-controls button {font-size:11px;padding:7px 9px;min-height:32px;}
+    .multi-monitor-record {font-size:11px;color:#876477;margin-top:7px;min-height:14px;}
+    @media(max-width:850px){.multi-monitor-grid{grid-template-columns:1fr}}
+</style></head>
+<body>
+  <div class="app-container">
+    <!-- Top Header Bar -->
+    <header class="top-header">
+      <div class="brand-section">
+        <span class="brand-logo">🐱🎀</span>
+        <div class="brand-text">
+          <h1>Hello Kitty Admin Console</h1>
+          <p>Kitty Timer • Workforce Management</p>
+        </div>
+      </div>
+      <div class="header-right">
+        <div class="notification-badge" title="Notifications">
+          🔔
+          <span class="count">3</span>
+        </div>
+        <div class="system-clock">
+          📅 <span id="clock-display">Apr 26, 2025 15:24 System Online</span>
+        </div>
+        <div class="admin-profile">
+          <div class="avatar-circle">👩‍💼</div>
+          <div class="admin-info">
+            <div class="name">Admin</div>
+            <div class="role">Administrator</div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Wrapper -->
+    <div class="main-wrapper">
+      <!-- Left Sidebar Navigation -->
+      <aside class="sidebar">
+        <ul class="nav-list">
+          <li class="nav-item active" data-view="dashboard" role="button" tabindex="0">📊 <span>Dashboard</span></li>
+          <li class="nav-item" data-view="workers" role="button" tabindex="0">👥 <span>Workers</span></li>
+          <li class="nav-item" data-view="tasks" role="button" tabindex="0">📋 <span>Tasks</span></li>
+          <li class="nav-item" data-view="devices" role="button" tabindex="0">📱 <span>Devices</span></li>
+          <li class="nav-item" data-view="chat" role="button" tabindex="0">💬 <span>Chat</span></li>
+          <li class="nav-item" data-view="reports" role="button" tabindex="0">📈 <span>Earning</span></li>
+          <li class="nav-item" data-view="settings" role="button" tabindex="0">⚙️ <span>Settings</span></li>
+          <li class="nav-item" id="btn-logout">🚪 <span>Log Out</span></li>
+        </ul>
+
+        <div class="sidebar-footer">
+          <div class="kitty-art">🐱🎀</div>
+          <p>Small steps make big progress! 💖</p>
+        </div>
+      </aside>
+
+      <!-- Main Content Area -->
+      <main class="content-area">
+        <!-- Sub-bar Summary Controls -->
+        <div id="dashboard-view">
+        <div class="sub-bar">
+          <div class="active-workers-badge">
+            👎 Active Workers <span id="active-workers-count">2 / 5</span>
+          </div>
+
+          <div class="worker-selector-group">
+            <label for="worker-select">Worker Selector:</label>
+            <select id="worker-select" class="custom-select">
+              <option value="">Select a Worker...</option>
+            </select>
+          </div>
+
+          <div class="active-workers-badge">
+            <span class="status-dot"></span> Online ⚙️
+          </div>
+        </div>
+
+        <section class="pink-card four-monitor-card" id="four-monitor-section">
+          <div class="card-header"><h2>🎥 Live Worker Monitor · 4 Screens</h2><span class="badge-tag" id="multi-monitor-summary">Choose workers below</span></div>
+          <p class="multi-monitor-note">Each screen stays connected independently when you open another tab. Camera access must be approved on each worker device.</p>
+          <div class="multi-monitor-grid" id="multi-monitor-grid"></div>
+        </section>
+        <!-- Row 1: Worker Feed, Worker Timer, Monitor Controls -->
+        <div class="grid-3col" id="legacy-monitor-controls" style="display:none">
+          <!-- Card 1: Worker Feed (Merged Single Live Camera Video Container) -->
+          <section class="pink-card">
+            <div class="card-header">
+              <h2>🎥 Worker Feed - Live Video Stream</h2>
+              <span class="badge-tag" id="live-feed-badge">READY</span>
+            </div>
+
+            <div class="single-video-container">
+              <video id="live-video-player" autoplay playsinline controls muted></video>
+              <div class="video-overlay-info">
+                <span class="status-dot" id="video-status-dot" style="background:#8B6B75;"></span>
+                <span id="video-feed-label">Live Camera • Select Worker</span>
+              </div>
+            </div>
+
+            <div style="display:flex; gap:8px;">
+              <button class="btn-pink" id="btn-toggle-live" style="flex:1;">📹 Connect Live Feed</button>
+              <button class="btn-outline" id="btn-switch-cam-front">📱 Front</button>
+              <button class="btn-outline" id="btn-switch-cam-back">📷 Back</button>
+            </div>
+          </section>
+
+          <!-- Card 2: Worker Timer -->
+          <section class="pink-card">
+            <div class="card-header">
+              <h2>⏰ Worker Timer</h2>
+            </div>
+            <div class="timer-display-box">
+              <div class="big-timer" id="worker-timer-display">00:00:00</div>
+              <div class="timer-subtext">
+                Estimated Pay: <strong id="worker-pay-display" style="color:var(--pink-primary);">$0.00</strong>
+                <br>
+                <span id="worker-status-text">OFFLINE</span> • $15.00/Hour
+              </div>
+            </div>
+
+            <div class="progress-bar-wrap">
+              <div class="progress-fill" id="timer-progress"></div>
+            </div>
+
+            <div class="timer-btn-grid">
+              <button class="btn-pink" id="btn-timer-pause">⏸ PAUSE</button>
+              <button class="btn-outline" id="btn-timer-stop">⏹ STOP</button>
+              <button class="btn-outline" id="btn-timer-break">➕ ADD BREAK</button>
+              <button class="btn-outline" id="btn-timer-reset">🔄 RESET</button>
+            </div>
+          </section>
+
+          <!-- Card 3: Monitor Controls -->
+          <section class="pink-card">
+            <div class="card-header">
+              <h2>💻 Monitor Controls</h2>
+              <select id="control-worker-select" class="custom-select" style="padding:4px 8px; font-size:12px;">
+                <option value="">Worker 01</option>
+              </select>
+            </div>
+
+            <div class="timer-btn-grid">
+              <button class="btn-pink" id="btn-start-live-control">📹 Live Camera</button>
+              <button class="btn-outline" id="btn-screenshot">📷 Take Screenshot</button>
+              <button class="btn-outline" id="btn-record">🔴 Record Video</button>
+              <button class="btn-outline" id="btn-mute">🎙 Mute Audio</button>
+            </div>
+
+            <div id="record-status" role="status" aria-live="polite" style="font-size:11px;color:var(--text-muted);">Recording idle</div>
+
+            <div style="margin-top:4px;">
+              <label style="font-size:11px; font-weight:700; color:var(--text-muted); display:block; margin-bottom:6px;">Quick Actions</label>
+              <div class="timer-btn-grid">
+                <button class="btn-outline" id="btn-lock">🔒 Lock Device</button>
+                <button class="btn-outline" id="btn-restart">🔄 Restart Device</button>
+              </div>
+            </div>
+
+            <div style="font-size:11px; color:var(--text-muted); background:#FFF0F5; padding:8px; border-radius:10px; margin-top:4px;">
+              ℹ Monitor controls require an administrator login. Recordings save to this browser when stopped.
+            </div>
+          </section>
+        </div>
+
+        <!-- Row 2: Task Management, Terminal, Worker Chat (Device Registration Removed) -->
+        <div class="grid-3col">
+          <!-- Card 4: Task Management -->
+          <section class="pink-card">
+            <div class="card-header">
+              <h2>📋 Task Management</h2>
+            </div>
+            <div style="display:flex; gap:8px;">
+              <button class="btn-pink" id="dashboard-new-task" style="flex:1; padding:6px; font-size:12px;">Assign New Task</button>
+              <button class="btn-outline" id="dashboard-completed" style="flex:1; padding:6px; font-size:12px;">Completed Tasks</button>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:8px; font-size:12px;">
+              <input id="dashboard-task-title" type="text" placeholder="Task Title *" style="padding:8px 10px; border:1px solid var(--border); border-radius:10px;">
+              <textarea id="dashboard-task-desc" placeholder="Describe the task in detail..." style="padding:8px 10px; border:1px solid var(--border); border-radius:10px; height:50px; resize:none;"></textarea>
+              <button class="btn-pink" id="dashboard-create-task">🚀 Assign Task</button>
+            </div>
+
+            <div style="border-top:1px solid var(--border-soft); padding-top:10px;">
+              <div style="font-size:12px; font-weight:700; margin-bottom:6px; color:var(--text-main);">Recent Tasks</div>
+              <div style="font-size:12px; display:flex; flex-direction:column; gap:6px;">
+                <div style="display:flex; justify-content:space-between;">
+                  <span>• Data Entry - Report Upload</span>
+                  <span class="status-pill completed">Completed</span>
+                </div>
+                <div style="display:flex; justify-content:space-between;">
+                  <span>• Image Processing</span>
+                  <span class="status-pill completed">Completed</span>
+                </div>
+                <div style="display:flex; justify-content:space-between;">
+                  <span>• Research & Compile</span>
+                  <span class="status-pill progress">In Progress</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Card 5: Remote Device Terminal -->
+          <section class="pink-card">
+            <div class="card-header">
+              <h2>>_ Remote Device Terminal</h2>
+            </div>
+            <div class="terminal-box" id="terminal-screen">
+              <div>Remote worker diagnostics. Enter help for supported commands.</div>
+            </div>
+            <div class="terminal-entry"><input id="terminal-command" placeholder="help, ping, status, info, time, uptime" autocomplete="off"></div>
+            <div style="display:flex; gap:8px;">
+              <button class="btn-pink" style="flex:1;" id="btn-send-cmd">➢ Send Command</button>
+              <button class="btn-outline" id="btn-clear-term">🗑 Clear</button>
+            </div>
+          </section>
+
+          <!-- Card 6: Worker Chat (Direct Worker-to-Admin Chat) -->
+          <section class="pink-card">
+            <div class="card-header">
+              <h2>💬 Worker Chat</h2>
+              <span class="badge-tag" id="chat-worker-badge">Worker-to-Admin</span>
+            </div>
+
+            <div class="chat-messages" id="chat-stream">
+              <div class="chat-bubble">
+                <div class="sender">System 🐱</div>
+                Select a worker to view or start chat.
+              </div>
+            </div>
+
+            <div class="chat-input-row">
+              <input type="text" id="chat-text-input" placeholder="Message worker...">
+              <button class="btn-pink" id="btn-send-chat" style="padding:8px 14px;">➢</button>
+            </div>
+          </section>
+        </div>
+        </div>
+        <section id="secondary-view" class="pink-card" style="display:none;min-height:65vh">
+          <div class="card-header"><h2 id="view-heading"></h2><button class="btn-outline" id="back-dashboard">← Dashboard</button></div>
+          <div id="view-content"></div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <!-- Socket.IO & WebRTC Logic -->
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    let workers = [];
+    let socket;
+    let iceServers = [];
+    let audioEnabled = false;
+    let selectedWorkerId = null;
+    let lastChatWorker = null;
+    let chatHistoryMap = new Map(); // workerId -> array of messages
+    const peers = new Map();
+    const requested = new Map();
+
+    function updateClock() {
+      const now = new Date();
+      document.getElementById('clock-display').textContent = now.toLocaleString() + ' System Online';
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    async function api(path, body, method) {
+      const httpMethod = method || (body ? 'POST' : 'GET');
+      const r = await fetch(path, {
+        method: httpMethod,
+        headers: { 'Content-Type': 'application/json' },
+        body: body && httpMethod !== 'GET' ? JSON.stringify(body) : undefined
+      });
+      if (r.status === 401 || r.status === 403) {
+        location.href = '/';
+        throw Error('Sign in required');
+      }
+      const d = await r.json();
+      if (!r.ok) throw Error(d.error || 'Request failed');
+      return d;
+    }
+
+    function fmt(ms) {
+      const t = Math.floor(Math.max(0, ms) / 1000);
+      return [Math.floor(t / 3600), Math.floor(t / 60) % 60, t % 60].map(x => String(x).padStart(2, '0')).join(':');
+    }
+
+    // Slot assignments are independent of the selected worker used by tasks and chat.
+    const monitorSlots = Array.from({length:4},(_,i)=>({workerId:null,recorder:null,chunks:[],started:0,muted:true,desired:false,lastAttempt:0}));
+    function monitorSlotFor(id) {return monitorSlots.findIndex(s=>s.workerId===id);}
+    function monitorStatus(index,label,state='idle') {
+      const el=document.getElementById(`monitor-status-${index}`);
+      if(el){el.textContent=label;el.style.color=state==='live'?'#168658':state==='error'?'#b52f46':'#a45477';}
+      const empty=document.getElementById(`monitor-empty-${index}`);
+      if(empty)empty.style.display=state==='live'?'none':'block';
+    }
+    function renderMonitorSlots() {
+      const grid=document.getElementById('multi-monitor-grid'); if(!grid)return;
+      if(!grid.children.length) {
+        grid.innerHTML=monitorSlots.map((slot,i)=>`<article class="multi-monitor-tile" data-slot="${i}">
+          <div class="multi-monitor-head"><select aria-label="Worker for camera ${i+1}" id="monitor-worker-${i}"></select><span class="multi-monitor-badge" id="monitor-status-${i}">Not connected</span></div>
+          <div class="multi-monitor-screen"><video id="monitor-video-${i}" autoplay playsinline muted></video><div class="multi-monitor-empty" id="monitor-empty-${i}">📷 Camera ${i+1}<br>Choose a worker and press Connect</div></div>
+          <div class="multi-monitor-foot"><span id="monitor-worker-status-${i}">No worker selected</span><span class="multi-monitor-time" id="monitor-time-${i}">00:00:00</span></div>
+          <div class="multi-monitor-controls"><button class="btn-pink" data-action="connect" data-slot="${i}">📹 Connect</button><button class="btn-outline" data-action="disconnect" data-slot="${i}">⏹ Disconnect</button><button class="btn-outline" data-action="front" data-slot="${i}">Front</button><button class="btn-outline" data-action="back" data-slot="${i}">Back</button><button class="btn-outline" data-action="audio" data-slot="${i}">🔇 Audio</button><button class="btn-outline" data-action="record" data-slot="${i}">🔴 Record</button></div>
+          <div class="multi-monitor-record" id="monitor-record-${i}">Recording idle</div></article>`).join('');
+        grid.addEventListener('change',e=>{if(!e.target.id.startsWith('monitor-worker-'))return;assignMonitorSlot(Number(e.target.id.slice(-1)),e.target.value);});
+        grid.addEventListener('click',e=>{const btn=e.target.closest('button[data-action]');if(btn)monitorAction(Number(btn.dataset.slot),btn.dataset.action,btn);});
+      }
+      for(let i=0;i<4;i++) {
+        const sel=document.getElementById(`monitor-worker-${i}`),slot=monitorSlots[i];
+        const items=[`<option value="">Select worker · Screen ${i+1}</option>`].concat(workers.map(w=>`<option value="${escapeHtml(w.id)}">${escapeHtml(w.name)} (${w.online?'Online':'Offline'})</option>`));
+        const html=items.join('');if(sel.innerHTML!==html)sel.innerHTML=html;sel.value=slot.workerId||'';
+      }
+      updateMonitorTimers();
+    }
+    function assignMonitorSlot(i,id) {
+      const old=monitorSlots[i].workerId;if(old===id)return;
+      if(id&&monitorSlots.some((s,n)=>n!==i&&s.workerId===id)) {alert('This worker already has a screen.');renderMonitorSlots();return;}
+      if(old)disconnectMonitor(i);
+      monitorSlots[i].desired=false;monitorSlots[i].workerId=id||null;
+      monitorStatus(i,id?'Ready to connect':'Not connected');updateMonitorTimers();
+    }
+    function updateMonitorTimers() {
+      monitorSlots.forEach((slot,i)=>{
+        const w=workers.find(w=>w.id===slot.workerId);
+        const elapsed=w?(Number(w.accumulatedMs)||0)+(w.status==='WORKING'&&w.startedAt?Math.max(0,Date.now()-w.startedAt):0):0;
+        const time=document.getElementById(`monitor-time-${i}`),status=document.getElementById(`monitor-worker-status-${i}`);
+        if(time)time.textContent=fmt(elapsed);
+        if(status)status.textContent=w?`${w.name} · ${w.status||'UNKNOWN'} · ${w.online?'Online':'Offline'}`:'No worker selected';
+      });
+    }
+    function disconnectMonitor(i) {
+      const slot=monitorSlots[i];slot.desired=false;if(slot.recorder?.state==='recording')slot.recorder.stop();
+      if(slot.workerId&&socket?.connected)socket.emit('admin-live-stop',{workerId:slot.workerId});
+      if(slot.workerId)closePeer(slot.workerId);
+      const v=document.getElementById(`monitor-video-${i}`);if(v)v.srcObject=null;
+      monitorStatus(i,'Disconnected');
+    }
+    function monitorAction(i,action,button) {
+      const slot=monitorSlots[i],id=slot.workerId;
+      if(!id){monitorStatus(i,'Select a worker first','error');return;}
+      if(action==='connect') {slot.desired=true;slot.lastAttempt=Date.now();if(!socket?.connected){monitorStatus(i,'Server disconnected','error');return;}if(peers.get(id)?.pc?.connectionState==='connected'){monitorStatus(i,'Already live','live');return;}requestLiveFeed(id);return;}
+      if(action==='disconnect'){disconnectMonitor(i);return;}
+      if(action==='front'||action==='back'){socket?.emit('admin-switch-camera',{workerId:id,camera:action});return;}
+      const v=document.getElementById(`monitor-video-${i}`);
+      if(action==='audio'){slot.muted=!slot.muted;v.muted=slot.muted;button.textContent=slot.muted?'🔇 Audio':'🔊 Audio';return;}
+      if(action==='record') {
+        if(slot.recorder&&slot.recorder.state!=='inactive'){slot.recorder.stop();return;}
+        const stream=v?.srcObject;if(!stream?.getVideoTracks().some(t=>t.readyState==='live')){document.getElementById(`monitor-record-${i}`).textContent='Connect camera before recording';return;}
+        if(!window.MediaRecorder){document.getElementById(`monitor-record-${i}`).textContent='Browser does not support video recording';return;}
+        try {
+          const mime=['video/webm;codecs=vp8,opus','video/webm','video/mp4'].find(m=>MediaRecorder.isTypeSupported(m));
+          const recorder=new MediaRecorder(new MediaStream(stream.getTracks().filter(t=>t.readyState==='live')),mime?{mimeType:mime}:undefined);
+          slot.recorder=recorder;slot.chunks=[];slot.started=Date.now();
+          recorder.ondataavailable=e=>{if(e.data?.size)slot.chunks.push(e.data);};
+          recorder.onstop=()=>{
+            const blob=new Blob(slot.chunks,{type:recorder.mimeType||'video/webm'});
+            if(blob.size){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`${id}_${new Date(slot.started).toISOString().replace(/[:.]/g,'-')}.${recorder.mimeType.includes('mp4')?'mp4':'webm'}`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);}
+            document.getElementById(`monitor-record-${i}`).textContent=blob.size?'Saved to browser Downloads':'No video captured';button.textContent='🔴 Record';slot.recorder=null;slot.chunks=[];
+          };
+          recorder.onerror=e=>{document.getElementById(`monitor-record-${i}`).textContent=e.error?.message||'Recording failed';};
+          recorder.start(1000);button.textContent='⏹ Stop Rec';document.getElementById(`monitor-record-${i}`).textContent='● Recording this screen…';
+        }catch(err){document.getElementById(`monitor-record-${i}`).textContent=err.message;}
+      }
+    }
+    function closePeer(id) {
+      const p = peers.get(id);
+      if (p?.pc) p.pc.close();
+      peers.delete(id);
+      requested.delete(id);
+      const index=monitorSlotFor(id);
+      if(index>=0){const tileVideo=document.getElementById(`monitor-video-${index}`);if(tileVideo)tileVideo.srcObject=null;monitorStatus(index,'Disconnected');}
+      const v = document.getElementById('live-video-player');
+      if (v && selectedWorkerId===id) v.srcObject = null;
+      document.getElementById('live-feed-badge').textContent = 'STOPPED';
+      document.getElementById('video-status-dot').style.background = '#8B6B75';
+    }
+
+    function requestLiveFeed(workerId) {
+      if (!workerId || !socket?.connected) return;
+      const worker = workers.find(w => w.id === workerId);
+      if (!worker) return;
+
+      document.getElementById('video-feed-label').textContent = `Connecting camera for ${worker.name}...`;
+      document.getElementById('video-status-dot').style.background = '#F59E0B';
+      document.getElementById('live-feed-badge').textContent = 'CONNECTING…';
+
+      if(peers.get(workerId)?.pc?.connectionState==='connected')return;
+      setTimeout(() => {
+        requested.set(workerId, Date.now());
+        socket.emit('admin-live-request', { workerId, mode: 'camera' });
+      }, 300);
+    }
+
+    function refreshKittyChat() {
+      if(currentView !== 'chat') return;
+      const target=document.getElementById('kitty-chat-stream');
+      if(!target)return;
+      const msgs=chatHistoryMap.get(selectedWorkerId)||[];
+      target.innerHTML=msgs.length?msgs.map(m=>`<div class="kitty-message ${m.sender==='admin'||m.from==='admin'||m.role==='admin'?'sent':''}">${escapeHtml(m.text||m.message||'')}<small>${escapeHtml(m.sender||m.from||'')}</small></div>`).join(''):'<p class="kitty-empty">No messages yet</p>';
+      target.scrollTop=target.scrollHeight;
+    }
+    function renderChatForWorker(workerId) {
+      const stream = document.getElementById('chat-stream');
+      stream.innerHTML = '';
+      if (!workerId) {
+        stream.innerHTML = '<div class="chat-bubble"><div class="sender">System 🐱</div>Select a worker to chat.</div>';
+        return;
+      }
+
+      const msgs = chatHistoryMap.get(workerId) || [];
+      if (msgs.length === 0) {
+        const worker = workers.find(w => w.id === workerId);
+        const name = worker ? worker.name : workerId;
+        stream.innerHTML = `<div class="chat-bubble"><div class="sender">System 🐱</div>No messages yet with ${name}. Send a message below!</div>`;
+        return;
+      }
+
+      msgs.forEach(msg => {
+        const bubble = document.createElement('div');
+        bubble.className = 'chat-bubble';
+        if (msg.senderRole === 'admin') {
+          bubble.style.alignSelf = 'flex-end';
+          bubble.style.background = '#FFE4E1';
+          bubble.innerHTML = `<div class="sender">Admin 👩‍💼</div>${escapeHtml(msg.text)}`;
+        } else {
+          bubble.style.alignSelf = 'flex-start';
+          bubble.innerHTML = `<div class="sender">${escapeHtml(msg.senderName)} 🐱</div>${escapeHtml(msg.text)}`;
+        }
+        stream.appendChild(bubble);
+      });
+
+      stream.scrollTop = stream.scrollHeight;
+    }
+
+    function escapeHtml(str) {
+      return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function loadChatHistory(workerId) {
+      if (!workerId) return;
+      socket.emit('get-chat-history', { workerId });
+    }
+
+    function updateUI() {
+      const activeCount = workers.filter(w => w.online).length;
+      document.getElementById('active-workers-count').textContent = `${activeCount} / ${workers.length}`;
+
+      const workerSelect = document.getElementById('worker-select');
+      const controlSelect = document.getElementById('control-worker-select');
+
+      const currentVal = workerSelect.value;
+      workerSelect.innerHTML = '';
+      controlSelect.innerHTML = '';
+
+      workers.forEach(w => {
+        const opt1 = document.createElement('option');
+        opt1.value = w.id;
+        opt1.textContent = `${w.name} (${w.online ? 'Online' : 'Offline'})`;
+        workerSelect.appendChild(opt1);
+
+        const opt2 = document.createElement('option');
+        opt2.value = w.id;
+        opt2.textContent = w.name;
+        controlSelect.appendChild(opt2);
+      });
+
+      if (currentVal && workers.some(w => w.id === currentVal)) {
+        workerSelect.value = currentVal;
+        controlSelect.value = currentVal;
+      } else if (workers.length > 0) {
+        workerSelect.value = workers[0].id;
+        controlSelect.value = workers[0].id;
+      }
+
+      selectedWorkerId = workerSelect.value;
+      updateSelectedWorkerDetails();
+      renderMonitorSlots();
+      // Preserve active forms and chat while worker heartbeat/state updates arrive.
+      // A view is re-rendered only when the administrator navigates to it.
+    }
+
+    function updateSelectedWorkerDetails() {
+      const worker = workers.find(w => w.id === selectedWorkerId);
+      if (!worker) return;
+
+      const cameraName = document.getElementById('cam-worker-name');
+      if (cameraName) cameraName.textContent = worker.name;
+      document.getElementById('worker-status-text').textContent = worker.status + (worker.online ? ' • CONNECTED' : ' • OFFLINE');
+
+      // Update Timer & Earnings
+      const elapsedMs = (worker.accumulatedMs || 0) + (worker.status === 'WORKING' && worker.startedAt ? Date.now() - worker.startedAt : 0);
+      document.getElementById('worker-timer-display').textContent = fmt(elapsedMs);
+
+      const hours = elapsedMs / (1000 * 60 * 60);
+      const estPay = (hours * 15.00).toFixed(2);
+      document.getElementById('worker-pay-display').textContent = `$${estPay}`;
+
+      // Update Pause / Start button state
+      const btnPause = document.getElementById('btn-timer-pause');
+      if (worker.status === 'WORKING') {
+        btnPause.textContent = '⏸ PAUSE';
+      } else if (worker.status === 'PAUSED') {
+        btnPause.textContent = '▶ RESUME';
+      } else {
+        btnPause.textContent = '▶ START';
+      }
+
+      // Update chat worker badge & chat history
+      document.getElementById('chat-worker-badge').textContent = `Chat with ${worker.name}`;
+      if (socket?.connected && lastChatWorker !== worker.id) { lastChatWorker = worker.id; loadChatHistory(worker.id); }
+      // Chat bubbles update from incoming messages/history; never replace the chat DOM on each timer tick.
+    }
+
+    // Functional sidebar panels. Camera controls and WebRTC signaling are unchanged.
+    let currentView = 'dashboard';
+    function showView(view) {
+      currentView = view;
+      document.getElementById('dashboard-view').style.display = view === 'dashboard' ? '' : 'none';
+      document.getElementById('secondary-view').style.display = view === 'dashboard' ? 'none' : '';
+      document.querySelectorAll('[data-view]').forEach(el => el.classList.toggle('active', el.dataset.view === view));
+      renderView();
+    }
+    document.querySelectorAll('[data-view]').forEach(el => {
+      el.onclick = () => showView(el.dataset.view);
+      el.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showView(el.dataset.view); } };
+    });
+    document.getElementById('back-dashboard').onclick = () => showView('dashboard');
+    function workerPicker(id='panel-worker') {
+      const uniqueMap = new Map();
+      workers.forEach(w => { if (w && w.id && !uniqueMap.has(w.id)) uniqueMap.set(w.id, w); });
+      const list = [...uniqueMap.values()];
+      return `<select class="custom-select" id="${id}">${list.map(w=>`<option value="${escapeHtml(w.id)}" ${w.id===selectedWorkerId?'selected':''}>${escapeHtml(w.name)} — ${w.online?'Online':'Offline'}</option>`).join('')}</select>`;
+    }
+    function renderView() {
+      if (currentView === 'dashboard') return;
+      const headings = {workers:'👥 Workers',tasks:'📋 Tasks',devices:'📱 Devices & Terminal',chat:'💬 Worker Chat',reports:'📈 Reports',settings:'⚙️ Settings'};
+      document.getElementById('view-heading').textContent = headings[currentView] || currentView;
+      const content = document.getElementById('view-content');
+
+      const uniqueWorkersMap = new Map();
+      workers.forEach(w => { if (w && w.id && !uniqueWorkersMap.has(w.id)) uniqueWorkersMap.set(w.id, w); });
+      const uniqueWorkers = [...uniqueWorkersMap.values()];
+
+      if(currentView === 'workers') {
+        content.innerHTML = `<div class="view-cards">${uniqueWorkers.map(w=>`<div class="view-tile"><strong>${escapeHtml(w.name)}</strong><p>${w.online?'🟢 Online':'⚪ Offline'} · ${escapeHtml(w.status)}</p><p>Time: ${fmt((w.accumulatedMs||0)+(w.status==='WORKING'&&w.startedAt?Date.now()-w.startedAt:0))}</p><div class="kitty-buttons"><button class="btn-outline" data-rename-worker="${escapeHtml(w.id)}">✏️ Rename</button><button class="btn-outline" data-worker="${escapeHtml(w.id)}">Select worker</button></div></div>`).join('')}</div>`;
+        content.querySelectorAll('[data-worker]').forEach(b=>b.onclick=()=>{selectedWorkerId=b.dataset.worker;document.getElementById('worker-select').value=selectedWorkerId;document.getElementById('control-worker-select').value=selectedWorkerId;showView('dashboard');updateSelectedWorkerDetails();});
+        content.querySelectorAll('[data-rename-worker]').forEach(b=>b.onclick=async()=>{
+          const worker=uniqueWorkers.find(w=>w.id===b.dataset.renameWorker);
+          if(!worker)return;
+          const name=prompt('New display name for '+worker.name+' (login username stays unchanged):',worker.name);
+          if(name===null)return;
+          const clean=name.trim().replace(/\s+/g,' ');
+          if(!clean||clean.length>60){alert('Please enter a name from 1 to 60 characters.');return;}
+          try {
+            await api('/api/admin/workers/'+encodeURIComponent(worker.id)+'/display-name',{name:clean});
+            worker.name=clean;
+            renderView();
+          }catch(err){alert('Could not rename worker: '+err.message);}
+        });
+      } else if (currentView === 'tasks') {
+        content.innerHTML = `<div class="kitty-section-intro"><div><h2>📋 Tasks</h2><p>Create, assign, and track tasks for your workforce</p></div><button class="btn-pink" id="new-task">＋ Create New Task</button></div><div class="kitty-tabs"><button class="selected" data-filter="open">Available Tasks</button><button data-filter="in_progress">Ongoing Tasks</button><button data-filter="submitted">Needs Review</button><button data-filter="completed">Completed Tasks</button></div><div class="kitty-filter"><input id="task-search" placeholder="🔎 Search tasks..."><select id="task-worker-filter"><option value="">All Workers</option>${uniqueWorkers.map(w=>`<option value="${escapeHtml(w.id)}">${escapeHtml(w.name)}</option>`).join('')}</select></div><div id="task-editor" hidden><form id="task-form" class="kitty-editor"><h3>Create New Task</h3><label>Task Title *</label><input name="title" required maxlength="160" placeholder="Enter task title"><label>Task Description</label><textarea name="description" placeholder="Enter task instructions" maxlength="2000"></textarea><label>Assign Task</label><select name="workerId"><option value="">Open for All</option>${uniqueWorkers.map(w=>`<option value="${escapeHtml(w.id)}">${escapeHtml(w.name)}</option>`).join('')}</select><div class="kitty-buttons"><button type="button" class="btn-outline" id="cancel-task">Cancel</button><button type="submit" class="btn-pink">Create Task</button></div></form></div><p id="tasks-notice"></p><div id="tasks-table" class="kitty-cards">Loading tasks…</div>`;
+        const editor=content.querySelector('#task-editor');content.querySelector('#new-task').onclick=()=>{editor.hidden=false;editor.querySelector('input').focus()};content.querySelector('#cancel-task').onclick=()=>editor.hidden=true;
+        let allTasks=[],filter='open';
+        function drawTasks(){const q=content.querySelector('#task-search').value.toLowerCase(),wid=content.querySelector('#task-worker-filter').value;const filtered=allTasks.filter(t=>(filter==='open'?['open','available'].includes(t.status):filter==='in_progress'?['active','in_progress','accepted','ongoing'].includes(t.status):filter==='submitted'?t.status==='submitted':t.status==='completed')&&(!wid||t.workerId===wid||t.assignedWorkerId===wid)&&String(t.title+' '+(t.description||'')).toLowerCase().includes(q));content.querySelector('#tasks-table').innerHTML=filtered.length?filtered.map(t=>`<article class="kitty-task"><div class="kitty-task-title"><strong>📋 ${escapeHtml(t.title)}</strong><span class="kitty-chip">${escapeHtml(t.status)}</span></div><p>${escapeHtml(t.description||'No description provided')}</p><p>Created: ${escapeHtml(new Date(t.createdAt||Date.now()).toLocaleString())}</p><p>👤 Assigned To: ${escapeHtml(uniqueWorkers.find(w=>w.id===(t.assignedWorkerId||t.workerId))?.name||'Unassigned — open for all')}</p><div class="kitty-buttons"><button class="btn-outline" data-detail="${escapeHtml(t.id)}">View Details</button>${t.status==='submitted'?`<button class="btn-pink" data-task="${escapeHtml(t.id)}">Approve Completion</button>`:`<button class="btn-pink" data-task="${escapeHtml(t.id)}">${t.status==='completed'?'Reopen Task':t.status==='open'?'Close Task':'Mark Completed'}</button>`}</div></article>`).join(''):'<p class="kitty-empty">No tasks in this category.</p>';content.querySelectorAll('[data-detail]').forEach(btn=>btn.onclick=()=>{let t=allTasks.find(t=>t.id===btn.dataset.detail);alert(t.title+'\n\n'+(t.description||'No description')+'\nStatus: '+t.status)});content.querySelectorAll('[data-task]').forEach(btn=>btn.onclick=async()=>{let t=allTasks.find(t=>t.id===btn.dataset.task);try{await api('/api/admin/tasks/status',{id:t.id,status:t.status==='completed'?'open':'completed'});loadTasks()}catch(e){content.querySelector('#tasks-notice').textContent=e.message}})}
+        async function loadTasks(){try{allTasks=(await api('/api/admin/tasks')).tasks;drawTasks()}catch(e){content.querySelector('#tasks-notice').textContent=e.message}}
+        content.querySelectorAll('[data-filter]').forEach(btn=>btn.onclick=()=>{filter=btn.dataset.filter;content.querySelectorAll('[data-filter]').forEach(x=>x.classList.toggle('selected',x===btn));drawTasks()});content.querySelector('#task-search').oninput=drawTasks;content.querySelector('#task-worker-filter').onchange=drawTasks;
+        content.querySelector('#task-form').onsubmit=async e=>{e.preventDefault();const data=Object.fromEntries(new FormData(e.target));try{await api('/api/admin/tasks',data);e.target.reset();editor.hidden=true;loadTasks()}catch(err){content.querySelector('#tasks-notice').textContent=err.message}};loadTasks();
+      } else if (currentView === 'devices') {
+        content.innerHTML=`<div class="kitty-section-intro"><div><h2>📱 Devices</h2><p>Monitor connected workers and their devices</p></div></div><div class="kitty-stats"><div><b>${uniqueWorkers.length}</b><span>Total Devices</span></div><div><b>${uniqueWorkers.filter(w=>w.online).length}</b><span>Online Devices</span></div><div><b>${uniqueWorkers.filter(w=>!w.online).length}</b><span>Offline Devices</span></div></div><h3>Device List</h3><input id="device-search" placeholder="🔎 Search devices or workers..."><div id="device-grid" class="kitty-cards"></div><p class="kitty-help">Live video and supported device commands remain available in the Dashboard. Device IP addresses and storage statistics are not exposed by this server.</p>`;
+        const draw=()=>{const q=content.querySelector('#device-search').value.toLowerCase();content.querySelector('#device-grid').innerHTML=uniqueWorkers.filter(w=>w.name.toLowerCase().includes(q)).map(w=>`<article class="kitty-task"><div class="kitty-task-title"><strong>📱 ${escapeHtml(w.name)}'s Device</strong><span class="kitty-chip ${w.online?'online':'offline'}">${w.online?'● Online':'● Offline'}</span></div><div class="kitty-device-preview">${w.online?'🎥 Live feed available from Dashboard':'📷 No camera feed — device offline'}</div><p>Worker status: ${escapeHtml(w.status||'Unknown')}</p><button class="btn-pink" data-device="${escapeHtml(w.id)}">Open Live Monitor</button></article>`).join('')||'<p class="kitty-empty">No matching devices</p>';content.querySelectorAll('[data-device]').forEach(b=>b.onclick=()=>{selectedWorkerId=b.dataset.device;document.getElementById('worker-select').value=selectedWorkerId;document.getElementById('control-worker-select').value=selectedWorkerId;showView('dashboard');updateSelectedWorkerDetails()})};content.querySelector('#device-search').oninput=draw;draw();
+      } else if (currentView === 'chat') {
+        content.innerHTML=`<div class="kitty-section-intro"><div><h2>💬 Chat</h2><p>Communicate with your workers in real time</p></div></div><div class="kitty-chat-layout"><div class="kitty-chat-contacts"><h3>Conversations</h3><input id="chat-search" placeholder="🔎 Search workers..."><div id="chat-contacts"></div></div><div class="kitty-chat-main"><div class="kitty-chat-head" id="chat-head">Select a worker</div><div id="kitty-chat-stream" class="kitty-chat-stream"></div><form id="kitty-chat-form" class="kitty-chat-compose"><input id="kitty-chat-input" placeholder="Type a message..." required maxlength="3000"><button class="btn-pink">➤</button></form></div></div>`;
+        let chatWid=selectedWorkerId||uniqueWorkers[0]?.id||'';const renderContacts=()=>{const q=content.querySelector('#chat-search').value.toLowerCase();content.querySelector('#chat-contacts').innerHTML=uniqueWorkers.filter(w=>w.name.toLowerCase().includes(q)).map(w=>`<button class="kitty-contact ${w.id===chatWid?'selected':''}" data-chatworker="${escapeHtml(w.id)}">👤 <b>${escapeHtml(w.name)}</b><small>${w.online?'🟢 Online':'⚪ Offline'}</small></button>`).join('');content.querySelectorAll('[data-chatworker]').forEach(b=>b.onclick=()=>{chatWid=b.dataset.chatworker;selectedWorkerId=chatWid;content.dataset.chatWorker=chatWid;renderContacts();renderMessages();loadChatHistory(chatWid)})};const renderMessages=()=>{const w=uniqueWorkers.find(w=>w.id===chatWid);content.querySelector('#chat-head').textContent=w?`${w.name} · ${w.online?'Online':'Offline'}`:'Select a worker';const msgs=chatHistoryMap.get(chatWid)||[];const box=content.querySelector('#kitty-chat-stream');box.innerHTML=msgs.length?msgs.map(m=>{const isMe=m.senderRole==='admin'||m.sender==='admin'||m.from==='admin'||m.role==='admin';const senderLabel=m.senderName||(isMe?'Admin':(w?.name||'Worker'));return `<div class="kitty-message ${isMe?'sent':''}">${escapeHtml(m.text||m.message||'')}<small>${escapeHtml(senderLabel)} · ${new Date(m.timestamp||Date.now()).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}</small></div>`;}).join(''):'<p class="kitty-empty">No messages yet</p>';box.scrollTop=box.scrollHeight};content.querySelector('#chat-search').oninput=renderContacts;content.querySelector('#kitty-chat-form').onsubmit=e=>{e.preventDefault();const input=content.querySelector('#kitty-chat-input');if(!chatWid||!socket?.connected)return;socket.emit('send-chat-message',{workerId:chatWid,text:input.value.trim()});input.value=''};content.dataset.chatWorker=chatWid;renderContacts();renderMessages();if(chatWid)loadChatHistory(chatWid);
+      } else if (currentView === 'reports') {
+        content.innerHTML=`<div class="kitty-section-intro"><div><h2>📈 Earning</h2><p>Worker hours, approved task payments, and bonuses</p></div><div class="kitty-buttons"><button class="btn-pink" id="add-manual-earning">＋ Add Task / Bonus</button><button class="btn-outline" id="export-reports">⇩ Export Report</button></div></div><div id="earning-editor" hidden><form id="earning-form" class="kitty-editor"><h3>Add Manual Completed Task or Bonus</h3><label>Select Worker *</label><select name="workerId" required>${uniqueWorkers.map(w=>`<option value="${escapeHtml(w.id)}">${escapeHtml(w.name)}</option>`).join('')}</select><label>Record Type</label><select name="type"><option value="bonus">Bonus 💰</option><option value="completed_task">Completed Task 📋</option></select><label>Title / Reason *</label><input name="title" required maxlength="160" placeholder="e.g. Project Completion Bonus"><label>Amount ($)</label><input name="amount" type="number" step="0.01" min="0" placeholder="0.00"><label>Approved Hours</label><input name="hours" type="number" step="0.1" min="0" placeholder="0.0"><label>Description / Notes</label><textarea name="description" placeholder="Enter details or notes" maxlength="1000"></textarea><div class="kitty-buttons"><button type="button" class="btn-outline" id="cancel-earning">Cancel</button><button type="submit" class="btn-pink">Save Record</button></div></form></div><div class="kitty-stats"><div><b id="stat-hours">—</b><span>Total Hours</span></div><div><b id="stat-bonuses">$0.00</b><span>Manual Bonuses</span></div><div><b id="stat-workers">${uniqueWorkers.length}</b><span>Registered Workers</span></div></div><div class="kitty-filter"><select id="panel-worker"><option value="">All Workers</option>${uniqueWorkers.map(w=>`<option value="${escapeHtml(w.id)}">${escapeHtml(w.name)}</option>`).join('')}</select><button class="btn-outline" id="load-reports">Refresh Sessions</button></div><h3>Manual Earnings & Bonus Records</h3><div id="manual-earnings-list" class="kitty-cards">Loading...</div><h3>Session Details</h3><div id="report-results" class="kitty-report-table">Loading…</div>`;
+        const editor=content.querySelector('#earning-editor');content.querySelector('#add-manual-earning').onclick=()=>{editor.hidden=false;editor.querySelector('input[name="title"]').focus()};content.querySelector('#cancel-earning').onclick=()=>editor.hidden=true;
+        const loadEarningsList=async()=>{
+          try {
+            const d=await api('/api/admin/earnings');
+            const wid=content.querySelector('#panel-worker').value;
+            const records=(d.earnings||[]).filter(r=>!wid||r.workerId===wid||r.workerId===uniqueWorkers.find(w=>w.id===wid)?.username);
+            const totalBonus=records.reduce((sum,r)=>sum+(Number(r.amount)||0),0);
+            content.querySelector('#stat-bonuses').textContent='$'+totalBonus.toFixed(2);
+            content.querySelector('#manual-earnings-list').innerHTML=records.length?records.map(r=>`<article class="kitty-task"><div class="kitty-task-title"><strong>${r.type==='bonus'?'💰':'📋'} ${escapeHtml(r.title)}</strong><span class="kitty-chip">$${Number(r.amount||0).toFixed(2)}</span></div><p>👤 Worker: ${escapeHtml(r.workerName||r.workerId)} · Hours: ${Number(r.hours||0).toFixed(1)} hrs</p><p>${escapeHtml(r.description||'No additional notes')}</p><button class="btn-outline" data-delete-earning="${escapeHtml(r.id)}">🗑 Remove Record</button></article>`).join(''):'<p class="kitty-empty">No manual earnings or bonus records found.</p>';
+            content.querySelectorAll('[data-delete-earning]').forEach(btn=>btn.onclick=async()=>{if(!confirm('Remove this earnings record?'))return;try{await api('/api/admin/earnings/delete',{id:btn.dataset.deleteEarning});loadEarningsList()}catch(e){alert(e.message)}});
+          } catch(e) { content.querySelector('#manual-earnings-list').textContent=e.message; }
+        };
+        content.querySelector('#earning-form').onsubmit=async e=>{e.preventDefault();const data=Object.fromEntries(new FormData(e.target));try{await api('/api/admin/earnings',data);e.target.reset();editor.hidden=true;loadEarningsList()}catch(err){alert(err.message)}};
+        loadEarningsList();
+        let reportRows=[];const load=async()=>{try{const wid=content.querySelector('#panel-worker').value;const names=wid?uniqueWorkers.filter(w=>w.id===wid):uniqueWorkers;const results=await Promise.all(names.map(async w=>{const d=await api('/api/work-sessions/'+encodeURIComponent(w.id));return (d.sessions||[]).map(r=>({...r,workerName:w.name}))}));reportRows=results.flat();content.querySelector('#stat-sessions').textContent=reportRows.length;const ms=reportRows.reduce((sum,r)=>sum+(Number(r.durationMs)||0),0);content.querySelector('#stat-hours').textContent=ms?(ms/3600000).toFixed(1):'—';content.querySelector('#report-results').innerHTML=reportRows.length?`<div class="kitty-table-scroll"><table><thead><tr><th>Worker</th><th>Session data</th></tr></thead><tbody>${reportRows.map(r=>`<tr><td>${escapeHtml(r.workerName)}</td><td>${escapeHtml(JSON.stringify(r))}</td></tr>`).join('')}</tbody></table></div>`:'<p class="kitty-empty">No recorded sessions found</p>'}catch(err){content.querySelector('#report-results').textContent=err.message}};content.querySelector('#panel-worker').onchange=()=>{load();loadEarningsList()};content.querySelector('#load-reports').onclick=()=>{load();loadEarningsList()};content.querySelector('#export-reports').onclick=()=>{if(!reportRows.length){alert('No sessions to export');return}const keys=[...new Set(reportRows.flatMap(Object.keys))],csv=[keys,...reportRows.map(r=>keys.map(k=>r[k]??''))].map(row=>row.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(',')).join('\r\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='worker-sessions.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)};load();
+      } else if (currentView === 'settings') {
+        content.innerHTML=`<form id="settings-form" class="view-form"><label><input type="checkbox" id="compact-mode" ${localStorage.getItem('kitty-compact')==='1'?'checked':''}> Compact dashboard cards</label><label><input type="checkbox" id="confirm-stop" ${localStorage.getItem('kitty-confirm-stop')!=='0'?'checked':''}> Confirm before stopping a worker timer</label><button class="btn-pink" type="submit">Save preferences</button></form><p>Settings on this page are saved locally in this browser.</p>`;
+        content.querySelector('form').onsubmit=e=>{e.preventDefault();localStorage.setItem('kitty-compact',document.getElementById('compact-mode').checked?'1':'0');localStorage.setItem('kitty-confirm-stop',document.getElementById('confirm-stop').checked?'1':'0');document.body.classList.toggle('compact',document.getElementById('compact-mode').checked);alert('Preferences saved')};
+      }
+    }
+    document.body.classList.toggle('compact',localStorage.getItem('kitty-compact')==='1');
+    document.getElementById('dashboard-new-task').onclick=()=>document.getElementById('dashboard-task-title').focus();
+    document.getElementById('dashboard-completed').onclick=()=>showView('tasks');
+    document.getElementById('dashboard-create-task').onclick=async()=>{
+      const title=document.getElementById('dashboard-task-title').value.trim();
+      if(!title){alert('Enter a task title');return;}
+      try{await api('/api/admin/tasks',{title,description:document.getElementById('dashboard-task-desc').value,workerId:selectedWorkerId||''});document.getElementById('dashboard-task-title').value='';document.getElementById('dashboard-task-desc').value='';showView('tasks')}catch(err){alert(err.message)}
+    };
+    // Event Listeners
+    document.getElementById('worker-select').addEventListener('change', (e) => {
+      selectedWorkerId = e.target.value;
+      document.getElementById('control-worker-select').value = selectedWorkerId;
+      updateSelectedWorkerDetails();
+      // Choosing a worker for tasks/chat never interrupts active camera feeds.
+    });
+
+    document.getElementById('control-worker-select').addEventListener('change', (e) => {
+      selectedWorkerId = e.target.value;
+      document.getElementById('worker-select').value = selectedWorkerId;
+      updateSelectedWorkerDetails();
+      // Choosing a worker for tasks/chat never interrupts active camera feeds.
+    });
+
+    document.getElementById('btn-toggle-live').onclick = () => {
+      // Choosing a worker for tasks/chat never interrupts active camera feeds.
+    };
+
+    document.getElementById('btn-start-live-control').onclick = () => {
+      // Choosing a worker for tasks/chat never interrupts active camera feeds.
+    };
+
+    document.getElementById('btn-switch-cam-front').onclick = () => {
+      if (!selectedWorkerId) return;
+      socket.emit('admin-switch-camera', { workerId: selectedWorkerId, camera: 'front' });
+      document.getElementById('video-feed-label').textContent = 'Switching to Front Camera…';
+    };
+
+    document.getElementById('btn-switch-cam-back').onclick = () => {
+      if (!selectedWorkerId) return;
+      socket.emit('admin-switch-camera', { workerId: selectedWorkerId, camera: 'back' });
+      document.getElementById('video-feed-label').textContent = 'Switching to Back Camera…';
+    };
+
+    document.getElementById('btn-timer-pause').onclick = () => {
+      if (!selectedWorkerId) return;
+      const worker = workers.find(w => w.id === selectedWorkerId);
+      const action = worker?.status === 'WORKING' ? 'pause' : worker?.status === 'PAUSED' ? 'resume' : 'start';
+      socket.emit('admin-timer-control', { workerId: selectedWorkerId, action });
+    };
+
+    document.getElementById('btn-timer-stop').onclick = () => {
+      if (!selectedWorkerId) return;
+      if(localStorage.getItem('kitty-confirm-stop') !== '0' && !confirm('Stop the selected worker timer?')) return;
+      socket.emit('admin-timer-control', { workerId: selectedWorkerId, action: 'stop' });
+    };
+
+    // Records the already-authorized remote WebRTC media stream in the admin browser.
+    // This doesn't renegotiate, replace, or otherwise modify the live camera feed.
+    let videoRecorder = null;
+    let recordStream = null;
+    let recordingChunks = [];
+    let recordingWorkerName = '';
+    let recordingStarted = 0;
+    let recordingMime = '';
+    const recordButton = document.getElementById('btn-record');
+    const recordStatus = document.getElementById('record-status');
+    function recordMessage(message) { recordStatus.textContent = message; }
+    function recordReset() {
+      recordButton.textContent = '🔴 Record Video';
+      recordButton.classList.remove('btn-pink');
+      recordButton.classList.add('btn-outline');
+    }
+    function stopRecording() {
+      if (videoRecorder && videoRecorder.state !== 'inactive') {
+        recordMessage('Finalizing recording…');
+        videoRecorder.stop();
+      }
+    }
+    recordButton.onclick = () => {
+      if (videoRecorder && videoRecorder.state !== 'inactive') { stopRecording(); return; }
+      if (!window.MediaRecorder) { recordMessage('Recording is not supported in this browser. Use the latest Chrome or Edge.'); return; }
+      const feed = document.getElementById('live-video-player');
+      const source = feed.srcObject;
+      const videoTracks = source?.getVideoTracks?.() || [];
+      if (!videoTracks.some(t => t.readyState === 'live')) {
+        recordMessage('Connect the live camera and wait for video before recording.');
+        return;
+      }
+      if (feed.readyState < 2) { recordMessage('Wait for the live camera to display video before recording.'); return; }
+      const options = ['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm','video/mp4']
+        .find(m => MediaRecorder.isTypeSupported(m));
+      try {
+        recordStream = new MediaStream(source.getTracks().filter(t => t.readyState === 'live'));
+        recordingChunks = [];
+        recordingMime = options || '';
+        const recorder = new MediaRecorder(recordStream, options ? {mimeType: options} : undefined);
+        videoRecorder = recorder;
+        recordingWorkerName = workers.find(w => w.id === selectedWorkerId)?.name || 'worker';
+        recordingStarted = Date.now();
+        recorder.ondataavailable = e => { if (e.data?.size) recordingChunks.push(e.data); };
+        recorder.onerror = e => { recordMessage('Recording error: ' + (e.error?.message || 'unknown error')); };
+        recorder.onstop = () => {
+          if (videoRecorder !== recorder) return;
+          const chunks = recordingChunks;
+          const mime = recorder.mimeType || recordingMime || 'video/webm';
+          const blob = new Blob(chunks, {type: mime});
+          recordReset();
+          videoRecorder = null;
+          recordStream = null;
+          recordingChunks = [];
+          if (!blob.size) { recordMessage('No video was captured. Check that the camera stayed connected.'); return; }
+          const ext = mime.includes('mp4') ? 'mp4' : 'webm';
+          const cleanName = recordingWorkerName.replace(/[^a-z0-9_-]+/gi,'_');
+          const fileName = `${cleanName}_${new Date(recordingStarted).toISOString().replace(/[:.]/g,'-')}.${ext}`;
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = fileName;
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 60000);
+          recordMessage(`Saved ${fileName} (${(blob.size / 1048576).toFixed(1)} MB) to your browser downloads.`);
+        };
+        recorder.start(1000);
+        recordButton.textContent = '⏹ Stop Recording';
+        recordButton.classList.add('btn-pink');
+        recordButton.classList.remove('btn-outline');
+        recordMessage('● Recording camera' + (recordStream.getAudioTracks().length ? ' + microphone audio' : ' (no audio track available)') + ' — click Stop Recording to save.');
+        for (const track of recordStream.getTracks()) {
+          track.addEventListener('ended', () => { if (recorder.state !== 'inactive') stopRecording(); }, {once:true});
+        }
+      } catch (err) {
+        videoRecorder = null;
+        recordStream = null;
+        recordReset();
+        recordMessage('Cannot start recording: ' + err.message);
+      }
+    };
+
+    document.getElementById('btn-mute').onclick = () => {
+      audioEnabled = !audioEnabled;
+      const v = document.getElementById('live-video-player');
+      if (v) v.muted = !audioEnabled;
+      document.getElementById('btn-mute').textContent = audioEnabled ? '🔊 Unmuted' : '🎙 Mute Audio';
+    };
+
+    let nextTerminalId = 0;
+    function termLine(message) { const screen=document.getElementById('terminal-screen'); const el=document.createElement('div');el.textContent=message;screen.appendChild(el);screen.scrollTop=screen.scrollHeight; }
+    document.getElementById('btn-clear-term').onclick=()=>document.getElementById('terminal-screen').replaceChildren();
+    function runTerminal(){const input=document.getElementById('terminal-command');const command=input.value.trim().toLowerCase();input.value='';if(!command)return;termLine('> '+command);if(command==='clear'){document.getElementById('btn-clear-term').click();return;}if(command==='help'){termLine('Commands: help, clear, status, ping, info, time, uptime. No arbitrary shell/ADB access.');return;}if(!['status','ping','info','time','uptime'].includes(command)){termLine('Unsupported command. Type help.');return;}const worker=workers.find(w=>w.id===selectedWorkerId);if(!worker?.online){termLine('Worker is offline. No command sent.');return;}if(!socket?.connected){termLine('Not connected to server.');return;}socket.emit('admin-device-command',{workerId:selectedWorkerId,command,requestId:String(++nextTerminalId)});termLine('Request sent to '+worker.name+'…');}
+    document.getElementById('btn-send-cmd').onclick=runTerminal;
+    document.getElementById('terminal-command').onkeydown=e=>{if(e.key==='Enter')runTerminal()};
+    document.getElementById('btn-logout').onclick = async () => {
+      await api('/api/logout', {});
+      location.href = '/';
+    };
+
+    document.getElementById('btn-send-chat').onclick = () => {
+      const input = document.getElementById('chat-text-input');
+      const text = input.value.trim();
+      if (!text || !selectedWorkerId) return;
+
+      socket.emit('send-chat-message', { workerId: selectedWorkerId, text });
+      input.value = '';
+    };
+
+    document.getElementById('chat-text-input').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        document.getElementById('btn-send-chat').click();
+      }
+    });
+
+    (async () => {
+      const me = await api('/api/me');
+      if (me.user.role !== 'admin') {
+        location.href = '/worker.html';
+        return;
+      }
+      iceServers = (await api('/api/rtc-config')).iceServers;
+      socket = io();
+
+      socket.on('connect', () => {
+        for (const id of [...peers.keys()]) closePeer(id);
+        requested.clear();
+      });
+
+      socket.on('device-command-result', p => { termLine((p.ok?'✓ ':'✗ ')+p.command+': '+(typeof p.result==='string'?p.result:JSON.stringify(p.result))); });
+      socket.on('workers-state', data => {
+        workers = data;
+        updateUI();
+        monitorSlots.forEach((slot,i)=>{
+          if(!slot.desired||!slot.workerId||!socket.connected)return;
+          if(!workers.some(w=>w.id===slot.workerId&&w.online))return;
+          const pc=peers.get(slot.workerId)?.pc;
+          if(pc&&['connected','connecting','new'].includes(pc.connectionState))return;
+          if(Date.now()-slot.lastAttempt<12000)return;
+          slot.lastAttempt=Date.now();requestLiveFeed(slot.workerId);
+        });
+      });
+
+      socket.on('chat-history', ({ workerId, messages }) => {
+        chatHistoryMap.set(workerId, messages || []);
+        if (workerId === selectedWorkerId) {
+          renderChatForWorker(workerId);
+          refreshKittyChat();
+        }
+      });
+
+      socket.on('chat-message', msg => {
+        const msgs = chatHistoryMap.get(msg.workerId) || [];
+        msgs.push(msg);
+        chatHistoryMap.set(msg.workerId, msgs);
+
+        renderChatForWorker(msg.workerId);
+        refreshKittyChat();
+        const chatInput = document.querySelector('#kitty-chat-stream');
+        if (chatInput) loadChatHistory(msg.workerId);
+      });
+
+      socket.on('tasks-updated', () => {
+        // Refresh from the server; redrawing the old array hid worker-side changes.
+        if (currentView === 'tasks') showView('tasks');
+        if (currentView === 'reports') showView('reports');
+      });
+      socket.on('earnings-updated', () => {
+        if (currentView === 'reports') showView('reports');
+      });
+
+      socket.on('rtc-offer', async p => {
+        console.log('Received rtc-offer:', p);
+        const early = peers.get(p.workerId)?.ice || [];
+        closePeer(p.workerId);
+
+        const pc = new RTCPeerConnection({ iceServers });
+        const entry = { pc, ice: early };
+        peers.set(p.workerId, entry);
+
+        pc.ontrack = e => {
+          console.log('WebRTC ontrack received stream:', e);
+          const stream=e.streams[0] || new MediaStream(e.track ? [e.track] : []);
+          const index=monitorSlotFor(p.workerId);
+          if(index>=0){
+            const video=document.getElementById(`monitor-video-${index}`);
+            if(video){video.srcObject=stream;video.muted=monitorSlots[index].muted;video.play().catch(()=>{});}
+            monitorStatus(index,'LIVE 🟢','live');
+          }
+          if(selectedWorkerId===p.workerId){
+            const videoElem=document.getElementById('live-video-player');
+            if(videoElem){videoElem.srcObject=stream;videoElem.muted=!audioEnabled;videoElem.play().catch(()=>{});}
+            const worker=workers.find(w=>w.id===p.workerId);
+            document.getElementById('video-feed-label').textContent=`LIVE CAMERA • ${worker?.name||p.workerId}`;
+            document.getElementById('video-status-dot').style.background='#10B981';
+            document.getElementById('live-feed-badge').textContent='LIVE 🟢';
+          }
+        };
+
+        pc.onicecandidate = e => {
+          if (e.candidate) {
+            socket.emit('rtc-ice', { targetSocketId: p.workerSocketId, workerId: p.workerId, candidate: e.candidate });
+          }
+        };
+
+        pc.onconnectionstatechange = () => {
+          console.log('WebRTC state:', pc.connectionState);
+          const index=monitorSlotFor(p.workerId);
+          if(index>=0)monitorStatus(index,pc.connectionState==='connected'?'LIVE 🟢':pc.connectionState.toUpperCase(),pc.connectionState==='connected'?'live':pc.connectionState==='failed'?'error':'idle');
+          if (pc.connectionState === 'connected') {
+            document.getElementById('live-feed-badge').textContent = 'LIVE 🟢';
+            document.getElementById('video-status-dot').style.background = '#10B981';
+          } else if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+            document.getElementById('live-feed-badge').textContent = 'OFFLINE';
+            document.getElementById('video-status-dot').style.background = '#EF4444';
+          }
+        };
+
+        try {
+          await pc.setRemoteDescription(new RTCSessionDescription(p.offer));
+          for (const ice of entry.ice) {
+            try { await pc.addIceCandidate(new RTCIceCandidate(ice)); } catch (_) {}
+          }
+          entry.ice = [];
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          socket.emit('rtc-answer', { targetSocketId: p.workerSocketId, workerId: p.workerId, answer });
+        } catch (e) {
+          console.error('WebRTC offer error:', e);
+          socket.emit('admin-live-stop', { workerId: p.workerId });
+          closePeer(p.workerId);
+        }
+      });
+
+      socket.on('rtc-ice', async p => {
+        let entry = peers.get(p.workerId);
+        if (!entry) {
+          entry = { pc: null, ice: [] };
+          peers.set(p.workerId, entry);
+        }
+        if (!entry.pc || !entry.pc.remoteDescription) {
+          entry.ice.push(p.candidate);
+        } else {
+          try {
+            await entry.pc.addIceCandidate(new RTCIceCandidate(p.candidate));
+          } catch (e) {
+            console.warn('ICE Candidate add error:', e);
+          }
+        }
+      });
+
+      socket.on('live-error', p => {
+        closePeer(p.workerId);
+        const index=monitorSlotFor(p.workerId);if(index>=0)monitorStatus(index,p.message||'Camera request failed','error');
+        document.getElementById('video-feed-label').textContent = p.message || 'Camera request failed';
+        document.getElementById('video-status-dot').style.background = '#EF4444';
+      });
+
+      socket.on('live-status', p => {
+        if (p.mode === 'NONE') closePeer(p.workerId);
+      });
+
+      setInterval(() => {
+        for (const [id, at] of requested) if (Date.now() - at > 30000) requested.delete(id);
+        updateSelectedWorkerDetails();
+        updateMonitorTimers();
+      }, 500);
+    })().catch(() => {});
+  </script>
+</body>
+</html>

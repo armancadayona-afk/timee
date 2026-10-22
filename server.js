@@ -803,9 +803,11 @@ app.post('/api/chat/send', requireAuth, (req, res) => {
   const targetId = resolveWorkerId(rawTarget);
   if (!targetId && req.session.user.role === 'admin') return res.status(400).json({ ok: false, error: 'Target worker required' });
 
+  const targetState = states.get(targetId) || states.get(workerId);
+  const conversationWorkerId = targetState?.id || targetId;
   const msg = {
     id: crypto.randomUUID(),
-    workerId: targetId,
+    workerId: conversationWorkerId,
     senderRole: req.session.user.role,
     senderName: req.session.user.name || req.session.user.username,
     text: messageText,
@@ -1531,19 +1533,29 @@ io.on('connection', socket => {
       timestamp: Date.now()
     };
 
+    const normalizedWorkerId = resolveWorkerId(targetWorkerId);
+    if (!normalizedWorkerId) return;
+    const targetState = states.get(normalizedWorkerId) || states.get(targetWorkerId);
+    msg.workerId = targetState?.id || normalizedWorkerId;
     chatMessages.push(msg);
+    persistChat();
 
+    // One canonical event path for both admin and worker clients.
     io.to('admins').emit('chat-message', msg);
-    const workerState = states.get(targetWorkerId);
-    if (workerState && workerState.socketId) {
-      io.to(workerState.socketId).emit('chat-message', msg);
-    }
+    io.to('worker:' + normalizedWorkerId).emit('chat-message', msg);
+    const workerState = states.get(normalizedWorkerId);
+    if (workerState?.socketId) io.to(workerState.socketId).emit('chat-message', msg);
   });
 
   socket.on('get-chat-history', ({ workerId } = {}) => {
-    const targetWorkerId = user.role === 'worker' ? user.id : workerId;
-    const history = chatMessages.filter(m => m.workerId === targetWorkerId);
-    socket.emit('chat-history', { workerId: targetWorkerId, messages: history });
+    const requestedWorkerKey = user.role === 'worker' ? user.id : workerId;
+    const targetWorkerId = resolveWorkerId(user.role === 'worker' ? (user.username || user.id) : workerId);
+    if (!targetWorkerId || (user.role !== 'admin' && targetWorkerId !== resolveWorkerId(user.username || user.id))) {
+      socket.emit('chat-history', { workerId: requestedWorkerKey || '', messages: [] });
+      return;
+    }
+    const history = chatMessages.filter(m => resolveWorkerId(m.workerId) === targetWorkerId);
+    socket.emit('chat-history', { workerId: requestedWorkerKey, messages: history });
   });
 
   socket.on('disconnect', () => {

@@ -34,3 +34,19 @@ Live camera/microphone monitoring requires the worker to be signed in to the wor
 - `npm test`: 5 tests pass, covering worker authentication/route protection, camera request timing, and timer pause/resume accounting.
 
 These automated checks do not replace a live two-browser WebRTC test on the final HTTPS deployment.
+
+## Synchronization fixes and verification
+
+This revision fixes two sync defects found during code review:
+
+- Admin task/earnings panels now fetch fresh server data on Socket.IO update events instead of only redrawing stale in-memory arrays.
+- Chat messages sent through the Socket.IO path are persisted to `data/chat-messages.json`; chat history compares normalized worker IDs and returns the original worker key used by the admin UI. This prevents messages from disappearing after restart and fixes worker ID/username mismatches in history.
+
+### Checks run for this revision
+
+- `node --check server.js` — passed.
+- `node --check public/worker-features.js` — passed.
+- Inline JavaScript syntax checks for `public/admin.html` and `public/worker.html` — passed.
+- `node --test test/*.test.js` — 9/9 passed (5 existing auth/timer tests and 4 synchronization contract checks).
+
+The synchronization contract tests verify persistence/broadcast wiring and the frontend listeners. A live two-browser end-to-end test was **not** completed in this environment because installing the app dependencies timed out. Run `npm install` and test with separate authenticated admin and worker browser sessions before production deployment.
