@@ -1,27 +1,36 @@
-# Timee / Worker Timer — rebuilt source
+# Timee / Worker Timer — standalone web rebuild
 
-This rebuild keeps the existing dashboard, worker/device views, authentication model,
-Socket.IO event names, timer-state implementation, WebRTC signaling and `/api/rtc-config`
-flow intact. The visual HTML/CSS and core server were intentionally left unchanged.
+A self-hosted browser application for worker timer sessions, task management, chat, earnings, device status, and authorized live camera monitoring. It runs as a Node.js web app and does not require an Android application.
 
-## Focused fixes
-- Worker Earnings now renders the server-provided earnings/statistics instead of treating
-  task titles as earnings. Admin-added earning records and their totals update through the
-  existing `tasks-updated` / `earnings-updated` events and refresh on reconnect.
-- Worker task/chat views refresh when the authenticated Socket.IO connection reconnects.
-- Removed the duplicate `public/server.js` copy from the public static directory. The real
-  backend entry point remains the root `server.js`.
-- Removed transient `data/http-sessions` cookie/session files from the source package.
-  The server recreates this directory automatically at startup.
+## What changed
 
-## Run and test
-- Node.js 18+
-- `npm install`
-- `npm test`
-- `npm start`
+- Reworked the worker-side Task, Open Tasks, Task History, Chat, Earnings, and Profile screens as browser-native interfaces using the existing authenticated API.
+- Added an administrator task review filter so submitted work is visible under **Needs Review** and can be approved. Task search and worker filtering include assigned workers.
+- Fixed task submission authorization: workers can submit only a task assigned to them, and must accept it before submitting.
+- Browser camera/microphone permission is requested when an authenticated administrator starts live monitoring, rather than on initial page load. Existing Socket.IO/WebRTC signaling events, RTC configuration endpoint, and admin monitoring authorization flow are retained. Monitoring stop releases camera/microphone tracks.
+- Earnings display uses actual server-provided earning records and totals rather than presenting task titles as payments. Worker task/chat data refreshes on socket reconnect and relevant server events.
+- Removed the duplicate backend file from the public static directory and excluded transient session files from the package.
 
-Configure `SESSION_SECRET`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, and worker credentials
-through environment variables before deploying. Change the development default credentials.
-Camera/microphone capture still requires browser permission and a secure context (HTTPS)
-outside localhost. This source-level review does not replace testing on the actual worker
-devices and deployment environment.
+## Run locally
+
+Requirements: Node.js 18 or newer.
+
+```sh
+npm install
+npm test
+npm start
+```
+
+Open `http://localhost:3000` (or the port configured by the server). Use the credentials configured for your deployment. Set `SESSION_SECRET`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, and worker credentials using environment variables; do not deploy with development credentials.
+
+## Browser camera requirements
+
+Live camera/microphone monitoring requires the worker to be signed in to the worker page, the browser to grant camera/microphone permission, and the app to be served over HTTPS (localhost is permitted for local testing). The admin must be authenticated and use the existing Dashboard live-monitor controls. The browser prompts the worker for access when monitoring is requested.
+
+## Verification performed
+
+- `node --check server.js`, `node --check public/worker-features.js`, and `node --check timer-state.js` pass.
+- Inline JavaScript in the admin, worker, and login pages passes `node --check`.
+- `npm test`: 5 tests pass, covering worker authentication/route protection, camera request timing, and timer pause/resume accounting.
+
+These automated checks do not replace a live two-browser WebRTC test on the final HTTPS deployment.

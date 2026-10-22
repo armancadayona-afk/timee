@@ -633,9 +633,10 @@ app.get('/api/worker/tasks', requireRole('worker'), (req,res) => {
 
 app.post('/api/worker/tasks/:id/submit', requireRole('worker'), (req,res) => {
   const wid = resolveWorkerId(req.session.user.username || req.session.user.id);
-  const task = adminTasks.find(t => t.id === req.params.id && (!resolveWorkerId(t.workerId) || resolveWorkerId(t.workerId) === wid || resolveWorkerId(t.assignedWorkerId) === wid));
-  if (!task) return res.status(404).json({error: 'Task not found'});
+  const task = adminTasks.find(t => t.id === req.params.id && (!resolveWorkerId(t.workerId) || resolveWorkerId(t.workerId) === wid) && (!resolveWorkerId(t.assignedWorkerId) || resolveWorkerId(t.assignedWorkerId) === wid));
+  if (!task) return res.status(404).json({error: 'Task not found or assigned to another worker'});
   if (task.status === 'completed') return res.status(409).json({error: 'Task already completed'});
+  if (task.status !== 'in_progress' || resolveWorkerId(task.assignedWorkerId) !== wid) return res.status(409).json({error: 'Accept this task before submitting it'});
 
   task.assignedWorkerId = wid;
   task.status = 'submitted';
