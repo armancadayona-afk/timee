@@ -1261,8 +1261,10 @@ app.post('/api/chat/messages', requireAuth, (req, res) => {
   // Socket.IO real-time message emit
   io.to('conv:' + conversationId).emit('new-message', newMsg);
 
-  // Notify other participant(s)
+  // Notify & broadcast to all participants and rooms
   conv.participants.forEach(pid => {
+    io.to('user:' + pid).emit('new-message', newMsg);
+    io.to('worker:' + pid).emit('new-message', newMsg);
     if (pid !== currentUser.id && pid !== currentUser.username) {
       createNotification(pid, 'CHAT_MESSAGE', `Message from ${currentUser.name}`, newMsg.text || 'Sent an attachment', { conversationId });
       io.to('user:' + pid).emit('chat-updated');
@@ -1270,6 +1272,7 @@ app.post('/api/chat/messages', requireAuth, (req, res) => {
     }
   });
 
+  io.to('admins').emit('new-message', newMsg);
   io.to('admins').emit('chat-updated');
 
   res.json({ ok: true, message: newMsg });
@@ -1460,6 +1463,14 @@ io.on('connection', socket => {
   const userId = user.id || user.username;
   socket.join('user:' + userId);
   if (user.username) socket.join('user:' + user.username);
+  if (user.id) socket.join('user:' + user.id);
+
+  // Auto-join all participant conversation rooms
+  conversations.forEach(c => {
+    if (c.participants.includes(userId) || (user.username && c.participants.includes(user.username)) || (user.id && c.participants.includes(user.id))) {
+      socket.join('conv:' + c.id);
+    }
+  });
 
   if (user.role === 'admin') {
     socket.join('admins');
