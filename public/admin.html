@@ -456,11 +456,14 @@
     }
 
     let currentView = 'dashboard';
-    function showView(view) {
+    async function showView(view) {
       currentView = view;
       document.getElementById('dashboard-view').style.display = view === 'dashboard' ? '' : 'none';
       document.getElementById('secondary-view').style.display = view === 'dashboard' ? 'none' : '';
       document.querySelectorAll('[data-view]').forEach(el => el.classList.toggle('active', el.dataset.view === view));
+      if (!workers.length) {
+        await loadWorkersList();
+      }
       renderView();
     }
 
@@ -1093,18 +1096,30 @@
       location.href = '/';
     };
 
+    async function loadWorkersList() {
+      try {
+        const res = await api('/api/workers');
+        if (res.workers && res.workers.length) {
+          workers = res.workers;
+          updateUI();
+        }
+      } catch (_) {}
+    }
+
     (async () => {
       const me = await api('/api/me');
       if (me.user.role !== 'admin') {
         location.href = '/worker.html';
         return;
       }
+      await loadWorkersList();
       iceServers = (await api('/api/rtc-config')).iceServers;
       socket = io();
 
       socket.on('connect', () => {
         for (const id of [...peers.keys()]) closePeer(id);
         requested.clear();
+        loadWorkersList();
         loadAdminConversations();
       });
 
