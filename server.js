@@ -25,9 +25,6 @@ const DATA_DIR = path.join(__dirname, 'data');
 const STATE_FILE = path.join(DATA_DIR, 'state.json');
 const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
 const HTTP_SESSION_DIR = path.join(DATA_DIR, 'http-sessions');
-const TASKS_FILE = path.join(DATA_DIR, 'tasks.json');
-const EARNINGS_FILE = path.join(DATA_DIR, 'earnings.json');
-const WITHDRAWALS_FILE = path.join(DATA_DIR, 'withdrawals.json');
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
 fs.mkdirSync(HTTP_SESSION_DIR, { recursive: true });
@@ -152,69 +149,16 @@ function readJson(file, fallback) {
   }
 }
 
-function writeJsonAtomic(file, value) {
-  const temp = `${file}.tmp`;
-  fs.writeFileSync(temp, JSON.stringify(value, null, 2));
-  fs.renameSync(temp, file);
-}
-
-const initialSampleTasks = [
-  {
-    id: 'sample-task-1',
-    title: 'Data Entry & Summary Report',
-    description: 'Compile monthly records into the master spreadsheet and format the output.',
-    deadline: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
-    type: 'DIRECT',
-    assignedWorkerId: 'worker1',
-    status: 'ASSIGNED',
-    rewardAmount: 50.00,
-    createdBy: 'admin',
-    createdAt: Date.now(),
-    submission: null,
-    review: null
-  },
-  {
-    id: 'sample-task-2',
-    title: 'Image Annotation & Tagging',
-    description: 'Tag dataset images for training the recognition pipeline.',
-    deadline: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
-    type: 'OPEN',
-    assignedWorkerId: null,
-    status: 'UNASSIGNED',
-    rewardAmount: 35.00,
-    createdBy: 'admin',
-    createdAt: Date.now(),
-    submission: null,
-    review: null
-  },
-  {
-    id: 'sample-task-3',
-    title: 'Code Base Security Review',
-    description: 'Review API authentication middleware and log security checks.',
-    deadline: new Date(Date.now() + 4 * 24 * 60 * 60 * 1000).toISOString(),
-    type: 'OPEN',
-    assignedWorkerId: null,
-    status: 'UNASSIGNED',
-    rewardAmount: 75.00,
-    createdBy: 'admin',
-    createdAt: Date.now(),
-    submission: null,
-    review: null
-  }
-];
-
 const persisted = readJson(STATE_FILE, {});
 const workSessions = readJson(SESSIONS_FILE, []);
-const tasks = readJson(TASKS_FILE, initialSampleTasks);
-const earnings = readJson(EARNINGS_FILE, []);
-const withdrawals = readJson(WITHDRAWALS_FILE, []);
-
 const states = new Map();
 
 for (const worker of users.filter(user => user.role === 'worker')) {
   const state = initialWorkerState(worker);
   const old = persisted[worker.id] || persisted[worker.username];
 
+  // Restore an active shift after reconnect or a server process restart.
+  // The clock is anchored to wall time, so offline time remains accounted for.
   if (old && Number.isFinite(Number(old.lastSeenAt))) {
     state.lastSeenAt = Number(old.lastSeenAt);
   }
@@ -237,8 +181,15 @@ for (const worker of users.filter(user => user.role === 'worker')) {
   }
 }
 
+function writeJsonAtomic(file, value) {
+  const temp = `${file}.tmp`;
+  fs.writeFileSync(temp, JSON.stringify(value, null, 2));
+  fs.renameSync(temp, file);
+}
+
 function persistState() {
   const output = {};
+
   for (const [id, state] of states.entries()) {
     output[id] = {
       lastSeenAt: state.lastSeenAt,
@@ -249,27 +200,12 @@ function persistState() {
       accumulatedMs: state.accumulatedMs
     };
   }
+
   writeJsonAtomic(STATE_FILE, output);
 }
 
 function persistSessions() {
   writeJsonAtomic(SESSIONS_FILE, workSessions.slice(-1000));
-}
-
-function persistTasks() {
-  writeJsonAtomic(TASKS_FILE, tasks);
-}
-
-function persistEarnings() {
-  writeJsonAtomic(EARNINGS_FILE, earnings);
-}
-
-function persistWithdrawals() {
-  writeJsonAtomic(WITHDRAWALS_FILE, withdrawals);
-}
-
-if (!fs.existsSync(TASKS_FILE)) {
-  persistTasks();
 }
 
 function safeWorkerState(state) {
@@ -316,11 +252,15 @@ function resetLiveState(state) {
 
 function stopWorkerLive(state, reason = 'stopped', notifyWorker = true) {
   if (!state) return;
+
   const adminSocketId = state.liveAdminSocketId;
   const previousMode = state.liveMode;
 
   if (notifyWorker && state.socketId) {
-    io.to(state.socketId).emit('stop-live', { adminSocketId, reason });
+    io.to(state.socketId).emit('stop-live', {
+      adminSocketId,
+      reason
+    });
   }
 
   resetLiveState(state);
@@ -340,6 +280,8 @@ function startShift(state) {
   if (state.sessionId) return;
 
   clearDisconnectTimer(state);
+  // Starting the clock must not interrupt an existing broadcast.
+
   state.status = 'WORKING';
   state.startedAt = Date.now();
   state.accumulatedMs = 0;
@@ -370,6 +312,7 @@ function resetWorkerTimer(state) {
     record.reason = 'admin-reset';
     persistSessions();
   }
+  // Reset only timer state. Do not stop the worker socket or the active WebRTC feed.
   state.status = 'STOPPED';
   state.startedAt = null;
   state.accumulatedMs = 0;
@@ -379,13 +322,17 @@ function resetWorkerTimer(state) {
 
 function finishShift(state, reason = 'stopped', nextStatus = 'STOPPED') {
   if (!state) return null;
+
   const activeSocketId = state.socketId;
 
   clearDisconnectTimer(state);
   stopWorkerLive(state, reason, true);
 
   const durationMs = timerState.elapsed(state);
-  const record = workSessions.find(item => item.id === state.sessionId && item.endedAt === null);
+
+  const record = workSessions.find(
+    item => item.id === state.sessionId && item.endedAt === null
+  );
 
   if (record) {
     record.endedAt = Date.now();
@@ -455,54 +402,13 @@ function loginRateLimit(req, res, next) {
   next();
 }
 
-// Balance calculation helper with exact 48-hour hold calculation
-function getWorkerEarnings(workerId) {
-  const now = Date.now();
-  const workerLedger = earnings.filter(item => item.workerId === workerId);
-  const workerWithdrawals = withdrawals.filter(w => w.workerId === workerId);
-
-  let totalEarnings = 0;
-  let pendingBalance = 0;
-  let grossAvailable = 0;
-
-  const ledgerWithStatus = workerLedger.map(item => {
-    totalEarnings += Number(item.amount) || 0;
-    const isAvailable = now >= item.availableAt;
-    if (isAvailable) {
-      grossAvailable += Number(item.amount) || 0;
-    } else {
-      pendingBalance += Number(item.amount) || 0;
-    }
-    return {
-      ...item,
-      status: isAvailable ? 'AVAILABLE' : 'HOLD_48H',
-      remainingHoldMs: isAvailable ? 0 : Math.max(0, item.availableAt - now)
-    };
-  });
-
-  const totalWithdrawn = workerWithdrawals
-    .filter(w => w.status === 'APPROVED' || w.status === 'PENDING')
-    .reduce((sum, w) => sum + (Number(w.amount) || 0), 0);
-
-  const availableBalance = Math.max(0, grossAvailable - totalWithdrawn);
-
-  return {
-    workerId,
-    totalEarnings,
-    pendingBalance,
-    availableBalance,
-    grossAvailable,
-    totalWithdrawn,
-    ledger: ledgerWithStatus,
-    withdrawals: workerWithdrawals
-  };
-}
-
 app.get('/', (_req, res) => {
   const indexPath = path.join(__dirname, 'public', 'index.html');
+
   if (!fs.existsSync(indexPath)) {
     return res.status(500).send('Work Timer homepage is missing.');
   }
+
   res.sendFile(indexPath);
 });
 
@@ -510,7 +416,7 @@ app.get('/health', (_req, res) => {
   res.json({
     ok: true,
     service: 'worker-timer-monitor',
-    version: '4.0.0-tasks-earnings'
+    version: '3.3.0-three-workers'
   });
 });
 
@@ -526,7 +432,11 @@ app.post('/api/login', loginRateLimit, (req, res) => {
 
   if (!user) {
     req.loginAttempt.entry.count += 1;
-    loginAttempts.set(req.loginAttempt.key, req.loginAttempt.entry);
+    loginAttempts.set(
+      req.loginAttempt.key,
+      req.loginAttempt.entry
+    );
+
     return res.status(401).json({
       ok: false,
       error: 'Invalid username or password'
@@ -544,6 +454,9 @@ app.post('/api/login', loginRateLimit, (req, res) => {
 
   if (user.role === 'worker') {
     const state = states.get(user.id);
+
+    // Authentication/reconnect must not end an existing shift.
+    // Socket registration handles replacing the prior transport connection.
     const oldSocketId = state.socketId;
     if (oldSocketId) {
       stopWorkerLive(state, 'relogin', true);
@@ -555,18 +468,22 @@ app.post('/api/login', loginRateLimit, (req, res) => {
     state.captureReady = false;
     clearDisconnectTimer(state);
     persistState();
+
     broadcastStates();
   }
 
   res.json({
     ok: true,
     user: req.session.user,
-    redirect: user.role === 'admin' ? '/admin.html' : '/worker.html'
+    redirect: user.role === 'admin'
+      ? '/admin.html'
+      : '/worker.html'
   });
 });
 
 app.post('/api/logout', requireAuth, (req, res) => {
   const user = req.session.user;
+
   if (user.role === 'worker' && user.id) {
     const state = states.get(user.id);
     if (state?.sessionId) {
@@ -578,6 +495,7 @@ app.post('/api/logout', requireAuth, (req, res) => {
     }
     broadcastStates();
   }
+
   req.session.destroy(() => {
     res.json({ ok: true });
   });
@@ -592,15 +510,29 @@ app.get('/api/me', requireAuth, (req, res) => {
 
 app.get('/api/worker/state', requireRole('worker'), (req, res) => {
   const state = states.get(req.session.user.id);
+
   if (!state) {
-    return res.status(404).json({ ok: false, error: 'Unknown worker' });
+    return res.status(404).json({
+      ok: false,
+      error: 'Unknown worker'
+    });
   }
-  res.json({ ok: true, state: safeWorkerState(state) });
+
+  res.json({
+    ok: true,
+    state: safeWorkerState(state)
+  });
 });
 
 app.post('/api/worker/start', requireRole('worker'), (req, res) => {
   const state = states.get(req.session.user.id);
-  if (!state) return res.status(404).json({ ok: false, error: 'Unknown worker' });
+
+  if (!state) {
+    return res.status(404).json({
+      ok: false,
+      error: 'Unknown worker'
+    });
+  }
 
   if (state.status === 'PAUSED') {
     timerState.resume(state);
@@ -611,33 +543,42 @@ app.post('/api/worker/start', requireRole('worker'), (req, res) => {
     broadcastStates();
   }
 
-  res.json({ ok: true, state: safeWorkerState(state) });
+  res.json({
+    ok: true,
+    state: safeWorkerState(state)
+  });
 });
 
 for (const action of ['pause', 'resume']) {
   app.post(`/api/worker/${action}`, requireRole('worker'), (req, res) => {
     const state = states.get(req.session.user.id);
-    if (!state) return res.status(404).json({ ok: false, error: 'Unknown worker' });
-    if (action === 'resume' && !state.sessionId) {
-      startShift(state);
-    } else {
-      timerState[action](state);
-    }
+    if (!state) return res.status(404).json({ok:false, error:'Unknown worker'});
+    timerState[action](state);
     persistState();
     broadcastStates();
-    res.json({ ok: true, state: safeWorkerState(state) });
+    res.json({ok:true, state:safeWorkerState(state)});
   });
 }
 
 app.post('/api/worker/stop', requireRole('worker'), (req, res) => {
   const state = states.get(req.session.user.id);
-  if (!state) return res.status(404).json({ ok: false, error: 'Unknown worker' });
+
+  if (!state) {
+    return res.status(404).json({
+      ok: false,
+      error: 'Unknown worker'
+    });
+  }
 
   if (state.sessionId) {
     const socketId = finishShift(state, 'worker-stop', 'STOPPED');
+
     if (socketId) {
-      io.to(socketId).emit('timer-stopped', { reason: 'worker-stop' });
+      io.to(socketId).emit('timer-stopped', {
+        reason: 'worker-stop'
+      });
     }
+
     state.socketId = null;
     broadcastStates();
   } else {
@@ -647,20 +588,31 @@ app.post('/api/worker/stop', requireRole('worker'), (req, res) => {
     broadcastStates();
   }
 
-  res.json({ ok: true, state: safeWorkerState(state) });
+  res.json({
+    ok: true,
+    state: safeWorkerState(state)
+  });
 });
 
 app.get('/api/workers', requireRole('admin'), (_req, res) => {
-  res.json({ ok: true, workers: uniqueWorkerStates() });
+  res.json({
+    ok: true,
+    workers: uniqueWorkerStates()
+  });
 });
 
 app.post('/api/admin/worker/timer', requireRole('admin'), (req, res) => {
   const { workerId, action } = req.body || {};
   const state = states.get(workerId);
 
-  if (!state) return res.status(404).json({ ok: false, error: 'Unknown worker' });
+  if (!state) {
+    return res.status(404).json({
+      ok: false,
+      error: 'Unknown worker'
+    });
+  }
 
-  if (action === 'start' || action === 'resume') {
+  if (action === 'start') {
     if (state.status === 'PAUSED') {
       timerState.resume(state);
     } else if (!state.sessionId) {
@@ -670,13 +622,19 @@ app.post('/api/admin/worker/timer', requireRole('admin'), (req, res) => {
     if (state.status === 'WORKING') {
       timerState.pause(state);
     }
+  } else if (action === 'resume') {
+    if (state.status === 'PAUSED') {
+      timerState.resume(state);
+    }
   } else if (action === 'reset') {
     resetWorkerTimer(state);
   } else if (action === 'stop') {
     if (state.sessionId) {
       const socketId = finishShift(state, 'admin-stop', 'STOPPED');
       if (socketId) {
-        io.to(socketId).emit('timer-stopped', { reason: 'admin-stop' });
+        io.to(socketId).emit('timer-stopped', {
+          reason: 'admin-stop'
+        });
       }
     } else {
       state.status = 'STOPPED';
@@ -692,368 +650,36 @@ app.post('/api/admin/worker/timer', requireRole('admin'), (req, res) => {
     io.to(state.socketId).emit('timer-updated', safeWorkerState(state));
   }
 
-  res.json({ ok: true, state: safeWorkerState(state) });
+  res.json({
+    ok: true,
+    state: safeWorkerState(state)
+  });
 });
 
 app.get('/api/rtc-config', requireAuth, (_req, res) => {
-  let iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
+  let iceServers = [
+    {
+      urls: 'stun:stun.l.google.com:19302'
+    }
+  ];
+
   if (process.env.RTC_ICE_SERVERS_JSON) {
     try {
-      const parsed = JSON.parse(process.env.RTC_ICE_SERVERS_JSON);
-      if (Array.isArray(parsed) && parsed.length) iceServers = parsed;
-    } catch (_) {}
-  }
-  res.json({ ok: true, iceServers });
-});
+      const parsed = JSON.parse(
+        process.env.RTC_ICE_SERVERS_JSON
+      );
 
-// --- TASK MANAGEMENT & EARNINGS ENDPOINTS ---
-
-// Admin: Get all tasks
-app.get('/api/tasks', requireRole('admin'), (_req, res) => {
-  res.json({
-    ok: true,
-    tasks: tasks.map(t => {
-      const worker = users.find(u => u.id === t.assignedWorkerId);
-      return {
-        ...t,
-        assignedWorkerName: worker ? worker.name : (t.assignedWorkerId || 'Unassigned')
-      };
-    })
-  });
-});
-
-// Worker: Get available open tasks
-app.get('/api/tasks/available', requireRole('worker'), (_req, res) => {
-  const availableTasks = tasks.filter(t => t.type === 'OPEN' && t.status === 'UNASSIGNED');
-  res.json({ ok: true, tasks: availableTasks });
-});
-
-// Worker: Get my tasks
-app.get('/api/tasks/my', requireRole('worker'), (req, res) => {
-  const workerId = req.session.user.id;
-  const myTasks = tasks.filter(t => t.assignedWorkerId === workerId);
-  res.json({ ok: true, tasks: myTasks });
-});
-
-// Admin: Create task
-app.post('/api/tasks', requireRole('admin'), (req, res) => {
-  const { title, description, deadline, type, assignedWorkerId, rewardAmount } = req.body || {};
-
-  if (!title || !title.trim()) {
-    return res.status(400).json({ ok: false, error: 'Task title is required' });
-  }
-
-  const normalizedType = String(type || 'OPEN').toUpperCase();
-  if (!['DIRECT', 'OPEN'].includes(normalizedType)) {
-    return res.status(400).json({ ok: false, error: 'Type must be DIRECT or OPEN' });
-  }
-
-  let assignedWorker = null;
-  let status = 'UNASSIGNED';
-
-  if (normalizedType === 'DIRECT') {
-    if (!assignedWorkerId) {
-      return res.status(400).json({ ok: false, error: 'Assigned worker is required for Direct tasks' });
+      if (Array.isArray(parsed) && parsed.length) {
+        iceServers = parsed;
+      }
+    } catch (_) {
     }
-    const targetUser = users.find(u => u.role === 'worker' && u.id === assignedWorkerId);
-    if (!targetUser) {
-      return res.status(400).json({ ok: false, error: 'Selected worker does not exist' });
-    }
-    assignedWorker = targetUser.id;
-    status = 'ASSIGNED';
   }
-
-  const newTask = {
-    id: crypto.randomUUID(),
-    title: title.trim(),
-    description: (description || '').trim(),
-    deadline: deadline || null,
-    type: normalizedType,
-    assignedWorkerId: assignedWorker,
-    status: status,
-    rewardAmount: Math.max(0, Number(rewardAmount) || 0),
-    createdBy: req.session.user.username,
-    createdAt: Date.now(),
-    submission: null,
-    review: null
-  };
-
-  tasks.push(newTask);
-  persistTasks();
-
-  io.to('admins').emit('tasks-updated');
-  if (assignedWorker) {
-    io.to('worker:' + assignedWorker).emit('tasks-updated');
-  } else {
-    io.emit('tasks-updated');
-  }
-
-  return res.json({ ok: true, task: newTask });
-});
-
-// Worker: Claim an open task (Atomic claim)
-app.post('/api/tasks/:id/claim', requireRole('worker'), (req, res) => {
-  const taskId = req.params.id;
-  const workerId = req.session.user.id;
-
-  const task = tasks.find(t => t.id === taskId);
-  if (!task) return res.status(404).json({ ok: false, error: 'Task not found' });
-
-  if (task.type !== 'OPEN' || task.status !== 'UNASSIGNED' || task.assignedWorkerId != null) {
-    return res.status(409).json({ ok: false, error: 'This task has already been claimed or is unavailable.' });
-  }
-
-  task.assignedWorkerId = workerId;
-  task.status = 'IN_PROGRESS';
-  task.claimedAt = Date.now();
-  persistTasks();
-
-  io.to('admins').emit('tasks-updated');
-  io.emit('tasks-updated');
-
-  return res.json({ ok: true, task });
-});
-
-// Worker: Accept or Deny direct task assignment
-app.post('/api/tasks/:id/respond', requireRole('worker'), (req, res) => {
-  const taskId = req.params.id;
-  const workerId = req.session.user.id;
-  const { action } = req.body || {};
-
-  const task = tasks.find(t => t.id === taskId);
-  if (!task) return res.status(404).json({ ok: false, error: 'Task not found' });
-
-  if (task.assignedWorkerId !== workerId || task.status !== 'ASSIGNED') {
-    return res.status(400).json({ ok: false, error: 'Task is not assigned to you or cannot be responded to.' });
-  }
-
-  if (action === 'accept') {
-    task.status = 'IN_PROGRESS';
-    task.acceptedAt = Date.now();
-  } else if (action === 'deny') {
-    task.status = 'REJECTED_BY_WORKER';
-    task.deniedAt = Date.now();
-  } else {
-    return res.status(400).json({ ok: false, error: 'Invalid action' });
-  }
-
-  persistTasks();
-  io.to('admins').emit('tasks-updated');
-  io.to('worker:' + workerId).emit('tasks-updated');
-
-  return res.json({ ok: true, task });
-});
-
-// Worker: Submit task for review
-app.post('/api/tasks/:id/submit', requireRole('worker'), (req, res) => {
-  const taskId = req.params.id;
-  const workerId = req.session.user.id;
-  const { note } = req.body || {};
-
-  const task = tasks.find(t => t.id === taskId);
-  if (!task) return res.status(404).json({ ok: false, error: 'Task not found' });
-
-  if (task.assignedWorkerId !== workerId) {
-    return res.status(403).json({ ok: false, error: 'You are not assigned to this task.' });
-  }
-
-  if (task.status !== 'IN_PROGRESS' && task.status !== 'REVISION_REQUIRED') {
-    return res.status(400).json({ ok: false, error: 'Task cannot be submitted in its current state.' });
-  }
-
-  task.status = 'PENDING_REVIEW';
-  task.submission = {
-    note: (note || '').trim(),
-    submittedAt: Date.now()
-  };
-
-  persistTasks();
-  io.to('admins').emit('tasks-updated');
-  io.to('worker:' + workerId).emit('tasks-updated');
-
-  return res.json({ ok: true, task });
-});
-
-// Admin: Review task submission (Approve / Reject)
-app.post('/api/tasks/:id/review', requireRole('admin'), (req, res) => {
-  const { action, paymentAmount, feedback } = req.body || {};
-  const taskId = req.params.id;
-
-  const task = tasks.find(t => t.id === taskId);
-  if (!task) return res.status(404).json({ ok: false, error: 'Task not found' });
-
-  if (action === 'approve') {
-    const amount = Number(paymentAmount) || Number(task.rewardAmount) || 0;
-    if (amount <= 0) return res.status(400).json({ ok: false, error: 'Payment amount must be greater than 0' });
-
-    task.status = 'COMPLETED';
-    const now = Date.now();
-    task.review = {
-      approved: true,
-      feedback: (feedback || 'Approved').trim(),
-      reviewedAt: now,
-      paymentAmount: amount
-    };
-
-    let ledgerEntry = earnings.find(e => e.taskId === task.id);
-    if (!ledgerEntry) {
-      ledgerEntry = {
-        id: crypto.randomUUID(),
-        taskId: task.id,
-        taskTitle: task.title,
-        workerId: task.assignedWorkerId,
-        amount: amount,
-        approvedAt: now,
-        availableAt: now + (48 * 60 * 60 * 1000) // 48 hours
-      };
-      earnings.push(ledgerEntry);
-      persistEarnings();
-    }
-    persistTasks();
-
-    io.to('admins').emit('tasks-updated');
-    io.to('admins').emit('earnings-updated');
-    if (task.assignedWorkerId) {
-      io.to('worker:' + task.assignedWorkerId).emit('tasks-updated');
-      io.to('worker:' + task.assignedWorkerId).emit('earnings-updated');
-    }
-
-    return res.json({ ok: true, task, ledgerEntry });
-  } else if (action === 'reject') {
-    if (!feedback || !feedback.trim()) {
-      return res.status(400).json({ ok: false, error: 'Feedback is required when rejecting a task' });
-    }
-    task.status = 'REVISION_REQUIRED';
-    task.review = {
-      approved: false,
-      feedback: feedback.trim(),
-      reviewedAt: Date.now()
-    };
-    persistTasks();
-
-    io.to('admins').emit('tasks-updated');
-    if (task.assignedWorkerId) {
-      io.to('worker:' + task.assignedWorkerId).emit('tasks-updated');
-    }
-
-    return res.json({ ok: true, task });
-  } else {
-    return res.status(400).json({ ok: false, error: 'Invalid review action' });
-  }
-});
-
-// Admin: Reassign or convert task
-app.post('/api/tasks/:id/reassign', requireRole('admin'), (req, res) => {
-  const taskId = req.params.id;
-  const { type, assignedWorkerId } = req.body || {};
-
-  const task = tasks.find(t => t.id === taskId);
-  if (!task) return res.status(404).json({ ok: false, error: 'Task not found' });
-
-  const normalizedType = String(type || task.type).toUpperCase();
-  if (normalizedType === 'DIRECT') {
-    if (!assignedWorkerId) return res.status(400).json({ ok: false, error: 'Worker required for Direct assignment' });
-    task.type = 'DIRECT';
-    task.assignedWorkerId = assignedWorkerId;
-    task.status = 'ASSIGNED';
-  } else {
-    task.type = 'OPEN';
-    task.assignedWorkerId = null;
-    task.status = 'UNASSIGNED';
-  }
-
-  persistTasks();
-  io.to('admins').emit('tasks-updated');
-  io.emit('tasks-updated');
-
-  return res.json({ ok: true, task });
-});
-
-// Worker: Get earnings and ledger summary
-app.get('/api/earnings/my', requireRole('worker'), (req, res) => {
-  const workerId = req.session.user.id;
-  const summary = getWorkerEarnings(workerId);
-  res.json({ ok: true, summary });
-});
-
-// Worker: Request withdrawal
-app.post('/api/earnings/withdraw', requireRole('worker'), (req, res) => {
-  const workerId = req.session.user.id;
-  const { amount, payoutMethod } = req.body || {};
-
-  const withdrawAmount = Number(amount);
-  if (!withdrawAmount || withdrawAmount <= 0) {
-    return res.status(400).json({ ok: false, error: 'Invalid withdrawal amount' });
-  }
-
-  const calc = getWorkerEarnings(workerId);
-  if (withdrawAmount > calc.availableBalance) {
-    return res.status(400).json({ ok: false, error: 'Requested amount exceeds your available balance. Pending earnings are held for 48 hours.' });
-  }
-
-  const newWithdrawal = {
-    id: crypto.randomUUID(),
-    workerId: workerId,
-    amount: withdrawAmount,
-    payoutMethod: (payoutMethod || 'Bank Transfer').trim(),
-    status: 'PENDING',
-    requestedAt: Date.now(),
-    reviewedAt: null,
-    adminNote: null
-  };
-
-  withdrawals.push(newWithdrawal);
-  persistWithdrawals();
-
-  io.to('admins').emit('earnings-updated');
-  io.to('worker:' + workerId).emit('earnings-updated');
-
-  return res.json({ ok: true, withdrawal: newWithdrawal });
-});
-
-// Admin: Get overall earnings and withdrawal requests
-app.get('/api/admin/earnings', requireRole('admin'), (_req, res) => {
-  const workerSummaries = users
-    .filter(u => u.role === 'worker')
-    .map(u => ({
-      worker: { id: u.id, name: u.name, username: u.username },
-      summary: getWorkerEarnings(u.id)
-    }));
 
   res.json({
     ok: true,
-    workerSummaries,
-    allLedger: earnings,
-    allWithdrawals: withdrawals.map(w => {
-      const u = users.find(user => user.id === w.workerId);
-      return { ...w, workerName: u ? u.name : w.workerId };
-    })
+    iceServers
   });
-});
-
-// Admin: Review withdrawal request
-app.post('/api/admin/withdrawals/review', requireRole('admin'), (req, res) => {
-  const { withdrawalId, action, adminNote } = req.body || {};
-
-  const w = withdrawals.find(item => item.id === withdrawalId);
-  if (!w) return res.status(404).json({ ok: false, error: 'Withdrawal request not found' });
-
-  if (action === 'approve') {
-    w.status = 'APPROVED';
-  } else if (action === 'reject') {
-    w.status = 'REJECTED';
-  } else {
-    return res.status(400).json({ ok: false, error: 'Invalid action' });
-  }
-
-  w.reviewedAt = Date.now();
-  w.adminNote = (adminNote || '').trim();
-  persistWithdrawals();
-
-  io.to('admins').emit('earnings-updated');
-  io.to('worker:' + w.workerId).emit('earnings-updated');
-
-  return res.json({ ok: true, withdrawal: w });
 });
 
 app.use(
@@ -1107,6 +733,7 @@ io.on('connection', socket => {
     broadcastStates();
   }
 
+  // Allowlisted, authenticated diagnostics only. No remote shell or ADB execution.
   const diagnosticCommands = new Set(['ping','status','info','time','uptime']);
   const pendingDiagnostics = new Map();
   socket.on('admin-device-command', ({workerId,command,requestId} = {}) => {
@@ -1132,6 +759,7 @@ io.on('connection', socket => {
     const pending=origin?.get(user.id+':'+requestId);
     if(!pending || pending.workerSocketId!==socket.id || pending.command!==command) return;
     origin.delete(user.id+':'+requestId);
+    // Only match responses to live pending admin requests.
     admin.emit('device-command-result',{workerId:user.id,command,requestId,ok:true,result:String(result??'').slice(0,1800)});
   });
 
@@ -1145,8 +773,16 @@ io.on('connection', socket => {
 
   socket.on('worker-heartbeat', () => {
     if (user.role !== 'worker' || !user.id) return;
+
     const state = states.get(user.id);
-    if (!state || state.socketId !== socket.id) return;
+
+    if (
+      !state ||
+      state.socketId !== socket.id
+    ) {
+      return;
+    }
+
     state.online = true;
     state.lastSeenAt = Date.now();
     persistState();
@@ -1155,8 +791,13 @@ io.on('connection', socket => {
 
   socket.on('admin-ping-worker', ({ workerId, nonce } = {}) => {
     if (user.role !== 'admin') return;
+
     const state = states.get(workerId);
-    if (!state?.socketId || !io.sockets.sockets.get(state.socketId)) {
+
+    if (
+      !state?.socketId ||
+      !io.sockets.sockets.get(state.socketId)
+    ) {
       socket.emit('worker-ping-result', {
         workerId,
         nonce,
@@ -1165,6 +806,7 @@ io.on('connection', socket => {
       });
       return;
     }
+
     io.to(state.socketId).emit('worker-ping', {
       adminSocketId: socket.id,
       workerId,
@@ -1173,214 +815,508 @@ io.on('connection', socket => {
     });
   });
 
-  socket.on('worker-pong', ({ adminSocketId, workerId, nonce, workerReceivedAt } = {}) => {
-    if (user.role !== 'worker' || workerId !== user.id || !adminSocketId || !nonce) return;
-    const state = states.get(workerId);
-    if (state && state.socketId === socket.id) {
-      state.online = true;
-      state.lastSeenAt = Date.now();
-      persistState();
-      broadcastStates();
-    }
-    io.to(adminSocketId).emit('worker-ping-result', {
+  socket.on(
+    'worker-pong',
+    ({
+      adminSocketId,
       workerId,
       nonce,
-      ok: true,
-      workerReceivedAt,
-      serverReceivedAt: Date.now()
-    });
-  });
+      workerReceivedAt
+    } = {}) => {
+      if (
+        user.role !== 'worker' ||
+        workerId !== user.id ||
+        !adminSocketId ||
+        !nonce
+      ) {
+        return;
+      }
 
-  socket.on('admin-live-request', ({ workerId, mode } = {}) => {
-    if (user.role !== 'admin') return;
-    const state = states.get(workerId);
-    const normalizedMode = String(mode || '').toLowerCase();
+      const state = states.get(workerId);
 
-    if (!['camera', 'screen'].includes(normalizedMode)) {
-      socket.emit('live-error', { workerId, mode: normalizedMode, message: 'Unknown live-feed mode.' });
-      return;
-    }
-
-    if (!state || !state.captureReady || !state.online || !state.socketId || !io.sockets.sockets.get(state.socketId)) {
-      socket.emit('live-error', { workerId, mode: normalizedMode, message: 'Camera is not ready or the Worker app is not connected.' });
-      return;
-    }
-
-    if (state.liveMode !== LIVE_NONE) {
-      socket.emit('live-error', { workerId, mode: normalizedMode, message: 'Another live feed is already active or waiting for Worker approval. Stop it first.' });
-      return;
-    }
-
-    state.liveMode = normalizedMode === 'camera' ? LIVE_CAMERA_PENDING : LIVE_SCREEN_PENDING;
-    state.liveAdminSocketId = socket.id;
-    state.liveRequestedAt = Date.now();
-
-    broadcastStates();
-
-    io.to(state.socketId).emit('live-request', { adminSocketId: socket.id, workerId, mode: normalizedMode });
-    socket.emit('live-status', { workerId, mode: state.liveMode });
-
-    const expectedPending = state.liveMode;
-    const timeoutMs = normalizedMode === 'screen' ? 90000 : 30000;
-
-    setTimeout(() => {
-      const latest = states.get(workerId);
-      if (latest && latest.liveAdminSocketId === socket.id && latest.liveMode === expectedPending) {
-        resetLiveState(latest);
+      if (state && state.socketId === socket.id) {
+        state.online = true;
+        state.lastSeenAt = Date.now();
+        persistState();
         broadcastStates();
+      }
+
+      io.to(adminSocketId).emit('worker-ping-result', {
+        workerId,
+        nonce,
+        ok: true,
+        workerReceivedAt,
+        serverReceivedAt: Date.now()
+      });
+    }
+  );
+
+  socket.on(
+    'admin-live-request',
+    ({ workerId, mode } = {}) => {
+      if (user.role !== 'admin') return;
+
+      const state = states.get(workerId);
+      const normalizedMode =
+        String(mode || '').toLowerCase();
+
+      if (!['camera', 'screen'].includes(normalizedMode)) {
         socket.emit('live-error', {
           workerId,
           mode: normalizedMode,
-          message: normalizedMode === 'screen' ? 'Screen-share request timed out.' : 'Camera request timed out.'
+          message: 'Unknown live-feed mode.'
+        });
+        return;
+      }
+
+      if (
+        !state ||
+        !state.captureReady ||
+        !state.online ||
+        !state.socketId ||
+        !io.sockets.sockets.get(state.socketId)
+      ) {
+        socket.emit('live-error', {
+          workerId,
+          mode: normalizedMode,
+          message:
+            'Camera is not ready or the Worker app is not connected.'
+        });
+        return;
+      }
+
+      if (state.liveMode !== LIVE_NONE) {
+        socket.emit('live-error', {
+          workerId,
+          mode: normalizedMode,
+          message:
+            'Another live feed is already active or waiting for Worker approval. Stop it first.'
+        });
+        return;
+      }
+
+      state.liveMode =
+        normalizedMode === 'camera'
+          ? LIVE_CAMERA_PENDING
+          : LIVE_SCREEN_PENDING;
+
+      state.liveAdminSocketId = socket.id;
+      state.liveRequestedAt = Date.now();
+
+      broadcastStates();
+
+      io.to(state.socketId).emit('live-request', {
+        adminSocketId: socket.id,
+        workerId,
+        mode: normalizedMode
+      });
+
+      socket.emit('live-status', {
+        workerId,
+        mode: state.liveMode
+      });
+
+      const expectedPending = state.liveMode;
+      const timeoutMs = normalizedMode === 'screen' ? 90000 : 30000;
+
+      setTimeout(() => {
+        const latest = states.get(workerId);
+
+        if (
+          latest &&
+          latest.liveAdminSocketId === socket.id &&
+          latest.liveMode === expectedPending
+        ) {
+          resetLiveState(latest);
+          broadcastStates();
+
+          socket.emit('live-error', {
+            workerId,
+            mode: normalizedMode,
+            message:
+              normalizedMode === 'screen'
+                ? 'Screen-share request timed out before Worker approval.'
+                : 'Camera request timed out before the Worker live feed started.'
+          });
+        }
+      }, timeoutMs);
+    }
+  );
+
+  socket.on(
+    'admin-live-stop',
+    ({ workerId } = {}) => {
+      if (user.role !== 'admin') return;
+
+      const state = states.get(workerId);
+
+      if (!state) return;
+
+      if (state.liveMode !== LIVE_NONE) {
+        stopWorkerLive(state, 'admin-stop', true);
+        broadcastStates();
+      }
+    }
+  );
+
+  socket.on(
+    'admin-switch-camera',
+    ({ workerId, camera } = {}) => {
+      if (user.role !== 'admin') return;
+
+      const state = states.get(workerId);
+
+      if (!state || !state.socketId) {
+        socket.emit('live-error', {
+          workerId,
+          message: 'Worker app is not connected.'
+        });
+        return;
+      }
+
+      io.to(state.socketId).emit('switch-camera', { camera });
+    }
+  );
+
+  socket.on(
+    'admin-timer-control',
+    ({ workerId, action } = {}) => {
+      if (user.role !== 'admin') return;
+
+      const state = states.get(workerId);
+
+      if (!state) return;
+
+      if (action === 'start') {
+        if (state.status === 'PAUSED') {
+          timerState.resume(state);
+        } else if (!state.sessionId) {
+          startShift(state);
+        }
+      } else if (action === 'pause') {
+        if (state.status === 'WORKING') {
+          timerState.pause(state);
+        }
+      } else if (action === 'resume') {
+        if (state.status === 'PAUSED') {
+          timerState.resume(state);
+        }
+      } else if (action === 'reset') {
+        resetWorkerTimer(state);
+      } else if (action === 'stop') {
+        if (state.sessionId) {
+          const socketId = finishShift(state, 'admin-stop', 'STOPPED');
+          if (socketId) {
+            io.to(socketId).emit('timer-stopped', {
+              reason: 'admin-stop'
+            });
+          }
+        } else {
+          state.status = 'STOPPED';
+          state.online = false;
+          resetLiveState(state);
+        }
+      }
+
+      persistState();
+      broadcastStates();
+
+      if (state.socketId) {
+        io.to(state.socketId).emit('timer-updated', safeWorkerState(state));
+      }
+    }
+  );
+
+
+  socket.on(
+    'worker-live-ack',
+    ({
+      adminSocketId,
+      workerId,
+      mode,
+      message
+    } = {}) => {
+      if (
+        user.role !== 'worker' ||
+        workerId !== user.id
+      ) {
+        return;
+      }
+
+      const state = states.get(workerId);
+
+      if (
+        !state ||
+        state.socketId !== socket.id ||
+        adminSocketId !== state.liveAdminSocketId
+      ) {
+        return;
+      }
+
+      io.to(adminSocketId).emit('live-ack', {
+        workerId,
+        mode,
+        message: message || 'Worker received the live request.'
+      });
+    }
+  );
+
+  socket.on(
+    'worker-live-started',
+    ({
+      adminSocketId,
+      workerId,
+      mode
+    } = {}) => {
+      if (
+        user.role !== 'worker' ||
+        workerId !== user.id
+      ) {
+        return;
+      }
+
+      const state = states.get(workerId);
+      const normalizedMode =
+        String(mode || '').toLowerCase();
+
+      if (
+        !state ||
+        state.socketId !== socket.id ||
+        adminSocketId !== state.liveAdminSocketId
+      ) {
+        return;
+      }
+
+      const expectedPending =
+        normalizedMode === 'camera'
+          ? LIVE_CAMERA_PENDING
+          : LIVE_SCREEN_PENDING;
+
+      if (state.liveMode !== expectedPending) {
+        return;
+      }
+
+      state.liveMode =
+        normalizedMode === 'camera'
+          ? LIVE_CAMERA
+          : LIVE_SCREEN;
+
+      broadcastStates();
+
+      io.to(adminSocketId).emit('live-status', {
+        workerId,
+        mode: state.liveMode
+      });
+    }
+  );
+
+  socket.on(
+    'worker-live-error',
+    ({
+      adminSocketId,
+      workerId,
+      mode,
+      message
+    } = {}) => {
+      if (
+        user.role !== 'worker' ||
+        workerId !== user.id
+      ) {
+        return;
+      }
+
+      const state = states.get(workerId);
+
+      if (!state || state.socketId !== socket.id) return;
+
+      const targetAdmin =
+        adminSocketId ||
+        state.liveAdminSocketId;
+
+      resetLiveState(state);
+      broadcastStates();
+
+      if (targetAdmin) {
+        io.to(targetAdmin).emit('live-error', {
+          workerId,
+          mode,
+          message: message || 'Worker live feed could not start.'
         });
       }
-    }, timeoutMs);
-  });
+    }
+  );
 
-  socket.on('admin-live-stop', ({ workerId } = {}) => {
-    if (user.role !== 'admin') return;
-    const state = states.get(workerId);
-    if (!state) return;
-    if (state.liveMode !== LIVE_NONE) {
-      stopWorkerLive(state, 'admin-stop', true);
+  socket.on(
+    'worker-live-stopped',
+    ({
+      adminSocketId,
+      workerId,
+      mode,
+      reason
+    } = {}) => {
+      if (
+        user.role !== 'worker' ||
+        workerId !== user.id
+      ) {
+        return;
+      }
+
+      const state = states.get(workerId);
+
+      if (!state || state.socketId !== socket.id) return;
+
+      const targetAdmin =
+        adminSocketId ||
+        state.liveAdminSocketId;
+
+      resetLiveState(state);
       broadcastStates();
-    }
-  });
 
-  socket.on('admin-switch-camera', ({ workerId, camera } = {}) => {
-    if (user.role !== 'admin') return;
-    const state = states.get(workerId);
-    if (!state || !state.socketId) {
-      socket.emit('live-error', { workerId, message: 'Worker app is not connected.' });
-      return;
-    }
-    io.to(state.socketId).emit('switch-camera', { camera });
-  });
-
-  socket.on('admin-timer-control', ({ workerId, action } = {}) => {
-    if (user.role !== 'admin') return;
-    const state = states.get(workerId);
-    if (!state) return;
-
-    if (action === 'start' || action === 'resume') {
-      if (state.status === 'PAUSED') {
-        timerState.resume(state);
-      } else if (!state.sessionId) {
-        startShift(state);
+      if (targetAdmin) {
+        io.to(targetAdmin).emit('live-status', {
+          workerId,
+          mode: LIVE_NONE,
+          previousMode: mode,
+          reason: reason || 'stopped'
+        });
       }
-    } else if (action === 'pause') {
-      if (state.status === 'WORKING') {
-        timerState.pause(state);
+    }
+  );
+
+  socket.on(
+    'rtc-offer',
+    ({
+      targetSocketId,
+      workerId,
+      mode,
+      offer
+    } = {}) => {
+      if (
+        user.role !== 'worker' ||
+        workerId !== user.id ||
+        !targetSocketId ||
+        !offer
+      ) {
+        return;
       }
-    } else if (action === 'reset') {
-      resetWorkerTimer(state);
-    } else if (action === 'stop') {
-      if (state.sessionId) {
-        const socketId = finishShift(state, 'admin-stop', 'STOPPED');
-        if (socketId) {
-          io.to(socketId).emit('timer-stopped', { reason: 'admin-stop' });
+
+      const state = states.get(workerId);
+
+      if (
+        !state ||
+        state.socketId !== socket.id ||
+        state.liveAdminSocketId !== targetSocketId
+      ) {
+        return;
+      }
+
+      io.to(targetSocketId).emit('rtc-offer', {
+        workerId,
+        workerSocketId: socket.id,
+        mode,
+        offer
+      });
+    }
+  );
+
+  socket.on(
+    'rtc-answer',
+    ({
+      targetSocketId,
+      workerId,
+      answer
+    } = {}) => {
+      if (
+        user.role !== 'admin' ||
+        !targetSocketId ||
+        !answer
+      ) {
+        return;
+      }
+
+      const state = states.get(workerId);
+
+      if (
+        !state ||
+        state.liveAdminSocketId !== socket.id ||
+        state.socketId !== targetSocketId
+      ) {
+        return;
+      }
+
+      io.to(targetSocketId).emit('rtc-answer', {
+        workerId,
+        adminSocketId: socket.id,
+        answer
+      });
+    }
+  );
+
+  socket.on(
+    'rtc-ice',
+    ({
+      targetSocketId,
+      workerId,
+      candidate
+    } = {}) => {
+      if (!targetSocketId || !candidate) return;
+
+      if (user.role === 'worker') {
+        const state = states.get(workerId);
+
+        if (
+          !state ||
+          user.id !== workerId ||
+          state.socketId !== socket.id ||
+          state.liveAdminSocketId !== targetSocketId
+        ) {
+          return;
+        }
+      } else if (user.role === 'admin') {
+        const state = states.get(workerId);
+
+        if (
+          !state ||
+          state.liveAdminSocketId !== socket.id ||
+          state.socketId !== targetSocketId
+        ) {
+          return;
         }
       } else {
-        state.status = 'STOPPED';
-        state.online = false;
-        resetLiveState(state);
+        return;
       }
+
+      io.to(targetSocketId).emit('rtc-ice', {
+        workerId,
+        fromSocketId: socket.id,
+        candidate
+      });
     }
-
-    persistState();
-    broadcastStates();
-
-    if (state.socketId) {
-      io.to(state.socketId).emit('timer-updated', safeWorkerState(state));
-    }
-  });
-
-  socket.on('worker-live-ack', ({ adminSocketId, workerId, mode, message } = {}) => {
-    if (user.role !== 'worker' || workerId !== user.id) return;
-    const state = states.get(workerId);
-    if (!state || state.socketId !== socket.id || adminSocketId !== state.liveAdminSocketId) return;
-    io.to(adminSocketId).emit('live-ack', { workerId, mode, message: message || 'Worker received request.' });
-  });
-
-  socket.on('worker-live-started', ({ adminSocketId, workerId, mode } = {}) => {
-    if (user.role !== 'worker' || workerId !== user.id) return;
-    const state = states.get(workerId);
-    const normalizedMode = String(mode || '').toLowerCase();
-    if (!state || state.socketId !== socket.id || adminSocketId !== state.liveAdminSocketId) return;
-
-    const expectedPending = normalizedMode === 'camera' ? LIVE_CAMERA_PENDING : LIVE_SCREEN_PENDING;
-    if (state.liveMode !== expectedPending) return;
-
-    state.liveMode = normalizedMode === 'camera' ? LIVE_CAMERA : LIVE_SCREEN;
-    broadcastStates();
-    io.to(adminSocketId).emit('live-status', { workerId, mode: state.liveMode });
-  });
-
-  socket.on('worker-live-error', ({ adminSocketId, workerId, mode, message } = {}) => {
-    if (user.role !== 'worker' || workerId !== user.id) return;
-    const state = states.get(workerId);
-    if (!state || state.socketId !== socket.id) return;
-    const targetAdmin = adminSocketId || state.liveAdminSocketId;
-    resetLiveState(state);
-    broadcastStates();
-    if (targetAdmin) {
-      io.to(targetAdmin).emit('live-error', { workerId, mode, message: message || 'Worker live feed error.' });
-    }
-  });
-
-  socket.on('worker-live-stopped', ({ adminSocketId, workerId, mode, reason } = {}) => {
-    if (user.role !== 'worker' || workerId !== user.id) return;
-    const state = states.get(workerId);
-    if (!state || state.socketId !== socket.id) return;
-    const targetAdmin = adminSocketId || state.liveAdminSocketId;
-    resetLiveState(state);
-    broadcastStates();
-    if (targetAdmin) {
-      io.to(targetAdmin).emit('live-status', { workerId, mode: LIVE_NONE, previousMode: mode, reason: reason || 'stopped' });
-    }
-  });
-
-  socket.on('rtc-offer', ({ targetSocketId, workerId, mode, offer } = {}) => {
-    if (user.role !== 'worker' || workerId !== user.id || !targetSocketId || !offer) return;
-    const state = states.get(workerId);
-    if (!state || state.socketId !== socket.id || state.liveAdminSocketId !== targetSocketId) return;
-    io.to(targetSocketId).emit('rtc-offer', { workerId, workerSocketId: socket.id, mode, offer });
-  });
-
-  socket.on('rtc-answer', ({ targetSocketId, workerId, answer } = {}) => {
-    if (user.role !== 'admin' || !targetSocketId || !answer) return;
-    const state = states.get(workerId);
-    if (!state || state.liveAdminSocketId !== socket.id || state.socketId !== targetSocketId) return;
-    io.to(targetSocketId).emit('rtc-answer', { workerId, adminSocketId: socket.id, answer });
-  });
-
-  socket.on('rtc-ice', ({ targetSocketId, workerId, candidate } = {}) => {
-    if (!targetSocketId || !candidate) return;
-    if (user.role === 'worker') {
-      const state = states.get(workerId);
-      if (!state || user.id !== workerId || state.socketId !== socket.id || state.liveAdminSocketId !== targetSocketId) return;
-    } else if (user.role === 'admin') {
-      const state = states.get(workerId);
-      if (!state || state.liveAdminSocketId !== socket.id || state.socketId !== targetSocketId) return;
-    } else {
-      return;
-    }
-    io.to(targetSocketId).emit('rtc-ice', { workerId, fromSocketId: socket.id, candidate });
-  });
+  );
 
   socket.on('disconnect', () => {
     if (user.role === 'worker' && user.id) {
       const state = states.get(user.id);
+
       if (state && state.socketId === socket.id) {
         const adminSocketId = state.liveAdminSocketId;
+
         if (adminSocketId) {
-          io.to(adminSocketId).emit('live-error', { workerId: state.id, mode: state.liveMode, message: 'Worker app disconnected.' });
+          io.to(adminSocketId).emit('live-error', {
+            workerId: state.id,
+            mode: state.liveMode,
+            message: 'Worker app disconnected.'
+          });
         }
+
         resetLiveState(state);
         state.online = false;
         state.captureReady = false;
         state.socketId = null;
         broadcastStates();
+
+        // Going offline is a connectivity event, not a shift stop.
+        // Leave the elapsed-time anchor and session ID untouched.
         clearDisconnectTimer(state);
         persistState();
       }
@@ -1388,20 +1324,28 @@ io.on('connection', socket => {
 
     if (user.role === 'admin') {
       let changed = false;
+
       for (const state of states.values()) {
         if (state.liveAdminSocketId === socket.id) {
           if (state.socketId) {
-            io.to(state.socketId).emit('stop-live', { adminSocketId: socket.id, reason: 'admin-disconnected' });
+            io.to(state.socketId).emit('stop-live', {
+              adminSocketId: socket.id,
+              reason: 'admin-disconnected'
+            });
           }
+
           resetLiveState(state);
           changed = true;
         }
       }
+
       if (changed) broadcastStates();
     }
   });
 });
 
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`Work Timer server v4.0 with Tasks & Earnings on http://localhost:${PORT}`);
+  console.log(
+    `Work Timer on-demand server v3.2 listening on http://localhost:${PORT}`
+  );
 });
