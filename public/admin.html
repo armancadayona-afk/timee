@@ -380,6 +380,11 @@
           if(socket) socket.connect();
           return;
         }
+        const targetWorker = workers.find(w => w.id === id);
+        if(!targetWorker || !targetWorker.online) {
+          monitorStatus(i,'Worker offline','error');
+          return;
+        }
         requestLiveFeed(id);
         return;
       }
@@ -410,6 +415,13 @@
 
     function requestLiveFeed(workerId) {
       if (!workerId || !socket?.connected) return;
+      const index = monitorSlotFor(workerId);
+      const worker = workers.find(w => w.id === workerId);
+      if (!worker || !worker.online) {
+        if (index >= 0) monitorStatus(index, 'Worker offline', 'error');
+        return;
+      }
+      if (index >= 0) monitorStatus(index, 'Requesting camera…', 'idle');
       if (peers.get(workerId)?.pc?.connectionState === 'connected') return;
       setTimeout(() => {
         requested.set(workerId, Date.now());
@@ -1158,7 +1170,11 @@
         updateUI();
         monitorSlots.forEach((slot,i)=>{
           if(!slot.desired||!slot.workerId||!socket.connected)return;
-          if(!workers.some(w=>w.id===slot.workerId&&w.online))return;
+          const targetWorker = workers.find(w => w.id === slot.workerId);
+          if(!targetWorker || !targetWorker.online) {
+            monitorStatus(i, 'Worker offline', 'error');
+            return;
+          }
           const pc=peers.get(slot.workerId)?.pc;
           if(pc&&['connected','connecting','new'].includes(pc.connectionState))return;
           if(Date.now()-slot.lastAttempt<12000)return;
