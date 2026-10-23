@@ -13,80 +13,28 @@
     .task-badge-rejected { background:#fee2e2; color:#b91c1c; }
     .task-meta { display:flex; justify-content:space-between; font-size:12px; color:#795d78; margin:8px 0; flex-wrap:wrap; gap:6px; }
     .task-actions-row { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
-    .task-actions-row button { flex:1; min-width:100px; font-size:12px; padding:10px 8px; }
+    .task-actions-row button { flex:1; min-width:110px; font-size:13px; }
     .btn-secondary { background:#6b7280 !important; }
     .btn-success { background:#10b981 !important; }
     .btn-danger { background:#ef4444 !important; }
-    .btn-chat { background:#8b5cf6 !important; }
-
     .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.5); display:none; place-items:center; z-index:100; padding:16px; }
     .modal-overlay.active { display:grid; }
     .modal-card { background:#fff; border-radius:20px; padding:20px; width:100%; max-width:420px; max-height:90vh; overflow:auto; }
     .modal-card h3 { margin-top:0; color:#ff1767; }
     .modal-card textarea, .modal-card input, .modal-card select { width:100%; padding:10px; margin:8px 0 16px; border:1px solid #ffd0df; border-radius:12px; font-size:14px; }
-
     .ledger-item { border-bottom:1px solid #ffe0ea; padding:10px 0; font-size:13px; }
     .ledger-item:last-child { border:0; }
     .ledger-header { display:flex; justify-content:space-between; font-weight:bold; }
     .ledger-sub { font-size:11px; color:#866f86; margin-top:4px; display:flex; justify-content:space-between; }
     .badge-hold { background:#fef3c7; color:#b45309; padding:2px 6px; border-radius:10px; font-size:10px; }
     .badge-avail { background:#dcfce7; color:#15803d; padding:2px 6px; border-radius:10px; font-size:10px; }
-
-    /* CHAT STYLING */
-    .chat-layout { display:flex; flex-direction:column; height:calc(100dvh - 190px); background:#fff; border-radius:20px; border:1px solid #ffe3ee; overflow:hidden; }
-    .chat-top-nav { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; background:#ffe0ea; border-bottom:1px solid #ffd0df; }
-    .chat-top-nav h3 { margin:0; font-size:16px; color:#4a2e35; display:flex; align-items:center; gap:8px; }
-    .status-dot { width:8px; height:8px; border-radius:50%; display:inline-block; }
-    .status-dot.online { background:#10b981; }
-    .status-dot.offline { background:#9ca3af; }
-    .conv-list { flex:1; overflow-y:auto; padding:10px; }
-    .conv-item { display:flex; align-items:center; justify-content:space-between; padding:12px; border-radius:14px; background:#fffafb; border:1px solid #ffe3ee; margin-bottom:8px; cursor:pointer; }
-    .conv-item.active, .conv-item:hover { background:#ffe8f1; border-color:#ff1767; }
-    .conv-info { flex:1; min-width:0; margin-left:10px; }
-    .conv-title { font-weight:bold; font-size:14px; color:#4a2e35; display:flex; justify-content:space-between; }
-    .conv-preview { font-size:12px; color:#866f86; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:3px; }
-    .unread-pill { background:#ff1767; color:#fff; font-size:10px; font-weight:bold; padding:2px 7px; border-radius:12px; }
-
-    .chat-messages-container { flex:1; overflow-y:auto; padding:14px; background:#fff8fa; display:flex; flex-direction:column; gap:10px; }
-    .chat-bubble { max-width:82%; padding:10px 14px; border-radius:16px; font-size:13.5px; line-height:1.4; word-break:break-word; position:relative; }
-    .chat-bubble.mine { align-self:flex-end; background:#ff1767; color:#fff; border-bottom-right-radius:4px; }
-    .chat-bubble.other { align-self:flex-start; background:#fff; color:#20132e; border:1px solid #ffd0df; border-bottom-left-radius:4px; }
-    .chat-time { font-size:10px; opacity:0.75; margin-top:4px; text-align:right; display:flex; justify-content:flex-end; gap:4px; align-items:center; }
-    .task-ref-chip { font-size:11px; background:rgba(255,255,255,0.25); border-radius:8px; padding:3px 8px; margin-bottom:6px; font-weight:bold; display:block; text-decoration:underline; }
-    .chat-bubble.other .task-ref-chip { background:#ffe0ea; color:#ff1767; }
-
-    .msg-actions { font-size:10px; opacity:0.8; margin-top:2px; display:flex; gap:8px; justify-content:flex-end; }
-    .msg-actions span { cursor:pointer; text-decoration:underline; }
-
-    .reply-preview-bar { background:#ffe0ea; padding:8px 12px; font-size:12px; display:flex; justify-content:space-between; align-items:center; border-top:1px solid #ffd0df; }
-    .chat-input-row { display:flex; gap:8px; padding:10px; background:#fff; border-top:1px solid #ffe3ee; align-items:center; }
-    .chat-input-row input[type="text"] { flex:1; padding:10px 14px; border:1px solid #ffd0df; border-radius:20px; font-size:14px; outline:none; }
-    .chat-input-row button { border:0; background:#ff1767; color:#fff; padding:10px 16px; border-radius:20px; font-weight:bold; cursor:pointer; }
-    .attach-btn { background:none !important; color:#ff1767 !important; padding:6px !important; font-size:20px; }
-
-    .notif-toast { position:fixed; top:16px; left:50%; transform:translateX(-50%); background:#20132e; color:#fff; padding:12px 20px; border-radius:25px; box-shadow:0 8px 25px rgba(0,0,0,0.3); font-size:13px; z-index:200; display:none; align-items:center; gap:10px; max-width:90%; border:1px solid #ff1767; cursor:pointer; }
-    .notif-toast.active { display:flex; }
-
-    .setting-row { display:flex; justify-content:space-between; align-items:center; padding:12px 0; border-bottom:1px solid #ffe0ea; font-size:13.5px; }
-    .setting-row:last-child { border:0; }
-    .switch { position:relative; display:inline-block; width:44px; height:24px; }
-    .switch input { opacity:0; width:0; height:0; }
-    .slider { position:absolute; cursor:pointer; inset:0; background-color:#ccc; transition:.3s; border-radius:24px; }
-    .slider:before { position:absolute; content:""; height:18px; width:18px; left:3px; bottom:3px; background-color:white; transition:.3s; border-radius:50%; }
-    input:checked + .slider { background-color:#ff1767; }
-    input:checked + .slider:before { transform:translateX(20px); }
   </style>
 </head>
 <body>
 <div class="app-shell">
   <header class="topbar">
     <span class="brand">🎀 <b>WorkerWise</b></span>
-    <div style="display:flex; gap:10px; align-items:center;">
-      <span id="top-notif-btn" style="cursor:pointer; font-size:20px; position:relative;">
-        🔔<span id="notif-badge" class="unread-pill" style="position:absolute; top:-4px; right:-6px; display:none;">0</span>
-      </span>
-      <button class="icon-btn" id="settings-btn" aria-label="Settings">⚙️</button>
-    </div>
+    <button class="icon-btn" id="settings-btn" aria-label="Settings">⚙️</button>
   </header>
 
   <main>
@@ -101,7 +49,6 @@
       <div class="timer-actions">
         <button id="pause-btn" disabled>Ⅱ PAUSE</button>
         <button id="resume-btn" disabled>▶ RESUME</button>
-        <button id="mic-toggle-btn" type="button" style="background:#8b5cf6;">🎙 Mic On</button>
       </div>
       <div class="motivation">🐱 <span><b>Keep Going!</b><small>You're doing great! 💗</small></span></div>
       <div class="status-line" id="status">Connecting…</div>
@@ -177,53 +124,21 @@
       </div>
     </section>
 
-    <!-- REAL-TIME CHAT SCREEN -->
+    <!-- CHAT SCREEN -->
     <section class="screen" id="screen-chat">
-      <h2>💬 Live Chat & Messaging</h2>
-      <div class="chat-layout">
-        <!-- View 1: Conversation List -->
-        <div id="conv-list-view">
-          <div style="padding:10px; border-bottom:1px solid #ffe3ee;">
-            <input type="text" id="chat-search-input" placeholder="🔎 Search conversations or users..." style="width:100%; padding:9px 12px; border:1px solid #ffd0df; border-radius:15px; font-size:13px;">
-          </div>
-          <div class="conv-list" id="conversations-container">
-            <p class="subtext">Loading conversations…</p>
-          </div>
-        </div>
-
-        <!-- View 2: Active Chat Stream -->
-        <div id="chat-stream-view" style="display:none; flex-direction:column; height:100%;">
-          <div class="chat-top-nav">
-            <button type="button" class="back-btn" id="btn-back-convs">←</button>
-            <h3>
-              <span id="active-chat-partner-name">Admin</span>
-              <span class="status-dot offline" id="active-partner-status"></span>
-            </h3>
-            <span id="chat-task-chip" style="font-size:11px; background:#fff; padding:3px 8px; border-radius:10px; color:#ff1767; font-weight:bold; display:none;">Task</span>
-          </div>
-
-          <div class="chat-messages-container" id="messages-container">
-            <p class="subtext">Select a conversation to start messaging.</p>
-          </div>
-
-          <div id="reply-preview-box" class="reply-preview-bar" style="display:none;">
-            <span id="reply-preview-text">Replying to...</span>
-            <button type="button" style="border:0; background:none; font-weight:bold; cursor:pointer;" id="btn-cancel-reply">✕</button>
-          </div>
-
-          <div class="chat-input-row">
-            <button type="button" class="attach-btn" id="btn-attach-file" title="Attach image or file">📎</button>
-            <input type="file" id="chat-file-input" style="display:none;" accept="image/*,.pdf,.doc,.docx,.txt,.zip">
-            <input type="text" id="chat-text-input" placeholder="Type a message..." autocomplete="off">
-            <button type="button" id="btn-send-message">➤</button>
-          </div>
-        </div>
+      <h2>💬 Admin Chat</h2>
+      <div class="chat-log">
+        <div class="chat-bubble">Messaging is available for urgent shift coordination.</div>
+      </div>
+      <div class="chat-form">
+        <input placeholder="Type a message…" disabled>
+        <button type="button" disabled aria-label="Send">➤</button>
       </div>
     </section>
 
-    <!-- PROFILE & APP BEHAVIOR SETTINGS SCREEN -->
+    <!-- PROFILE SCREEN -->
     <section class="screen" id="screen-profile">
-      <h2>👤 My Profile & Settings</h2>
+      <h2>👤 My Profile</h2>
       <div class="profile-avatar">🐱</div>
       <h3 class="center worker-name">Worker</h3>
       <div class="profile-box">
@@ -232,41 +147,9 @@
         <div>Role <b>Worker</b></div>
         <div>ID <b id="profile-id">—</b></div>
       </div>
-
-      <h3>⚙️ App Behavior & Notifications Settings</h3>
+      <h3>⚙️ Settings</h3>
       <div class="profile-box">
-        <div class="setting-row">
-          <span>Task Event Notifications</span>
-          <label class="switch"><input type="checkbox" id="setting-task-notif" checked><span class="slider"></span></label>
-        </div>
-        <div class="setting-row">
-          <span>Chat Message Notifications</span>
-          <label class="switch"><input type="checkbox" id="setting-chat-notif" checked><span class="slider"></span></label>
-        </div>
-        <div class="setting-row">
-          <span>Notification Sounds</span>
-          <label class="switch"><input type="checkbox" id="setting-sound" checked><span class="slider"></span></label>
-        </div>
-        <div class="setting-row">
-          <span>Vibration Alert</span>
-          <label class="switch"><input type="checkbox" id="setting-vibe" checked><span class="slider"></span></label>
-        </div>
-        <div class="setting-row">
-          <span>Display Over Other Apps (Chat-Head)</span>
-          <label class="switch"><input type="checkbox" id="setting-overlay"><span class="slider"></span></label>
-        </div>
-        <div class="setting-row">
-          <span>Launch on Device Startup</span>
-          <label class="switch"><input type="checkbox" id="setting-startup"><span class="slider"></span></label>
-        </div>
-        <div class="setting-row">
-          <span>Notification Content Previews</span>
-          <label class="switch"><input type="checkbox" id="setting-previews" checked><span class="slider"></span></label>
-        </div>
-      </div>
-
-      <div style="margin-top:10px; text-align:center;">
-        <button class="primary-btn btn-secondary" id="btn-save-settings" style="width:100%;">Save App Behavior Preferences</button>
+        <div>App Theme <button id="theme-toggle" class="small-btn">🌙 Dark</button></div>
       </div>
     </section>
   </main>
@@ -276,7 +159,7 @@
     <button data-page="tasks"><span>📋</span>My Tasks</button>
     <button data-page="open"><span>👜</span>Open Tasks</button>
     <button data-page="earnings"><span>💰</span>Earnings</button>
-    <button data-page="chat"><span>💬</span>Chat <span id="chat-tab-badge" class="unread-pill" style="display:none; margin-left:2px;">0</span></button>
+    <button data-page="chat"><span>💬</span>Chat</button>
   </nav>
 
   <div class="more-nav">
@@ -284,15 +167,6 @@
   </div>
 
   <p class="worker-feedback" id="worker-feedback" role="status"></p>
-</div>
-
-<!-- REAL-TIME TOAST NOTIFICATION -->
-<div class="notif-toast" id="notif-toast">
-  <span style="font-size:20px;">🔔</span>
-  <div style="flex:1;">
-    <strong id="toast-title" style="display:block; font-size:13px; color:#ff1767;">Notification</strong>
-    <span id="toast-msg" style="font-size:12px; color:#fff;">Message text</span>
-  </div>
 </div>
 
 <!-- SUBMIT WORK MODAL -->
@@ -315,11 +189,6 @@
 let state, socket, stream, pc, adminId, pendingIce = [], iceServers = [];
 let myTasksData = [], openTasksData = [], currentTaskFilter = 'ALL';
 let submittingTaskId = null;
-
-// Chat State
-let conversationsList = [], activeConversationId = null, activeConversationObj = null;
-let replyingToMsg = null, activeTaskRefId = null;
-let behaviorPrefs = { taskNotifications: true, chatNotifications: true, enableSound: true, enableVibration: true, notificationPreviews: true };
 
 async function api(path, body, method) {
   const httpMethod = method || (body ? 'POST' : 'GET');
@@ -347,16 +216,6 @@ function tick() {
 
 function closePeer() { if (pc) pc.close(); pc = null; adminId = null; pendingIce = []; }
 
-let isMicMuted = false;
-document.getElementById('mic-toggle-btn').onclick = () => {
-  if (!stream) return;
-  isMicMuted = !isMicMuted;
-  stream.getAudioTracks().forEach(t => t.enabled = !isMicMuted);
-  const btn = document.getElementById('mic-toggle-btn');
-  btn.textContent = isMicMuted ? '🔇 Mic Off' : '🎙 Mic On';
-  btn.style.background = isMicMuted ? '#ef4444' : '#8b5cf6';
-};
-
 document.getElementById('pause-btn').onclick = () => buttonAction('pause');
 document.getElementById('resume-btn').onclick = () => buttonAction('resume');
 
@@ -372,47 +231,15 @@ async function buttonAction(action) {
   }
 }
 
-function fmtMoney(amount) { return '$' + (Number(amount) || 0).toFixed(2); }
-function fmtDate(ts) { return ts ? new Date(ts).toLocaleString() : '—'; }
-function escapeHtml(str) { return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
-
-function playNotificationTone() {
-  if (!behaviorPrefs.enableSound) return;
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(587.33, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.15);
-    gain.gain.setValueAtTime(0.1, ctx.currentTime);
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.2);
-  } catch (_) {}
+function fmtMoney(amount) {
+  return '$' + (Number(amount) || 0).toFixed(2);
 }
 
-function triggerVibration() {
-  if (!behaviorPrefs.enableVibration) return;
-  if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+function fmtDate(ts) {
+  if (!ts) return '—';
+  return new Date(ts).toLocaleString();
 }
 
-function showToastNotification(title, message, onClick) {
-  const toast = document.getElementById('notif-toast');
-  document.getElementById('toast-title').textContent = title;
-  document.getElementById('toast-msg').textContent = behaviorPrefs.notificationPreviews ? message : 'New Notification Received';
-  toast.classList.add('active');
-  playNotificationTone();
-  triggerVibration();
-  toast.onclick = () => {
-    toast.classList.remove('active');
-    if (onClick) onClick();
-  };
-  setTimeout(() => toast.classList.remove('active'), 4000);
-}
-
-// TASKS FUNCTIONS
 async function loadMyTasks() {
   const listEl = document.getElementById('my-tasks-list');
   try {
@@ -449,18 +276,11 @@ function renderMyTasks() {
         <div class="task-actions-row">
           <button class="primary-btn btn-success" onclick="respondTask('${t.id}', 'accept')">Accept Task</button>
           <button class="primary-btn btn-danger" onclick="respondTask('${t.id}', 'deny')">Deny Task</button>
-          <button class="primary-btn btn-chat" onclick="startTaskChat('${t.id}', '${escapeHtml(t.title)}')">💬 Chat Admin</button>
         </div>`;
     } else if (t.status === 'IN_PROGRESS' || t.status === 'REVISION_REQUIRED') {
       actionsHtml = `
         <div class="task-actions-row">
           <button class="primary-btn" onclick="openSubmitModal('${t.id}', '${escapeHtml(t.title)}')">${t.status === 'REVISION_REQUIRED' ? 'Resubmit Work' : 'Submit Task'}</button>
-          <button class="primary-btn btn-chat" onclick="startTaskChat('${t.id}', '${escapeHtml(t.title)}')">💬 Chat Admin</button>
-        </div>`;
-    } else {
-      actionsHtml = `
-        <div class="task-actions-row">
-          <button class="primary-btn btn-chat" onclick="startTaskChat('${t.id}', '${escapeHtml(t.title)}')">💬 Discuss Task in Chat</button>
         </div>`;
     }
 
@@ -559,7 +379,6 @@ async function claimTask(taskId) {
   }
 }
 
-// EARNINGS FUNCTIONS
 async function loadMyEarnings() {
   try {
     const res = await api('/api/earnings/my');
@@ -571,6 +390,7 @@ async function loadMyEarnings() {
     const completed = myTasksData.filter(t => t.status === 'COMPLETED').length;
     document.getElementById('completed-tasks-count').textContent = completed;
 
+    // Render Ledger
     const ledgerEl = document.getElementById('earnings-ledger-list');
     if (!s.ledger || !s.ledger.length) {
       ledgerEl.innerHTML = `<p class="subtext">No task earnings recorded yet.</p>`;
@@ -594,6 +414,7 @@ async function loadMyEarnings() {
       }).join('');
     }
 
+    // Render Withdrawals
     const withEl = document.getElementById('withdrawals-history-list');
     if (!s.withdrawals || !s.withdrawals.length) {
       withEl.innerHTML = `<p class="subtext">No withdrawal requests yet.</p>`;
@@ -606,7 +427,7 @@ async function loadMyEarnings() {
           </div>
           <div class="ledger-sub">
             <span>Requested: ${fmtDate(w.requestedAt)}</span>
-            <span class="${w.status === 'APPROVED' ? 'badge-avail' : 'badge-hold'}">${w.status}</span>
+            <span class="${w.status === 'APPROVED' ? 'badge-avail' : w.status === 'REJECTED' ? 'badge-hold' : 'badge-hold'}">${w.status}</span>
           </div>
         </div>`).join('');
     }
@@ -641,292 +462,9 @@ document.getElementById('my-task-tabs').onclick = (e) => {
   }
 };
 
-// REAL-TIME CHAT FUNCTIONS
-async function loadConversations() {
-  try {
-    const res = await api('/api/chat/conversations');
-    conversationsList = res.conversations || [];
-    renderConversationsList();
-    updateUnreadBadgeCount();
-  } catch (err) {
-    document.getElementById('conversations-container').innerHTML = `<p class="subtext">Error loading chat: ${err.message}</p>`;
-  }
+function escapeHtml(str) {
+  return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
-
-function renderConversationsList() {
-  const container = document.getElementById('conversations-container');
-  const q = document.getElementById('chat-search-input').value.toLowerCase();
-  const filtered = conversationsList.filter(c => (c.partner?.name || '').toLowerCase().includes(q));
-
-  if (!filtered.length) {
-    container.innerHTML = `<p class="subtext">No conversations found.</p>`;
-    return;
-  }
-
-  container.innerHTML = filtered.map(c => `
-    <div class="conv-item ${c.id === activeConversationId ? 'active' : ''}" onclick="openConversation('${c.id}')">
-      <div class="cat" style="width:40px; height:40px; font-size:20px; margin:0;">${c.partner.role === 'admin' ? '👩‍💼' : '👤'}</div>
-      <div class="conv-info">
-        <div class="conv-title">
-          <span>${escapeHtml(c.partner.name)} <span class="status-dot ${c.partner.online ? 'online' : 'offline'}"></span></span>
-          <span style="font-size:10px; color:#a06d85; font-weight:normal;">${c.latestMessage ? fmtDate(c.latestMessage.sentAt) : ''}</span>
-        </div>
-        <div class="conv-preview">${c.taskTitle ? `[Task: ${escapeHtml(c.taskTitle)}] ` : ''}${escapeHtml(c.latestMessage?.text || 'No messages yet')}</div>
-      </div>
-      ${c.unreadCount > 0 ? `<span class="unread-pill">${c.unreadCount}</span>` : ''}
-    </div>`).join('');
-}
-
-function updateUnreadBadgeCount() {
-  const totalUnread = conversationsList.reduce((sum, c) => sum + (c.unreadCount || 0), 0);
-  const badgeEl = document.getElementById('chat-tab-badge');
-  if (totalUnread > 0) {
-    badgeEl.textContent = totalUnread;
-    badgeEl.style.display = 'inline-block';
-  } else {
-    badgeEl.style.display = 'none';
-  }
-}
-
-async function startTaskChat(taskId, taskTitle) {
-  try {
-    const res = await api('/api/chat/conversations/start', { targetUserId: 'admin', taskId });
-    // Switch to Chat Tab
-    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-    document.getElementById('screen-chat').classList.add('active');
-    document.querySelectorAll('.bottom-nav button').forEach(b => b.classList.toggle('active', b.dataset.page === 'chat'));
-
-    await loadConversations();
-    openConversation(res.conversationId);
-  } catch (err) {
-    alert('Cannot open task chat: ' + err.message);
-  }
-}
-
-async function openConversation(convId) {
-  activeConversationId = convId;
-  const convObj = conversationsList.find(c => c.id === convId);
-  activeConversationObj = convObj;
-
-  document.getElementById('conv-list-view').style.display = 'none';
-  const streamView = document.getElementById('chat-stream-view');
-  streamView.style.display = 'flex';
-
-  if (convObj) {
-    document.getElementById('active-chat-partner-name').textContent = convObj.partner?.name || 'Chat';
-    const statusDot = document.getElementById('active-partner-status');
-    statusDot.className = 'status-dot ' + (convObj.partner?.online ? 'online' : 'offline');
-
-    const taskChip = document.getElementById('chat-task-chip');
-    if (convObj.taskTitle) {
-      taskChip.textContent = '📋 Task: ' + convObj.taskTitle;
-      taskChip.style.display = 'inline-block';
-    } else {
-      taskChip.style.display = 'none';
-    }
-  }
-
-  socket.emit('join-conversation', { conversationId: convId });
-  loadMessages(convId);
-}
-
-document.getElementById('btn-back-convs').onclick = () => {
-  activeConversationId = null;
-  activeConversationObj = null;
-  document.getElementById('chat-stream-view').style.display = 'none';
-  document.getElementById('conv-list-view').style.display = 'block';
-  loadConversations();
-};
-
-async function loadMessages(convId) {
-  const container = document.getElementById('messages-container');
-  try {
-    const res = await api(`/api/chat/conversations/${convId}/messages`);
-    const msgs = res.messages || [];
-    renderMessages(msgs);
-  } catch (err) {
-    container.innerHTML = `<p class="subtext">Error loading messages: ${err.message}</p>`;
-  }
-}
-
-function renderMessages(msgs) {
-  const container = document.getElementById('messages-container');
-  if (!msgs.length) {
-    container.innerHTML = `<p class="subtext" style="text-align:center;">No messages yet. Send a message to start chatting!</p>`;
-    return;
-  }
-
-  const myId = window.workerMe?.id || window.workerMe?.username;
-
-  container.innerHTML = msgs.map(m => {
-    const isMine = m.senderId === myId;
-    let attachHtml = '';
-    if (m.attachment) {
-      if (m.attachment.type === 'image') {
-        attachHtml = `<div style="margin-top:6px;"><img src="${escapeHtml(m.attachment.url)}" style="max-width:100%; border-radius:10px; max-height:200px;"></div>`;
-      } else {
-        attachHtml = `<div style="margin-top:6px;"><a href="${escapeHtml(m.attachment.url)}" target="_blank" style="color:inherit; font-weight:bold;">📎 Download: ${escapeHtml(m.attachment.name)}</a></div>`;
-      }
-    }
-
-    let replyHtml = '';
-    if (m.replyTo) {
-      replyHtml = `<div style="font-size:11px; opacity:0.8; border-left:2px solid; padding-left:6px; margin-bottom:4px;">Replying to: <i>${escapeHtml(m.replyTo.textPreview)}</i></div>`;
-    }
-
-    let taskRefHtml = '';
-    if (m.taskTitle) {
-      taskRefHtml = `<span class="task-ref-chip">📋 Task: ${escapeHtml(m.taskTitle)}</span>`;
-    }
-
-    const readReceipt = isMine ? (m.readBy?.length > 1 ? '✓✓' : '✓') : '';
-
-    return `
-      <div class="chat-bubble ${isMine ? 'mine' : 'other'}">
-        ${taskRefHtml}
-        ${replyHtml}
-        <div>${m.deleted ? '<i>This message was deleted.</i>' : escapeHtml(m.text)}</div>
-        ${attachHtml}
-        <div class="chat-time">
-          <span>${new Date(m.sentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} ${readReceipt}</span>
-          ${m.editedAt ? '<span>(edited)</span>' : ''}
-        </div>
-        ${isMine && !m.deleted ? `
-          <div class="msg-actions">
-            <span onclick="setReplyMessage('${m.id}', '${escapeHtml(m.text)}')">Reply</span>
-            <span onclick="editMessagePrompt('${m.id}', '${escapeHtml(m.text)}')">Edit</span>
-            <span onclick="deleteMessagePrompt('${m.id}')">Delete</span>
-          </div>` : (!isMine && !m.deleted ? `
-          <div class="msg-actions">
-            <span onclick="setReplyMessage('${m.id}', '${escapeHtml(m.text)}')">Reply</span>
-          </div>` : '')}
-      </div>`;
-  }).join('');
-
-  container.scrollTop = container.scrollHeight;
-}
-
-function setReplyMessage(msgId, text) {
-  replyingToMsg = { messageId: msgId, textPreview: text.slice(0, 40) };
-  document.getElementById('reply-preview-text').textContent = 'Replying: ' + text.slice(0, 30) + '…';
-  document.getElementById('reply-preview-box').style.display = 'flex';
-}
-
-document.getElementById('btn-cancel-reply').onclick = () => {
-  replyingToMsg = null;
-  document.getElementById('reply-preview-box').style.display = 'none';
-};
-
-async function editMessagePrompt(msgId, currentText) {
-  const newText = prompt('Edit your message:', currentText);
-  if (newText && newText.trim() && newText !== currentText) {
-    try {
-      await api(`/api/chat/messages/${msgId}/edit`, { text: newText });
-      if (activeConversationId) loadMessages(activeConversationId);
-    } catch (err) { alert(err.message); }
-  }
-}
-
-async function deleteMessagePrompt(msgId) {
-  if (confirm('Delete this message?')) {
-    try {
-      await api(`/api/chat/messages/${msgId}/delete`, {}, 'POST');
-      if (activeConversationId) loadMessages(activeConversationId);
-    } catch (err) { alert(err.message); }
-  }
-}
-
-document.getElementById('btn-attach-file').onclick = () => {
-  document.getElementById('chat-file-input').click();
-};
-
-document.getElementById('chat-file-input').onchange = async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = async (evt) => {
-    try {
-      const uploadRes = await api('/api/chat/upload', {
-        fileName: file.name,
-        fileType: file.type,
-        fileData: evt.target.result
-      });
-      sendMessage(null, uploadRes.attachment);
-    } catch (err) {
-      alert('Upload failed: ' + err.message);
-    }
-  };
-  reader.readAsDataURL(file);
-};
-
-document.getElementById('btn-send-message').onclick = () => {
-  const input = document.getElementById('chat-text-input');
-  const text = input.value.trim();
-  if (text) {
-    sendMessage(text, null);
-    input.value = '';
-  }
-};
-
-document.getElementById('chat-text-input').onkeydown = (e) => {
-  if (e.key === 'Enter') {
-    document.getElementById('btn-send-message').click();
-  }
-};
-
-async function sendMessage(text, attachment) {
-  if (!activeConversationId) return;
-  try {
-    await api('/api/chat/messages', {
-      conversationId: activeConversationId,
-      text: text || '',
-      attachment: attachment || null,
-      replyTo: replyingToMsg,
-      taskId: activeConversationObj?.taskId || null
-    });
-    replyingToMsg = null;
-    document.getElementById('reply-preview-box').style.display = 'none';
-    loadMessages(activeConversationId);
-  } catch (err) {
-    alert(err.message);
-  }
-}
-
-document.getElementById('chat-search-input').oninput = renderConversationsList;
-
-// APP BEHAVIOR SETTINGS
-async function loadBehaviorSettings() {
-  try {
-    const res = await api('/api/settings/behavior');
-    behaviorPrefs = res.settings || behaviorPrefs;
-    document.getElementById('setting-task-notif').checked = behaviorPrefs.taskNotifications !== false;
-    document.getElementById('setting-chat-notif').checked = behaviorPrefs.chatNotifications !== false;
-    document.getElementById('setting-sound').checked = behaviorPrefs.enableSound !== false;
-    document.getElementById('setting-vibe').checked = behaviorPrefs.enableVibration !== false;
-    document.getElementById('setting-overlay').checked = Boolean(behaviorPrefs.displayOverOtherApps);
-    document.getElementById('setting-startup').checked = Boolean(behaviorPrefs.launchOnStartup);
-    document.getElementById('setting-previews').checked = behaviorPrefs.notificationPreviews !== false;
-  } catch (_) {}
-}
-
-document.getElementById('btn-save-settings').onclick = async () => {
-  const updated = {
-    taskNotifications: document.getElementById('setting-task-notif').checked,
-    chatNotifications: document.getElementById('setting-chat-notif').checked,
-    enableSound: document.getElementById('setting-sound').checked,
-    enableVibration: document.getElementById('setting-vibe').checked,
-    displayOverOtherApps: document.getElementById('setting-overlay').checked,
-    launchOnStartup: document.getElementById('setting-startup').checked,
-    notificationPreviews: document.getElementById('setting-previews').checked
-  };
-  try {
-    await api('/api/settings/behavior', updated);
-    behaviorPrefs = updated;
-    alert('App behavior & notification settings saved!');
-  } catch (err) {
-    alert(err.message);
-  }
-};
 
 (async () => {
   const me = await api('/api/me');
@@ -942,17 +480,12 @@ document.getElementById('btn-save-settings').onclick = async () => {
   try {
     stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: { echoCancellation: true, noiseSuppression: true } });
     document.getElementById('preview').srcObject = stream;
-    document.getElementById('status').textContent = 'Timer Active now';
+    document.getElementById('status').textContent = 'Camera and microphone active';
   } catch (e) {
-    document.getElementById('status').textContent = 'Timer unavailable — ' + e.message;
+    document.getElementById('status').textContent = 'Camera unavailable — ' + e.message;
   }
 
-  socket = io({
-    auth: { user: me.user },
-    reconnection: true,
-    reconnectionDelay: 1000,
-    reconnectionAttempts: Infinity
-  });
+  socket = io();
   socket.on('connect', () => {
     closePeer();
     api('/api/worker/state').then(d => { state = d.state; render(); tick(); }).catch(() => {});
@@ -961,50 +494,15 @@ document.getElementById('btn-save-settings').onclick = async () => {
     loadMyTasks();
     loadAvailableTasks();
     loadMyEarnings();
-    loadConversations();
-    loadBehaviorSettings();
   });
 
   socket.on('tasks-updated', () => { loadMyTasks(); loadAvailableTasks(); });
   socket.on('earnings-updated', () => { loadMyEarnings(); });
-  socket.on('chat-updated', () => { loadConversations(); if (activeConversationId) loadMessages(activeConversationId); });
-
-  socket.on('new-message', (msg) => {
-    if (msg.conversationId === activeConversationId) {
-      loadMessages(activeConversationId);
-    } else {
-      loadConversations();
-      if (behaviorPrefs.chatNotifications) {
-        showToastNotification(`💬 ${msg.senderName}`, msg.text || 'Sent an attachment', () => {
-          // Navigate to chat
-          document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-          document.getElementById('screen-chat').classList.add('active');
-          openConversation(msg.conversationId);
-        });
-      }
-    }
-  });
-
-  socket.on('message-updated', (msg) => {
-    if (msg.conversationId === activeConversationId) loadMessages(activeConversationId);
-  });
-
-  socket.on('new-notification', (notif) => {
-    if (behaviorPrefs.taskNotifications) {
-      showToastNotification(notif.title, notif.message, () => {
-        if (notif.taskId) {
-          document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-          document.getElementById('screen-tasks').classList.add('active');
-          loadMyTasks();
-        }
-      });
-    }
-  });
 
   socket.on('timer-updated', p => { state = p; render(); });
   socket.on('timer-stopped', () => { state = { ...state, status: 'STOPPED', startedAt: null, accumulatedMs: 0 }; render(); });
 
-  socket.on('stop-live', () => { closePeer(); document.getElementById('status').textContent = 'Timer ready'; });
+  socket.on('stop-live', () => { closePeer(); document.getElementById('status').textContent = 'Camera and microphone ready'; });
   socket.on('session-replaced', () => {
     if (stream) stream.getTracks().forEach(t => t.stop());
     closePeer();
@@ -1014,11 +512,11 @@ document.getElementById('btn-save-settings').onclick = async () => {
 
   socket.on('live-request', async request => {
     if (request.mode !== 'camera') {
-      socket.emit('worker-live-error', { ...request, message: 'daily wages only.' });
+      socket.emit('worker-live-error', { ...request, message: 'Camera and audio supported only.' });
       return;
     }
     if (!stream) {
-      socket.emit('worker-live-error', { ...request, message: 'Timer unavailable.' });
+      socket.emit('worker-live-error', { ...request, message: 'Camera stream unavailable.' });
       return;
     }
     if (pc) return;
@@ -1030,20 +528,6 @@ document.getElementById('btn-save-settings').onclick = async () => {
       stream.getTracks().forEach(t => pc.addTrack(t, stream));
       pc.onicecandidate = e => {
         if (e.candidate) socket.emit('rtc-ice', { targetSocketId: adminId, workerId: state.id, candidate: e.candidate });
-      };
-      pc.oniceconnectionstatechange = () => {
-        if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
-          if (socket && socket.connected && adminId) {
-            try {
-              pc.restartIce();
-              pc.createOffer({ iceRestart: true }).then(offer => {
-                return pc.setLocalDescription(offer);
-              }).then(() => {
-                socket.emit('rtc-offer', { targetSocketId: adminId, workerId: state.id, mode: 'camera', offer: pc.localDescription });
-              }).catch(() => {});
-            } catch (_) {}
-          }
-        }
       };
       await pc.setLocalDescription(await pc.createOffer());
       if (pc !== current) return;
