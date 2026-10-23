@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>WorkWise - Admin</title>
+  <title>WorkWise - Admin Console</title>
   <link rel="stylesheet" href="/styles.css">
   <style>
     .four-monitor-card { margin-bottom:16px; }
@@ -53,7 +53,39 @@
     .data-table { width:100%; border-collapse:collapse; font-size:13px; margin-top:10px; }
     .data-table th, .data-table td { padding:10px; text-align:left; border-bottom:1px solid #f4c7db; }
     .data-table th { background:#fff0f5; color:#4a2e35; font-weight:bold; }
-    @media(max-width:850px){.multi-monitor-grid{grid-template-columns:1fr}}
+
+    /* CHAT STYLING FOR ADMIN */
+    .admin-chat-layout { display:grid; grid-template-columns:260px 1fr; gap:14px; min-height:60vh; background:#fff; border:1px solid #f4c7db; border-radius:16px; overflow:hidden; }
+    .admin-conv-sidebar { border-right:1px solid #f4c7db; background:#fff8fa; padding:12px; display:flex; flex-direction:column; gap:8px; }
+    .admin-conv-tile { padding:10px; border-radius:12px; border:1px solid #f4c7db; background:#fff; cursor:pointer; font-size:13px; }
+    .admin-conv-tile.active, .admin-conv-tile:hover { background:#ffe0ea; border-color:#e06980; }
+    .admin-chat-main { display:flex; flex-direction:column; height:100%; }
+    .admin-chat-header { padding:12px 16px; background:#fff0f5; border-bottom:1px solid #f4c7db; font-weight:bold; color:#4a2e35; display:flex; justify-content:space-between; align-items:center; }
+    .admin-chat-stream { flex:1; padding:16px; background:#fffafb; overflow-y:auto; display:flex; flex-direction:column; gap:10px; max-height:450px; }
+    .admin-chat-bubble { max-width:80%; padding:10px 14px; border-radius:14px; font-size:13px; line-height:1.4; word-break:break-word; }
+    .admin-chat-bubble.mine { align-self:flex-end; background:#e06980; color:#fff; }
+    .admin-chat-bubble.other { align-self:flex-start; background:#fff; border:1px solid #f4c7db; color:#4a2e35; }
+    .admin-chat-input-row { display:flex; gap:8px; padding:12px; background:#fff; border-top:1px solid #f4c7db; align-items:center; }
+    .admin-chat-input-row input[type="text"] { flex:1; padding:10px 14px; border:1px solid #edbad0; border-radius:12px; font-size:13px; outline:none; }
+    .admin-chat-input-row button { border:0; background:#e06980; color:#fff; padding:10px 18px; border-radius:12px; font-weight:bold; cursor:pointer; }
+
+    .status-dot { width:8px; height:8px; border-radius:50%; display:inline-block; }
+    .status-dot.online { background:#10b981; }
+    .status-dot.offline { background:#9ca3af; }
+
+    /* TOAST NOTIFICATION */
+    .admin-toast { position:fixed; top:20px; right:20px; background:#4a2e35; color:#fff; padding:12px 18px; border-radius:16px; border:1px solid #e06980; box-shadow:0 8px 25px rgba(0,0,0,0.25); z-index:999; font-size:13px; display:none; align-items:center; gap:10px; cursor:pointer; max-width:360px; }
+    .admin-toast.active { display:flex; }
+
+    /* SETTINGS SWITCH */
+    .switch { position:relative; display:inline-block; width:44px; height:24px; }
+    .switch input { opacity:0; width:0; height:0; }
+    .slider { position:absolute; cursor:pointer; inset:0; background-color:#ccc; transition:.3s; border-radius:24px; }
+    .slider:before { position:absolute; content:""; height:18px; width:18px; left:3px; bottom:3px; background-color:white; transition:.3s; border-radius:50%; }
+    input:checked + .slider { background-color:#e06980; }
+    input:checked + .slider:before { transform:translateX(20px); }
+    .setting-row { display:flex; justify-content:space-between; align-items:center; padding:12px 0; border-bottom:1px solid #f4c7db; font-size:13.5px; }
+    @media(max-width:850px){.admin-chat-layout{grid-template-columns:1fr;}}
   </style>
 </head>
 <body>
@@ -64,13 +96,13 @@
         <span class="brand-logo">🐱🎀</span>
         <div class="brand-text">
           <h1>Hello Kitty Admin Console</h1>
-          <p>Kitty Timer • Workforce & Task Management</p>
+          <p>Kitty Timer • Workforce, Tasks & Real-Time Chat</p>
         </div>
       </div>
       <div class="header-right">
-        <div class="notification-badge" title="Notifications">
+        <div class="notification-badge" id="admin-notif-btn" title="Notifications" style="cursor:pointer; position:relative;">
           🔔
-          <span class="count">3</span>
+          <span class="count" id="admin-notif-count" style="display:none;">0</span>
         </div>
         <div class="system-clock">
           📅 <span id="clock-display">System Online</span>
@@ -94,9 +126,9 @@
           <li class="nav-item" data-view="workers" role="button" tabindex="0">👥 <span>Workers</span></li>
           <li class="nav-item" data-view="tasks" role="button" tabindex="0">📋 <span>Tasks</span></li>
           <li class="nav-item" data-view="devices" role="button" tabindex="0">📱 <span>Devices</span></li>
-          <li class="nav-item" data-view="chat" role="button" tabindex="0">💬 <span>Chat</span></li>
+          <li class="nav-item" data-view="chat" role="button" tabindex="0">💬 <span>Chat & Messaging</span></li>
           <li class="nav-item" data-view="reports" role="button" tabindex="0">📈 <span>Earning Overview</span></li>
-          <li class="nav-item" data-view="settings" role="button" tabindex="0">⚙️ <span>Settings</span></li>
+          <li class="nav-item" data-view="settings" role="button" tabindex="0">⚙️ <span>Settings & Behavior</span></li>
           <li class="nav-item" id="btn-logout">🚪 <span>Log Out</span></li>
         </ul>
 
@@ -193,6 +225,15 @@
     </div>
   </div>
 
+  <!-- TOAST NOTIFICATION -->
+  <div class="admin-toast" id="admin-toast">
+    <span style="font-size:20px;">🔔</span>
+    <div style="flex:1;">
+      <strong id="admin-toast-title" style="display:block; color:#e06980; font-size:13px;">Notification</strong>
+      <span id="admin-toast-msg" style="font-size:12px;">Details</span>
+    </div>
+  </div>
+
   <video id="live-video-player" autoplay playsinline muted style="position:absolute; width:1px; height:1px; opacity:0; pointer-events:none;"></video>
 
   <!-- Socket.IO & Logic -->
@@ -202,6 +243,11 @@
     let selectedWorkerId = null;
     const peers = new Map(), requested = new Map();
     let currentAdminTasks = [], currentAdminFilter = 'ALL';
+
+    // Admin Chat State
+    let adminConversationsList = [], activeAdminConvId = null, activeAdminConvObj = null;
+    let adminReplyingToMsg = null, adminAllowWorkerChat = false;
+    let behaviorPrefs = { taskNotifications: true, chatNotifications: true, enableSound: true, enableVibration: true, notificationPreviews: true };
 
     function updateClock() {
       const now = new Date();
@@ -230,10 +276,36 @@
       const t = Math.floor(Math.max(0, ms) / 1000);
       return [Math.floor(t / 3600), Math.floor(t / 60) % 60, t % 60].map(x => String(x).padStart(2, '0')).join(':');
     }
-
     function fmtMoney(amt) { return '$' + (Number(amt) || 0).toFixed(2); }
     function fmtDate(ts) { return ts ? new Date(ts).toLocaleString() : '—'; }
     function escapeHtml(str) { return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+
+    function playAudioTone() {
+      if (!behaviorPrefs.enableSound) return;
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(523.25, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(783.99, ctx.currentTime + 0.15);
+        gain.gain.setValueAtTime(0.1, ctx.currentTime);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.2);
+      } catch (_) {}
+    }
+
+    function showAdminToast(title, msg, onClick) {
+      const toast = document.getElementById('admin-toast');
+      document.getElementById('admin-toast-title').textContent = title;
+      document.getElementById('admin-toast-msg').textContent = behaviorPrefs.notificationPreviews ? msg : 'New Alert Received';
+      toast.classList.add('active');
+      playAudioTone();
+      toast.onclick = () => { toast.classList.remove('active'); if (onClick) onClick(); };
+      setTimeout(() => toast.classList.remove('active'), 4000);
+    }
 
     // Monitor slots management
     const monitorSlots = Array.from({length:4},(_,i)=>({workerId:null,recorder:null,chunks:[],started:0,muted:true,desired:false,lastAttempt:0}));
@@ -401,7 +473,7 @@
 
     async function renderView() {
       if (currentView === 'dashboard') return;
-      const headings = { workers:'👥 Worker Roster', tasks:'📋 Task Management System', devices:'📱 Connected Devices', chat:'💬 Worker Chat', reports:'📈 Earnings & Financial Overview', settings:'⚙️ Preferences' };
+      const headings = { workers:'👥 Worker Roster', tasks:'📋 Task Management System', devices:'📱 Connected Devices', chat:'💬 Worker Real-Time Chat', reports:'📈 Earnings & Financial Overview', settings:'⚙️ Preferences & Behavior' };
       document.getElementById('view-heading').textContent = headings[currentView] || currentView;
       const content = document.getElementById('view-content');
 
@@ -490,18 +562,111 @@
         };
 
         loadAdminTasks();
+      } else if (currentView === 'chat') {
+        content.innerHTML = `
+          <div style="background:#fff0f5; border:1px solid #f4c7db; border-radius:12px; padding:12px; margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+            <span><b>Worker-to-Worker Direct Chat Setting:</b> Allow workers to message each other directly</span>
+            <label class="switch">
+              <input type="checkbox" id="toggle-worker-chat" ${adminAllowWorkerChat ? 'checked' : ''}>
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="admin-chat-layout">
+            <div class="admin-conv-sidebar">
+              <input type="text" id="admin-chat-search" placeholder="🔎 Search workers..." style="width:100%; padding:8px; border:1px solid #edbad0; border-radius:10px; font-size:12px;">
+              <div id="admin-convs-list" style="overflow-y:auto; flex:1;">
+                <p style="font-size:12px; color:#866274;">Loading conversations…</p>
+              </div>
+            </div>
+
+            <div class="admin-chat-main">
+              <div class="admin-chat-header">
+                <span id="admin-active-partner-title">Select a Worker to Chat</span>
+                <span id="admin-chat-task-chip" style="font-size:11px; background:#e06980; color:#fff; padding:2px 8px; border-radius:10px; display:none;">Task</span>
+              </div>
+              <div class="admin-chat-stream" id="admin-messages-container">
+                <p style="font-size:12px; color:#866274; text-align:center;">Select a worker from the sidebar to view chat history.</p>
+              </div>
+              <div id="admin-reply-box" style="background:#ffe0ea; padding:6px 12px; font-size:12px; display:none; justify-content:space-between;">
+                <span id="admin-reply-text">Replying...</span>
+                <button type="button" style="border:0; background:none; font-weight:bold; cursor:pointer;" id="admin-btn-cancel-reply">✕</button>
+              </div>
+              <div class="admin-chat-input-row">
+                <button type="button" id="admin-btn-attach" style="background:none; color:#e06980; font-size:18px; padding:4px 8px;">📎</button>
+                <input type="file" id="admin-file-input" style="display:none;" accept="image/*,.pdf,.doc,.docx,.txt,.zip">
+                <input type="text" id="admin-chat-input" placeholder="Type message to worker...">
+                <button type="button" id="admin-btn-send">Send</button>
+              </div>
+            </div>
+          </div>`;
+
+        document.getElementById('toggle-worker-chat').onchange = async (e) => {
+          try {
+            await api('/api/admin/chat-settings', { allowWorkerToWorkerChat: e.target.checked });
+            adminAllowWorkerChat = e.target.checked;
+            alert(adminAllowWorkerChat ? 'Worker-to-worker chat enabled!' : 'Worker-to-worker chat disabled.');
+          } catch (err) { alert(err.message); }
+        };
+
+        document.getElementById('admin-chat-search').oninput = renderAdminConvsList;
+
+        loadAdminConversations();
       } else if (currentView === 'reports') {
         content.innerHTML = `<p>Loading financial overview…</p>`;
         loadAdminEarnings();
       } else if (currentView === 'workers') {
-        content.innerHTML = `<div class="view-cards">${workers.map(w=>`<div class="view-tile"><strong>${escapeHtml(w.name)}</strong><p>${w.online?'🟢 Online':'⚪ Offline'} · ${escapeHtml(w.status)}</p><p>Shift Time: ${fmt((w.accumulatedMs||0)+(w.status==='WORKING'&&w.startedAt?Date.now()-w.startedAt:0))}</p></div>`).join('')}</div>`;
+        content.innerHTML = `<div class="view-cards">${workers.map(w=>`<div class="view-tile"><strong>${escapeHtml(w.name)}</strong><p>${w.online?'🟢 Online':'⚪ Offline'} · ${escapeHtml(w.status)}</p><p>Shift Time: ${fmt((w.accumulatedMs||0)+(w.status==='WORKING'&&w.startedAt?Date.now()-w.startedAt:0))}</p><button class="btn-pink" style="margin-top:8px; font-size:11px;" onclick="openAdminChatWithWorker('${w.id}')">💬 Chat with ${escapeHtml(w.name)}</button></div>`).join('')}</div>`;
       } else if (currentView === 'devices') {
         content.innerHTML = `<div class="kitty-stats"><div><b>${workers.length}</b><span>Total Devices</span></div><div><b>${workers.filter(w=>w.online).length}</b><span>Online</span></div></div><div class="view-cards">${workers.map(w=>`<div class="view-tile"><strong>📱 ${escapeHtml(w.name)}</strong><p>${w.online?'🟢 Connected & Live Feed Ready':'⚪ Offline'}</p></div>`).join('')}</div>`;
-      } else if (currentView === 'chat') {
-        content.innerHTML = `<p style="padding:20px;">Worker messaging workspace.</p>`;
       } else if (currentView === 'settings') {
-        content.innerHTML = `<form class="view-form"><label><input type="checkbox" id="confirm-stop" ${localStorage.getItem('kitty-confirm-stop')!=='0'?'checked':''}> Confirm before stopping worker timer</label></form>`;
+        content.innerHTML = `
+          <div class="task-create-card">
+            <h3>⚙️ Admin App Behavior & Notification Preferences</h3>
+            <div class="setting-row">
+              <span>Task Event Notifications</span>
+              <label class="switch"><input type="checkbox" id="adm-setting-task" checked><span class="slider"></span></label>
+            </div>
+            <div class="setting-row">
+              <span>Chat Message Notifications</span>
+              <label class="switch"><input type="checkbox" id="adm-setting-chat" checked><span class="slider"></span></label>
+            </div>
+            <div class="setting-row">
+              <span>Notification Sounds</span>
+              <label class="switch"><input type="checkbox" id="adm-setting-sound" checked><span class="slider"></span></label>
+            </div>
+            <div class="setting-row">
+              <span>Notification Previews</span>
+              <label class="switch"><input type="checkbox" id="adm-setting-previews" checked><span class="slider"></span></label>
+            </div>
+            <button class="btn-pink" id="btn-save-admin-settings" style="margin-top:16px;">Save Behavior Settings</button>
+          </div>`;
+
+        loadAdminBehaviorSettings();
       }
+    }
+
+    async function loadAdminBehaviorSettings() {
+      try {
+        const res = await api('/api/settings/behavior');
+        behaviorPrefs = res.settings || behaviorPrefs;
+        document.getElementById('adm-setting-task').checked = behaviorPrefs.taskNotifications !== false;
+        document.getElementById('adm-setting-chat').checked = behaviorPrefs.chatNotifications !== false;
+        document.getElementById('adm-setting-sound').checked = behaviorPrefs.enableSound !== false;
+        document.getElementById('adm-setting-previews').checked = behaviorPrefs.notificationPreviews !== false;
+
+        document.getElementById('btn-save-admin-settings').onclick = async () => {
+          const updated = {
+            taskNotifications: document.getElementById('adm-setting-task').checked,
+            chatNotifications: document.getElementById('adm-setting-chat').checked,
+            enableSound: document.getElementById('adm-setting-sound').checked,
+            notificationPreviews: document.getElementById('adm-setting-previews').checked
+          };
+          await api('/api/settings/behavior', updated);
+          behaviorPrefs = updated;
+          alert('Settings saved!');
+        };
+      } catch (_) {}
     }
 
     async function loadAdminTasks() {
@@ -554,6 +719,7 @@
               <div style="display:flex; gap:8px; margin-top:8px;">
                 <button class="btn-pink" onclick="reviewTask('${t.id}', 'approve')">Approve Task & Credit Payment</button>
                 <button class="btn-outline" style="color:#b91c1c; border-color:#b91c1c;" onclick="reviewTask('${t.id}', 'reject')">Reject & Request Revision</button>
+                <button class="btn-outline" onclick="openAdminChatWithWorker('${t.assignedWorkerId}', '${t.id}')">💬 Chat with Worker</button>
               </div>
             </div>`;
         }
@@ -591,6 +757,191 @@
       } catch (err) {
         alert(err.message);
       }
+    }
+
+    // ADMIN REAL-TIME CHAT
+    async function loadAdminConversations() {
+      try {
+        const res = await api('/api/chat/conversations');
+        adminConversationsList = res.conversations || [];
+        adminAllowWorkerChat = Boolean(res.allowWorkerToWorkerChat);
+        const toggle = document.getElementById('toggle-worker-chat');
+        if (toggle) toggle.checked = adminAllowWorkerChat;
+        renderAdminConvsList();
+        updateAdminUnreadNotifs();
+      } catch (err) {
+        const c = document.getElementById('admin-convs-list');
+        if (c) c.innerHTML = `<p style="font-size:12px; color:#b91c1c;">Error loading chat: ${err.message}</p>`;
+      }
+    }
+
+    function renderAdminConvsList() {
+      const container = document.getElementById('admin-convs-list');
+      if (!container) return;
+
+      const searchInput = document.getElementById('admin-chat-search');
+      const q = searchInput ? searchInput.value.toLowerCase() : '';
+
+      // Build roster including workers who don't have active conversation yet
+      const allRoster = workers.map(w => {
+        const existingConv = adminConversationsList.find(c => c.partner?.id === w.id || c.partner?.username === w.username);
+        return {
+          workerId: w.id,
+          workerName: w.name,
+          online: w.online,
+          convId: existingConv?.id || null,
+          latestMessage: existingConv?.latestMessage || null,
+          unreadCount: existingConv?.unreadCount || 0
+        };
+      }).filter(item => item.workerName.toLowerCase().includes(q));
+
+      container.innerHTML = allRoster.map(item => `
+        <div class="admin-conv-tile ${item.convId && item.convId === activeAdminConvId ? 'active' : ''}" onclick="openAdminChatWithWorker('${item.workerId}')">
+          <div style="display:flex; justify-content:space-between; font-weight:bold;">
+            <span>${escapeHtml(item.workerName)} <span class="status-dot ${item.online ? 'online' : 'offline'}"></span></span>
+            ${item.unreadCount > 0 ? `<span style="background:#e06980; color:#fff; font-size:10px; padding:1px 6px; border-radius:10px;">${item.unreadCount}</span>` : ''}
+          </div>
+          <div style="font-size:11px; color:#866274; margin-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+            ${escapeHtml(item.latestMessage?.text || 'Click to start chat')}
+          </div>
+        </div>`).join('');
+    }
+
+    async function openAdminChatWithWorker(workerId, taskId = null) {
+      showView('chat');
+      try {
+        const res = await api('/api/chat/conversations/start', { targetUserId: workerId, taskId });
+        activeAdminConvId = res.conversationId;
+        await loadAdminConversations();
+        openAdminConversation(res.conversationId);
+      } catch (err) {
+        alert('Cannot open chat: ' + err.message);
+      }
+    }
+
+    async function openAdminConversation(convId) {
+      activeAdminConvId = convId;
+      const convObj = adminConversationsList.find(c => c.id === convId);
+      activeAdminConvObj = convObj;
+
+      if (convObj) {
+        document.getElementById('admin-active-partner-title').textContent = '💬 Chat with ' + (convObj.partner?.name || 'Worker');
+        const chip = document.getElementById('admin-chat-task-chip');
+        if (convObj.taskTitle) {
+          chip.textContent = '📋 Task: ' + convObj.taskTitle;
+          chip.style.display = 'inline-block';
+        } else {
+          chip.style.display = 'none';
+        }
+      }
+
+      socket.emit('join-conversation', { conversationId: convId });
+      loadAdminMessages(convId);
+    }
+
+    async function loadAdminMessages(convId) {
+      const container = document.getElementById('admin-messages-container');
+      try {
+        const res = await api(`/api/chat/conversations/${convId}/messages`);
+        renderAdminMessages(res.messages || []);
+      } catch (err) {
+        container.innerHTML = `<p style="font-size:12px; color:#b91c1c;">Error loading messages: ${err.message}</p>`;
+      }
+    }
+
+    function renderAdminMessages(msgs) {
+      const container = document.getElementById('admin-messages-container');
+      if (!msgs.length) {
+        container.innerHTML = `<p style="font-size:12px; color:#866274; text-align:center;">No messages in this chat yet. Type below to send a message.</p>`;
+        return;
+      }
+
+      container.innerHTML = msgs.map(m => {
+        const isMine = m.senderId === 'admin';
+        let attachHtml = '';
+        if (m.attachment) {
+          if (m.attachment.type === 'image') {
+            attachHtml = `<div style="margin-top:6px;"><img src="${escapeHtml(m.attachment.url)}" style="max-width:100%; border-radius:10px; max-height:200px;"></div>`;
+          } else {
+            attachHtml = `<div style="margin-top:6px;"><a href="${escapeHtml(m.attachment.url)}" target="_blank" style="color:inherit; font-weight:bold;">📎 Download: ${escapeHtml(m.attachment.name)}</a></div>`;
+          }
+        }
+
+        const readReceipt = isMine ? (m.readBy?.length > 1 ? '✓✓' : '✓') : '';
+
+        return `
+          <div class="admin-chat-bubble ${isMine ? 'mine' : 'other'}">
+            ${m.taskTitle ? `<div style="font-size:10px; font-weight:bold; opacity:0.8; margin-bottom:4px;">📋 ${escapeHtml(m.taskTitle)}</div>` : ''}
+            <div>${m.deleted ? '<i>This message was deleted.</i>' : escapeHtml(m.text)}</div>
+            ${attachHtml}
+            <div style="font-size:10px; opacity:0.75; text-align:right; margin-top:4px;">
+              ${new Date(m.sentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} ${readReceipt}
+            </div>
+          </div>`;
+      }).join('');
+
+      container.scrollTop = container.scrollHeight;
+    }
+
+    document.getElementById('admin-btn-attach').onclick = () => {
+      document.getElementById('admin-file-input').click();
+    };
+
+    document.getElementById('admin-file-input').onchange = async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async (evt) => {
+        try {
+          const res = await api('/api/chat/upload', {
+            fileName: file.name,
+            fileType: file.type,
+            fileData: evt.target.result
+          });
+          sendAdminMessage(null, res.attachment);
+        } catch (err) { alert(err.message); }
+      };
+      reader.readAsDataURL(file);
+    };
+
+    document.getElementById('admin-btn-send').onclick = () => {
+      const input = document.getElementById('admin-chat-input');
+      const text = input.value.trim();
+      if (text) {
+        sendAdminMessage(text, null);
+        input.value = '';
+      }
+    };
+
+    document.getElementById('admin-chat-input').onkeydown = (e) => {
+      if (e.key === 'Enter') document.getElementById('admin-btn-send').click();
+    };
+
+    async function sendAdminMessage(text, attachment) {
+      if (!activeAdminConvId) return;
+      try {
+        await api('/api/chat/messages', {
+          conversationId: activeAdminConvId,
+          text: text || '',
+          attachment: attachment || null,
+          taskId: activeAdminConvObj?.taskId || null
+        });
+        loadAdminMessages(activeAdminConvId);
+      } catch (err) { alert(err.message); }
+    }
+
+    async function updateAdminUnreadNotifs() {
+      try {
+        const res = await api('/api/notifications/my');
+        const unread = (res.notifications || []).filter(n => !n.read).length;
+        const badge = document.getElementById('admin-notif-count');
+        if (unread > 0) {
+          badge.textContent = unread;
+          badge.style.display = 'inline-block';
+        } else {
+          badge.style.display = 'none';
+        }
+      } catch (_) {}
     }
 
     async function loadAdminEarnings() {
@@ -754,6 +1105,7 @@
       socket.on('connect', () => {
         for (const id of [...peers.keys()]) closePeer(id);
         requested.clear();
+        loadAdminConversations();
       });
 
       socket.on('device-command-result', p => { termLine((p.ok?'✓ ':'✗ ')+p.command+': '+p.result); });
@@ -772,6 +1124,29 @@
 
       socket.on('tasks-updated', () => { if (currentView === 'tasks') loadAdminTasks(); });
       socket.on('earnings-updated', () => { if (currentView === 'reports') loadAdminEarnings(); });
+      socket.on('chat-updated', () => { loadAdminConversations(); if (activeAdminConvId) loadAdminMessages(activeAdminConvId); });
+
+      socket.on('new-message', (msg) => {
+        if (msg.conversationId === activeAdminConvId) {
+          loadAdminMessages(activeAdminConvId);
+        } else {
+          loadAdminConversations();
+          if (behaviorPrefs.chatNotifications) {
+            showAdminToast(`💬 ${msg.senderName}`, msg.text || 'Sent an attachment', () => {
+              openAdminConversation(msg.conversationId);
+            });
+          }
+        }
+      });
+
+      socket.on('new-notification', (notif) => {
+        updateAdminUnreadNotifs();
+        if (behaviorPrefs.taskNotifications) {
+          showAdminToast(notif.title, notif.message, () => {
+            if (notif.taskId) showView('tasks');
+          });
+        }
+      });
 
       socket.on('rtc-offer', async p => {
         const early = peers.get(p.workerId)?.ice || [];
