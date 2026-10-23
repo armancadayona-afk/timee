@@ -101,6 +101,7 @@
       <div class="timer-actions">
         <button id="pause-btn" disabled>Ⅱ PAUSE</button>
         <button id="resume-btn" disabled>▶ RESUME</button>
+        <button id="mic-toggle-btn" type="button" style="background:#8b5cf6;">🎙 Mic On</button>
       </div>
       <div class="motivation">🐱 <span><b>Keep Going!</b><small>You're doing great! 💗</small></span></div>
       <div class="status-line" id="status">Connecting…</div>
@@ -345,6 +346,16 @@ function tick() {
 }
 
 function closePeer() { if (pc) pc.close(); pc = null; adminId = null; pendingIce = []; }
+
+let isMicMuted = false;
+document.getElementById('mic-toggle-btn').onclick = () => {
+  if (!stream) return;
+  isMicMuted = !isMicMuted;
+  stream.getAudioTracks().forEach(t => t.enabled = !isMicMuted);
+  const btn = document.getElementById('mic-toggle-btn');
+  btn.textContent = isMicMuted ? '🔇 Mic Off' : '🎙 Mic On';
+  btn.style.background = isMicMuted ? '#ef4444' : '#8b5cf6';
+};
 
 document.getElementById('pause-btn').onclick = () => buttonAction('pause');
 document.getElementById('resume-btn').onclick = () => buttonAction('resume');
