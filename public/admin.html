@@ -252,7 +252,7 @@
           <div class="multi-monitor-head"><select aria-label="Worker for camera ${i+1}" id="monitor-worker-${i}"></select><span class="multi-monitor-badge" id="monitor-status-${i}">Not connected</span></div>
           <div class="multi-monitor-screen" id="monitor-screen-${i}"><video id="monitor-video-${i}" autoplay playsinline muted></video><div class="multi-monitor-empty" id="monitor-empty-${i}">📷 Camera ${i+1}<br>Choose worker and press Connect</div></div>
           <div class="multi-monitor-foot"><span id="monitor-worker-status-${i}">No worker selected</span><span class="multi-monitor-time" id="monitor-time-${i}">00:00:00</span></div>
-          <div class="multi-monitor-controls"><button class="btn-pink" data-action="connect" data-slot="${i}">📹 Connect</button><button class="btn-outline" data-action="disconnect" data-slot="${i}">⏹ Disconnect</button><button class="btn-outline" data-action="front" data-slot="${i}">Front</button><button class="btn-outline" data-action="back" data-slot="${i}">Back</button><button class="btn-outline" data-action="zoom" data-slot="${i}" aria-pressed="false">🔎 Zoom</button><button class="btn-outline" data-action="fullscreen" data-slot="${i}">⛶ Full Screen</button><button class="btn-outline" data-action="timer-reset" data-slot="${i}">🔄 Reset Timer</button></div>
+          <div class="multi-monitor-controls"><button class="btn-pink" data-action="connect" data-slot="${i}">📹 Connect</button><button class="btn-outline" data-action="disconnect" data-slot="${i}">⏹ Disconnect</button><button class="btn-outline" data-action="front" data-slot="${i}">Front</button><button class="btn-outline" data-action="back" data-slot="${i}">Back</button><button class="btn-outline" data-action="zoom" data-slot="${i}" aria-pressed="false">🔎 Zoom</button><button class="btn-outline" data-action="fullscreen" data-slot="${i}">⛶ Full Screen</button><button class="btn-outline" data-action="audio" data-slot="${i}" aria-pressed="false">🔇 Audio Off</button><button class="btn-outline" data-action="record" data-slot="${i}" aria-pressed="false">⏺ Record</button><button class="btn-outline" data-action="timer-reset" data-slot="${i}">🔄 Reset Timer</button></div>
           <div class="multi-monitor-record" id="monitor-record-${i}">Recording idle</div></article>`).join('');
         grid.addEventListener('change',e=>{if(!e.target.id.startsWith('monitor-worker-'))return;assignMonitorSlot(Number(e.target.id.slice(-1)),e.target.value);});
         grid.addEventListener('click',e=>{const btn=e.target.closest('button[data-action]');if(btn)monitorAction(Number(btn.dataset.slot),btn.dataset.action,btn);});
@@ -287,13 +287,68 @@
       const slot=monitorSlots[i];slot.desired=false;if(slot.recorder?.state==='recording')slot.recorder.stop();
       if(slot.workerId&&socket?.connected)socket.emit('admin-live-stop',{workerId:slot.workerId});
       if(slot.workerId)closePeer(slot.workerId);
-      const v=document.getElementById(`monitor-video-${i}`);if(v)v.srcObject=null;
+      const v=document.getElementById(`monitor-video-${i}`);if(v){v.srcObject=null;v.muted=true;}
+      slot.muted=true;
+      const audioBtn=document.querySelector(`button[data-action="audio"][data-slot="${i}"]`);if(audioBtn){audioBtn.textContent='🔇 Audio Off';audioBtn.setAttribute('aria-pressed','false');}
+      const recordBtn=document.querySelector(`button[data-action="record"][data-slot="${i}"]`);if(recordBtn){recordBtn.textContent='⏺ Record';recordBtn.setAttribute('aria-pressed','false');}
       monitorStatus(i,'Disconnected');
     }
 
     function monitorAction(i,action,button) {
       const slot=monitorSlots[i],id=slot.workerId;
       if(!id){monitorStatus(i,'Select a worker first','error');return;}
+      if(action==='audio'){
+        const video=document.getElementById(`monitor-video-${i}`);
+        if(!video || !video.srcObject){monitorStatus(i,'Connect the feed before enabling audio','error');return;}
+        slot.muted=!slot.muted;
+        video.muted=slot.muted;
+        button.textContent=slot.muted?'🔇 Audio Off':'🔊 Audio On';
+        button.setAttribute('aria-pressed',String(!slot.muted));
+        if(!slot.muted) video.play().catch(()=>{});
+        return;
+      }
+      if(action==='record'){
+        const video=document.getElementById(`monitor-video-${i}`);
+        const status=document.getElementById(`monitor-record-${i}`);
+        if(slot.recorder && slot.recorder.state==='recording'){
+          slot.recorder.stop();
+          button.textContent='⏺ Record';
+          button.setAttribute('aria-pressed','false');
+          if(status)status.textContent='Saving recording…';
+          return;
+        }
+        const mediaStream=video && video.srcObject;
+        if(!mediaStream || !mediaStream.getTracks().some(t=>t.readyState==='live')){
+          if(status)status.textContent='Connect the feed before recording';
+          return;
+        }
+        if(!window.MediaRecorder){if(status)status.textContent='Recording is not supported by this browser';return;}
+        try{
+          slot.chunks=[];
+          const mimeType=['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'].find(type=>MediaRecorder.isTypeSupported(type));
+          slot.recorder=new MediaRecorder(mediaStream,mimeType?{mimeType}:undefined);
+          slot.started=Date.now();
+          slot.recorder.ondataavailable=event=>{if(event.data&&event.data.size)slot.chunks.push(event.data);};
+          slot.recorder.onerror=event=>{if(status)status.textContent='Recording failed: '+(event.error?.message||'unknown error');};
+          slot.recorder.onstop=()=>{
+            const chunks=slot.chunks.splice(0);
+            if(chunks.length){
+              const blob=new Blob(chunks,{type:slot.recorder?.mimeType||'video/webm'});
+              const url=URL.createObjectURL(blob),a=document.createElement('a');
+              const stamp=new Date().toISOString().replace(/[:.]/g,'-');
+              a.href=url;a.download=`timee-${String(id).replace(/[^a-z0-9_-]/gi,'_')}-${stamp}.webm`;
+              document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
+              if(status)status.textContent=`Recording saved locally · ${(blob.size/1024/1024).toFixed(1)} MB`;
+            }else if(status)status.textContent='No recording data was captured';
+            slot.recorder=null;
+          };
+          slot.recorder.start(1000);
+          button.textContent='⏹ Stop & Save';
+          button.setAttribute('aria-pressed','true');
+          if(status)status.textContent='Recording in progress · saved to this browser when stopped';
+        }catch(err){if(status)status.textContent='Could not start recording: '+err.message;slot.recorder=null;}
+        return;
+      }
       if(action==='timer-reset'){
         const worker=workers.find(w=>w.id===id);
         if(!confirm(`Reset timer for ${worker?.name||id}? Active camera stream will remain connected.`))return;
