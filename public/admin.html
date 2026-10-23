@@ -1,0 +1,840 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WorkWise - Admin</title>
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    .four-monitor-card { margin-bottom:16px; }
+    .multi-monitor-note {font-size:12px;color:#866274;margin:2px 0 14px;}
+    .multi-monitor-grid {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;}
+    .multi-monitor-tile {border:1px solid #f4c7db;border-radius:15px;padding:12px;background:#fff8fc;min-width:0;}
+    .multi-monitor-head {display:flex;justify-content:space-between;gap:9px;align-items:center;margin-bottom:8px;flex-wrap:wrap;}
+    .multi-monitor-head select {max-width:65%;min-width:115px;padding:7px;border:1px solid #edbad0;border-radius:8px;background:white;}
+    .multi-monitor-badge {font-weight:bold;font-size:11px;color:#a45477;}
+    .multi-monitor-screen {position:relative;aspect-ratio:16/9;background:#302632;border-radius:11px;overflow:hidden;display:flex;align-items:center;justify-content:center;}
+    .multi-monitor-screen video {width:100%;height:100%;object-fit:contain;background:#211d26;transition:transform .18s ease;transform-origin:center center;}
+    .multi-monitor-screen.zoomed video {transform:scale(1.6);cursor:zoom-out;}
+    .multi-monitor-screen:fullscreen {width:100vw;height:100vh;aspect-ratio:auto;border-radius:0;background:#111;}
+    .multi-monitor-screen:fullscreen video {object-fit:contain;}
+    .multi-monitor-empty {position:absolute;color:#f6dbe7;font-size:13px;pointer-events:none;text-align:center;}
+    .multi-monitor-foot {display:flex;justify-content:space-between;align-items:center;margin-top:9px;margin-bottom:7px;gap:7px;font-size:12px;}
+    .multi-monitor-time {font-size:20px;font-weight:800;color:#bc4d7f;font-variant-numeric:tabular-nums;}
+    .multi-monitor-controls {display:flex;gap:6px;flex-wrap:wrap;}
+    .multi-monitor-controls button {font-size:11px;padding:7px 9px;min-height:32px;}
+    .multi-monitor-record {font-size:11px;color:#876477;margin-top:7px;min-height:14px;}
+
+    /* Task Management & Financials styling */
+    .task-create-card { background:#fff0f5; border:1px solid #f4c7db; border-radius:16px; padding:18px; margin-bottom:20px; }
+    .form-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:12px; margin-bottom:12px; }
+    .form-group label { display:block; font-size:12px; font-weight:bold; color:#4a2e35; margin-bottom:4px; }
+    .form-group input, .form-group select, .form-group textarea { width:100%; padding:9px; border:1px solid #edbad0; border-radius:10px; font-size:13px; background:#fff; }
+    .task-filter-pills { display:flex; gap:8px; overflow-x:auto; padding-bottom:8px; margin-bottom:16px; }
+    .task-filter-pills button { border:1px solid #edbad0; background:#fff; padding:6px 14px; border-radius:20px; font-size:12px; font-weight:bold; cursor:pointer; color:#866274; white-space:nowrap; }
+    .task-filter-pills button.active { background:#e06980; color:#fff; border-color:#e06980; }
+    .task-admin-tile { border:1px solid #f4c7db; border-radius:15px; padding:16px; background:#fff; margin-bottom:12px; }
+    .task-admin-head { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:8px; }
+    .task-badge { font-size:11px; font-weight:bold; padding:4px 10px; border-radius:12px; text-transform:uppercase; }
+    .badge-open { background:#e0f2fe; color:#0369a1; }
+    .badge-assigned { background:#fef3c7; color:#b45309; }
+    .badge-progress { background:#e0e7ff; color:#4338ca; }
+    .badge-review { background:#fef3c7; color:#b45309; }
+    .badge-completed { background:#dcfce7; color:#15803d; }
+    .badge-rejected { background:#fee2e2; color:#b91c1c; }
+    .task-admin-body p { margin:6px 0; font-size:13px; color:#4a2e35; }
+    .task-admin-meta { display:flex; gap:16px; font-size:12px; color:#8a6b74; margin:10px 0; flex-wrap:wrap; }
+    .review-action-box { background:#fff5f8; border:1px solid #ffc2d1; border-radius:12px; padding:12px; margin-top:10px; }
+    .review-action-box label { font-size:11px; font-weight:bold; color:#4a2e35; display:block; margin-bottom:4px; }
+    .financial-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:14px; margin-bottom:20px; }
+    .financial-card { background:#fff; border:1px solid #f4c7db; border-radius:16px; padding:16px; text-align:center; }
+    .financial-card h3 { margin:0; font-size:12px; color:#8a6b74; text-transform:uppercase; }
+    .financial-card .val { font-size:26px; font-weight:800; color:#e06980; margin-top:6px; }
+    .data-table { width:100%; border-collapse:collapse; font-size:13px; margin-top:10px; }
+    .data-table th, .data-table td { padding:10px; text-align:left; border-bottom:1px solid #f4c7db; }
+    .data-table th { background:#fff0f5; color:#4a2e35; font-weight:bold; }
+    @media(max-width:850px){.multi-monitor-grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div class="app-container">
+    <!-- Top Header Bar -->
+    <header class="top-header">
+      <div class="brand-section">
+        <span class="brand-logo">🐱🎀</span>
+        <div class="brand-text">
+          <h1>Hello Kitty Admin Console</h1>
+          <p>Kitty Timer • Workforce & Task Management</p>
+        </div>
+      </div>
+      <div class="header-right">
+        <div class="notification-badge" title="Notifications">
+          🔔
+          <span class="count">3</span>
+        </div>
+        <div class="system-clock">
+          📅 <span id="clock-display">System Online</span>
+        </div>
+        <div class="admin-profile">
+          <div class="avatar-circle">👩‍💼</div>
+          <div class="admin-info">
+            <div class="name">Admin</div>
+            <div class="role">Administrator</div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Wrapper -->
+    <div class="main-wrapper">
+      <!-- Left Sidebar Navigation -->
+      <aside class="sidebar">
+        <ul class="nav-list">
+          <li class="nav-item active" data-view="dashboard" role="button" tabindex="0">📊 <span>Dashboard</span></li>
+          <li class="nav-item" data-view="workers" role="button" tabindex="0">👥 <span>Workers</span></li>
+          <li class="nav-item" data-view="tasks" role="button" tabindex="0">📋 <span>Tasks</span></li>
+          <li class="nav-item" data-view="devices" role="button" tabindex="0">📱 <span>Devices</span></li>
+          <li class="nav-item" data-view="chat" role="button" tabindex="0">💬 <span>Chat</span></li>
+          <li class="nav-item" data-view="reports" role="button" tabindex="0">📈 <span>Earning Overview</span></li>
+          <li class="nav-item" data-view="settings" role="button" tabindex="0">⚙️ <span>Settings</span></li>
+          <li class="nav-item" id="btn-logout">🚪 <span>Log Out</span></li>
+        </ul>
+
+        <div class="sidebar-footer">
+          <div class="kitty-art">🐱🎀</div>
+          <p>Small steps make big progress! 💖</p>
+        </div>
+      </aside>
+
+      <!-- Main Content Area -->
+      <main class="content-area">
+        <!-- Dashboard View -->
+        <div id="dashboard-view">
+          <div class="sub-bar">
+            <div class="active-workers-badge">
+              Active Workers <span id="active-workers-count">0 / 4</span>
+            </div>
+
+            <div class="worker-selector-group">
+              <label for="worker-select">Worker Selector:</label>
+              <select id="worker-select" class="custom-select">
+                <option value="">Select a Worker...</option>
+              </select>
+            </div>
+
+            <div class="active-workers-badge">
+              <span class="status-dot"></span> Online ⚙️
+            </div>
+          </div>
+
+          <section class="pink-card four-monitor-card" id="four-monitor-section">
+            <div class="card-header">
+              <h2>🎥 Live Worker Monitor · 4 Screens</h2>
+              <span class="badge-tag" id="multi-monitor-summary">Choose workers below</span>
+            </div>
+            <p class="multi-monitor-note">Each screen stays connected independently. Camera access must be granted on worker app.</p>
+            <div class="multi-monitor-grid" id="multi-monitor-grid"></div>
+          </section>
+
+          <!-- Selected Worker Timer & Quick Controls -->
+          <div class="grid-3col">
+            <section class="pink-card">
+              <div class="card-header">
+                <h2>⏰ Selected Worker Timer</h2>
+              </div>
+              <div class="timer-display-box">
+                <div class="big-timer" id="worker-timer-display">00:00:00</div>
+                <div class="timer-subtext">
+                  Status: <strong id="worker-status-text" style="color:var(--pink-primary);">OFFLINE</strong>
+                </div>
+              </div>
+
+              <div class="timer-btn-grid" style="display:flex; gap:8px; margin-top:12px;">
+                <button class="btn-pink" id="btn-timer-pause" style="flex:1;">⏸ PAUSE</button>
+                <button class="btn-outline" id="btn-timer-resume" style="flex:1;">▶ RESUME</button>
+                <button class="btn-outline" id="btn-timer-reset" style="flex:1;">🔄 RESET</button>
+              </div>
+            </section>
+
+            <section class="pink-card">
+              <div class="card-header">
+                <h2>📱 Selected Worker Camera</h2>
+              </div>
+              <p style="font-size:12px; color:var(--text-muted);">Switch camera perspective for <b id="cam-worker-name">Selected Worker</b></p>
+              <div style="display:flex; gap:8px; margin-top:16px;">
+                <button class="btn-outline" id="btn-switch-cam-front" style="flex:1;">📱 Front Camera</button>
+                <button class="btn-outline" id="btn-switch-cam-back" style="flex:1;">📷 Back Camera</button>
+              </div>
+            </section>
+
+            <section class="pink-card">
+              <div class="card-header">
+                <h2>&gt;_ Remote Terminal</h2>
+              </div>
+              <div class="terminal-box" id="terminal-screen" style="height:100px;"><div>Remote worker diagnostics.</div></div>
+              <div class="terminal-entry"><input id="terminal-command" placeholder="help, ping, status, info, time, uptime"></div>
+              <div style="display:flex; gap:8px; margin-top:8px;">
+                <button class="btn-pink" style="flex:1;" id="btn-send-cmd">➢ Send</button>
+                <button class="btn-outline" id="btn-clear-term">🗑 Clear</button>
+              </div>
+            </section>
+          </div>
+        </div>
+
+        <!-- Secondary View for Sidebar Items -->
+        <section id="secondary-view" class="pink-card" style="display:none; min-height:65vh;">
+          <div class="card-header">
+            <h2 id="view-heading"></h2>
+            <button class="btn-outline" id="back-dashboard">← Dashboard</button>
+          </div>
+          <div id="view-content"></div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <video id="live-video-player" autoplay playsinline muted style="position:absolute; width:1px; height:1px; opacity:0; pointer-events:none;"></video>
+
+  <!-- Socket.IO & Logic -->
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    let workers = [], socket, iceServers = [];
+    let selectedWorkerId = null;
+    const peers = new Map(), requested = new Map();
+    let currentAdminTasks = [], currentAdminFilter = 'ALL';
+
+    function updateClock() {
+      const now = new Date();
+      document.getElementById('clock-display').textContent = now.toLocaleString() + ' System Online';
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    async function api(path, body, method) {
+      const httpMethod = method || (body ? 'POST' : 'GET');
+      const r = await fetch(path, {
+        method: httpMethod,
+        headers: { 'Content-Type': 'application/json' },
+        body: body && httpMethod !== 'GET' ? JSON.stringify(body) : undefined
+      });
+      if (r.status === 401 || r.status === 403) {
+        location.href = '/';
+        throw Error('Sign in required');
+      }
+      const d = await r.json();
+      if (!r.ok) throw Error(d.error || 'Request failed');
+      return d;
+    }
+
+    function fmt(ms) {
+      const t = Math.floor(Math.max(0, ms) / 1000);
+      return [Math.floor(t / 3600), Math.floor(t / 60) % 60, t % 60].map(x => String(x).padStart(2, '0')).join(':');
+    }
+
+    function fmtMoney(amt) { return '$' + (Number(amt) || 0).toFixed(2); }
+    function fmtDate(ts) { return ts ? new Date(ts).toLocaleString() : '—'; }
+    function escapeHtml(str) { return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+
+    // Monitor slots management
+    const monitorSlots = Array.from({length:4},(_,i)=>({workerId:null,recorder:null,chunks:[],started:0,muted:true,desired:false,lastAttempt:0}));
+    function monitorSlotFor(id) { return monitorSlots.findIndex(s=>s.workerId===id); }
+    function monitorStatus(index,label,state='idle') {
+      const el=document.getElementById(`monitor-status-${index}`);
+      if(el){el.textContent=label;el.style.color=state==='live'?'#168658':state==='error'?'#b52f46':'#a45477';}
+      const empty=document.getElementById(`monitor-empty-${index}`);
+      if(empty)empty.style.display=state==='live'?'none':'block';
+    }
+
+    function renderMonitorSlots() {
+      const grid=document.getElementById('multi-monitor-grid'); if(!grid)return;
+      if(!grid.children.length) {
+        grid.innerHTML=monitorSlots.map((slot,i)=>`<article class="multi-monitor-tile" data-slot="${i}">
+          <div class="multi-monitor-head"><select aria-label="Worker for camera ${i+1}" id="monitor-worker-${i}"></select><span class="multi-monitor-badge" id="monitor-status-${i}">Not connected</span></div>
+          <div class="multi-monitor-screen" id="monitor-screen-${i}"><video id="monitor-video-${i}" autoplay playsinline muted></video><div class="multi-monitor-empty" id="monitor-empty-${i}">📷 Camera ${i+1}<br>Choose worker and press Connect</div></div>
+          <div class="multi-monitor-foot"><span id="monitor-worker-status-${i}">No worker selected</span><span class="multi-monitor-time" id="monitor-time-${i}">00:00:00</span></div>
+          <div class="multi-monitor-controls"><button class="btn-pink" data-action="connect" data-slot="${i}">📹 Connect</button><button class="btn-outline" data-action="disconnect" data-slot="${i}">⏹ Disconnect</button><button class="btn-outline" data-action="front" data-slot="${i}">Front</button><button class="btn-outline" data-action="back" data-slot="${i}">Back</button><button class="btn-outline" data-action="zoom" data-slot="${i}" aria-pressed="false">🔎 Zoom</button><button class="btn-outline" data-action="fullscreen" data-slot="${i}">⛶ Full Screen</button><button class="btn-outline" data-action="timer-reset" data-slot="${i}">🔄 Reset Timer</button></div>
+          <div class="multi-monitor-record" id="monitor-record-${i}">Recording idle</div></article>`).join('');
+        grid.addEventListener('change',e=>{if(!e.target.id.startsWith('monitor-worker-'))return;assignMonitorSlot(Number(e.target.id.slice(-1)),e.target.value);});
+        grid.addEventListener('click',e=>{const btn=e.target.closest('button[data-action]');if(btn)monitorAction(Number(btn.dataset.slot),btn.dataset.action,btn);});
+      }
+      for(let i=0;i<4;i++) {
+        const sel=document.getElementById(`monitor-worker-${i}`),slot=monitorSlots[i];
+        const items=[`<option value="">Select worker · Screen ${i+1}</option>`].concat(workers.map(w=>`<option value="${escapeHtml(w.id)}">${escapeHtml(w.name)} (${w.online?'Online':'Offline'})</option>`));
+        const html=items.join('');if(sel.innerHTML!==html)sel.innerHTML=html;sel.value=slot.workerId||'';
+      }
+      updateMonitorTimers();
+    }
+
+    function assignMonitorSlot(i,id) {
+      const old=monitorSlots[i].workerId;if(old===id)return;
+      if(id&&monitorSlots.some((s,n)=>n!==i&&s.workerId===id)) {alert('This worker already has a screen.');renderMonitorSlots();return;}
+      if(old)disconnectMonitor(i);
+      monitorSlots[i].desired=false;monitorSlots[i].workerId=id||null;
+      monitorStatus(i,id?'Ready to connect':'Not connected');updateMonitorTimers();
+    }
+
+    function updateMonitorTimers() {
+      monitorSlots.forEach((slot,i)=>{
+        const w=workers.find(w=>w.id===slot.workerId);
+        const elapsed=w?(Number(w.accumulatedMs)||0)+(w.status==='WORKING'&&w.startedAt?Math.max(0,Date.now()-w.startedAt):0):0;
+        const time=document.getElementById(`monitor-time-${i}`),status=document.getElementById(`monitor-worker-status-${i}`);
+        if(time)time.textContent=fmt(elapsed);
+        if(status)status.textContent=w?`${w.name} · ${w.status||'UNKNOWN'} · ${w.online?'Online':'Offline'}`:'No worker selected';
+      });
+    }
+
+    function disconnectMonitor(i) {
+      const slot=monitorSlots[i];slot.desired=false;if(slot.recorder?.state==='recording')slot.recorder.stop();
+      if(slot.workerId&&socket?.connected)socket.emit('admin-live-stop',{workerId:slot.workerId});
+      if(slot.workerId)closePeer(slot.workerId);
+      const v=document.getElementById(`monitor-video-${i}`);if(v)v.srcObject=null;
+      monitorStatus(i,'Disconnected');
+    }
+
+    function monitorAction(i,action,button) {
+      const slot=monitorSlots[i],id=slot.workerId;
+      if(!id){monitorStatus(i,'Select a worker first','error');return;}
+      if(action==='timer-reset'){
+        const worker=workers.find(w=>w.id===id);
+        if(!confirm(`Reset timer for ${worker?.name||id}? Active camera stream will remain connected.`))return;
+        socket?.emit('admin-timer-control',{workerId:id,action:'reset'});
+        return;
+      }
+      if(action==='connect') {slot.desired=true;slot.lastAttempt=Date.now();if(!socket?.connected){monitorStatus(i,'Server disconnected','error');return;}requestLiveFeed(id);return;}
+      if(action==='disconnect'){disconnectMonitor(i);return;}
+      if(action==='front'||action==='back'){socket?.emit('admin-switch-camera',{workerId:id,camera:action});return;}
+      if(action==='zoom'){
+        const screen=document.getElementById(`monitor-screen-${i}`);
+        const zoomed=screen.classList.toggle('zoomed');
+        button.textContent=zoomed?'🔎 Reset Zoom':'🔎 Zoom';
+        return;
+      }
+      if(action==='fullscreen'){
+        const screen=document.getElementById(`monitor-screen-${i}`);
+        if(document.fullscreenElement===screen){document.exitFullscreen?.().catch(()=>{});}
+        else if(screen.requestFullscreen){screen.requestFullscreen().catch(err=>{document.getElementById(`monitor-record-${i}`).textContent='Fullscreen error: '+err.message;});}
+        return;
+      }
+    }
+
+    function closePeer(id) {
+      const p = peers.get(id);
+      if (p?.pc) p.pc.close();
+      peers.delete(id);
+      requested.delete(id);
+      const index=monitorSlotFor(id);
+      if(index>=0){const tileVideo=document.getElementById(`monitor-video-${index}`);if(tileVideo)tileVideo.srcObject=null;monitorStatus(index,'Disconnected');}
+    }
+
+    function requestLiveFeed(workerId) {
+      if (!workerId || !socket?.connected) return;
+      if (peers.get(workerId)?.pc?.connectionState === 'connected') return;
+      setTimeout(() => {
+        requested.set(workerId, Date.now());
+        socket.emit('admin-live-request', { workerId, mode: 'camera' });
+      }, 300);
+    }
+
+    function updateUI() {
+      const activeCount = workers.filter(w => w.online).length;
+      document.getElementById('active-workers-count').textContent = `${activeCount} / ${workers.length}`;
+
+      const workerSelect = document.getElementById('worker-select');
+      const currentVal = workerSelect.value;
+      workerSelect.innerHTML = '';
+
+      workers.forEach(w => {
+        const opt = document.createElement('option');
+        opt.value = w.id;
+        opt.textContent = `${w.name} (${w.online ? 'Online' : 'Offline'})`;
+        workerSelect.appendChild(opt);
+      });
+
+      if (currentVal && workers.some(w => w.id === currentVal)) {
+        workerSelect.value = currentVal;
+      } else if (workers.length > 0) {
+        workerSelect.value = workers[0].id;
+      }
+
+      selectedWorkerId = workerSelect.value;
+      updateSelectedWorkerDetails();
+      renderMonitorSlots();
+    }
+
+    function updateSelectedWorkerDetails() {
+      const worker = workers.find(w => w.id === selectedWorkerId);
+      if (!worker) return;
+
+      const cameraName = document.getElementById('cam-worker-name');
+      if (cameraName) cameraName.textContent = worker.name;
+      document.getElementById('worker-status-text').textContent = worker.status + (worker.online ? ' • CONNECTED' : ' • OFFLINE');
+
+      const elapsedMs = (worker.accumulatedMs || 0) + (worker.status === 'WORKING' && worker.startedAt ? Date.now() - worker.startedAt : 0);
+      document.getElementById('worker-timer-display').textContent = fmt(elapsedMs);
+
+      const btnPause = document.getElementById('btn-timer-pause');
+      const btnResume = document.getElementById('btn-timer-resume');
+      if (worker.status === 'WORKING') {
+        btnPause.disabled = false;
+        btnResume.disabled = true;
+      } else {
+        btnPause.disabled = true;
+        btnResume.disabled = false;
+      }
+    }
+
+    let currentView = 'dashboard';
+    function showView(view) {
+      currentView = view;
+      document.getElementById('dashboard-view').style.display = view === 'dashboard' ? '' : 'none';
+      document.getElementById('secondary-view').style.display = view === 'dashboard' ? 'none' : '';
+      document.querySelectorAll('[data-view]').forEach(el => el.classList.toggle('active', el.dataset.view === view));
+      renderView();
+    }
+
+    document.querySelectorAll('[data-view]').forEach(el => {
+      el.onclick = () => showView(el.dataset.view);
+      el.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showView(el.dataset.view); } };
+    });
+
+    document.getElementById('back-dashboard').onclick = () => showView('dashboard');
+
+    async function renderView() {
+      if (currentView === 'dashboard') return;
+      const headings = { workers:'👥 Worker Roster', tasks:'📋 Task Management System', devices:'📱 Connected Devices', chat:'💬 Worker Chat', reports:'📈 Earnings & Financial Overview', settings:'⚙️ Preferences' };
+      document.getElementById('view-heading').textContent = headings[currentView] || currentView;
+      const content = document.getElementById('view-content');
+
+      if (currentView === 'tasks') {
+        content.innerHTML = `
+          <div class="task-create-card">
+            <h3 style="margin-top:0; color:#e06980;">✨ Create New Task</h3>
+            <form id="create-task-form">
+              <div class="form-grid">
+                <div class="form-group">
+                  <label>Task Title *</label>
+                  <input id="task-title-input" placeholder="e.g. Data Entry & Report Compilation" required>
+                </div>
+                <div class="form-group">
+                  <label>Deadline *</label>
+                  <input type="datetime-local" id="task-deadline-input" required>
+                </div>
+                <div class="form-group">
+                  <label>Assignment Type *</label>
+                  <select id="task-type-select">
+                    <option value="OPEN">Open Task (Any worker can grab)</option>
+                    <option value="DIRECT">Direct Assignment (Specific worker)</option>
+                  </select>
+                </div>
+                <div class="form-group" id="worker-assign-group" style="display:none;">
+                  <label>Assign to Worker *</label>
+                  <select id="task-worker-select">
+                    ${workers.map(w => `<option value="${w.id}">${w.name}</option>`).join('')}
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Base Reward / Payment ($) *</label>
+                  <input type="number" id="task-reward-input" placeholder="50.00" min="1" step="0.01" required>
+                </div>
+              </div>
+              <div class="form-group">
+                <label>Instructions & Description</label>
+                <textarea id="task-desc-input" rows="3" placeholder="Provide clear task instructions..."></textarea>
+              </div>
+              <button class="btn-pink" type="submit">Publish Task</button>
+            </form>
+          </div>
+
+          <div class="task-filter-pills" id="admin-task-filters">
+            <button class="active" data-filter="ALL">All Tasks</button>
+            <button data-filter="OPEN">Available Open</button>
+            <button data-filter="DIRECT">Directly Assigned</button>
+            <button data-filter="IN_PROGRESS">In Progress</button>
+            <button data-filter="PENDING_REVIEW">Pending Review</button>
+            <button data-filter="COMPLETED">Completed</button>
+            <button data-filter="REVISION_REQUIRED">Revision Required</button>
+          </div>
+
+          <div id="admin-tasks-list"><p>Loading tasks…</p></div>`;
+
+        document.getElementById('task-type-select').onchange = (e) => {
+          document.getElementById('worker-assign-group').style.display = e.target.value === 'DIRECT' ? 'block' : 'none';
+        };
+
+        document.getElementById('create-task-form').onsubmit = async (e) => {
+          e.preventDefault();
+          try {
+            await api('/api/tasks', {
+              title: document.getElementById('task-title-input').value,
+              deadline: document.getElementById('task-deadline-input').value,
+              type: document.getElementById('task-type-select').value,
+              assignedWorkerId: document.getElementById('task-worker-select').value,
+              rewardAmount: document.getElementById('task-reward-input').value,
+              description: document.getElementById('task-desc-input').value
+            });
+            alert('Task created successfully!');
+            document.getElementById('create-task-form').reset();
+            loadAdminTasks();
+          } catch (err) {
+            alert(err.message);
+          }
+        };
+
+        document.getElementById('admin-task-filters').onclick = (e) => {
+          if (e.target.tagName === 'BUTTON') {
+            document.querySelectorAll('#admin-task-filters button').forEach(b => b.classList.remove('active'));
+            e.target.classList.add('active');
+            currentAdminFilter = e.target.dataset.filter;
+            renderAdminTasksList();
+          }
+        };
+
+        loadAdminTasks();
+      } else if (currentView === 'reports') {
+        content.innerHTML = `<p>Loading financial overview…</p>`;
+        loadAdminEarnings();
+      } else if (currentView === 'workers') {
+        content.innerHTML = `<div class="view-cards">${workers.map(w=>`<div class="view-tile"><strong>${escapeHtml(w.name)}</strong><p>${w.online?'🟢 Online':'⚪ Offline'} · ${escapeHtml(w.status)}</p><p>Shift Time: ${fmt((w.accumulatedMs||0)+(w.status==='WORKING'&&w.startedAt?Date.now()-w.startedAt:0))}</p></div>`).join('')}</div>`;
+      } else if (currentView === 'devices') {
+        content.innerHTML = `<div class="kitty-stats"><div><b>${workers.length}</b><span>Total Devices</span></div><div><b>${workers.filter(w=>w.online).length}</b><span>Online</span></div></div><div class="view-cards">${workers.map(w=>`<div class="view-tile"><strong>📱 ${escapeHtml(w.name)}</strong><p>${w.online?'🟢 Connected & Live Feed Ready':'⚪ Offline'}</p></div>`).join('')}</div>`;
+      } else if (currentView === 'chat') {
+        content.innerHTML = `<p style="padding:20px;">Worker messaging workspace.</p>`;
+      } else if (currentView === 'settings') {
+        content.innerHTML = `<form class="view-form"><label><input type="checkbox" id="confirm-stop" ${localStorage.getItem('kitty-confirm-stop')!=='0'?'checked':''}> Confirm before stopping worker timer</label></form>`;
+      }
+    }
+
+    async function loadAdminTasks() {
+      try {
+        const res = await api('/api/tasks');
+        currentAdminTasks = res.tasks || [];
+        renderAdminTasksList();
+      } catch (err) {
+        document.getElementById('admin-tasks-list').innerHTML = `<p>Error loading tasks: ${err.message}</p>`;
+      }
+    }
+
+    function renderAdminTasksList() {
+      const container = document.getElementById('admin-tasks-list');
+      if (!container) return;
+
+      let filtered = currentAdminTasks;
+      if (currentAdminFilter === 'OPEN') filtered = currentAdminTasks.filter(t => t.type === 'OPEN' && t.status === 'UNASSIGNED');
+      else if (currentAdminFilter === 'DIRECT') filtered = currentAdminTasks.filter(t => t.type === 'DIRECT');
+      else if (currentAdminFilter !== 'ALL') filtered = currentAdminTasks.filter(t => t.status === currentAdminFilter);
+
+      if (!filtered.length) {
+        container.innerHTML = `<p>No tasks match the selected filter.</p>`;
+        return;
+      }
+
+      container.innerHTML = filtered.map(t => {
+        let badgeClass = 'badge-open';
+        if (t.status === 'ASSIGNED') badgeClass = 'badge-assigned';
+        if (t.status === 'IN_PROGRESS') badgeClass = 'badge-progress';
+        if (t.status === 'PENDING_REVIEW') badgeClass = 'badge-review';
+        if (t.status === 'COMPLETED') badgeClass = 'badge-completed';
+        if (t.status === 'REVISION_REQUIRED' || t.status === 'REJECTED_BY_WORKER') badgeClass = 'badge-rejected';
+
+        let reviewBoxHtml = '';
+        if (t.status === 'PENDING_REVIEW') {
+          reviewBoxHtml = `
+            <div class="review-action-box">
+              <p><b>📝 Worker Submission Note:</b> ${escapeHtml(t.submission?.note || 'No note provided')}</p>
+              <div class="form-grid" style="margin-top:10px;">
+                <div class="form-group">
+                  <label>Confirmed Payment Amount ($)</label>
+                  <input type="number" id="review-pay-${t.id}" value="${t.rewardAmount || 50}" step="0.01" min="1">
+                </div>
+                <div class="form-group">
+                  <label>Feedback (if rejecting)</label>
+                  <input id="review-feed-${t.id}" placeholder="Specify required revisions...">
+                </div>
+              </div>
+              <div style="display:flex; gap:8px; margin-top:8px;">
+                <button class="btn-pink" onclick="reviewTask('${t.id}', 'approve')">Approve Task & Credit Payment</button>
+                <button class="btn-outline" style="color:#b91c1c; border-color:#b91c1c;" onclick="reviewTask('${t.id}', 'reject')">Reject & Request Revision</button>
+              </div>
+            </div>`;
+        }
+
+        return `
+          <div class="task-admin-tile">
+            <div class="task-admin-head">
+              <strong>${escapeHtml(t.title)}</strong>
+              <span class="task-badge ${badgeClass}">${t.status.replace(/_/g, ' ')}</span>
+            </div>
+            <div class="task-admin-body">
+              <p>${escapeHtml(t.description || 'No description.')}</p>
+            </div>
+            <div class="task-admin-meta">
+              <span>Type: <b>${t.type}</b></span>
+              <span>Assigned: <b>${escapeHtml(t.assignedWorkerName)}</b></span>
+              <span>Deadline: ${fmtDate(t.deadline)}</span>
+              <span>Reward: <b>${fmtMoney(t.rewardAmount)}</b></span>
+            </div>
+            ${reviewBoxHtml}
+          </div>`;
+      }).join('');
+    }
+
+    async function reviewTask(taskId, action) {
+      const payInput = document.getElementById(`review-pay-${taskId}`);
+      const feedInput = document.getElementById(`review-feed-${taskId}`);
+      const paymentAmount = payInput ? payInput.value : undefined;
+      const feedback = feedInput ? feedInput.value : undefined;
+
+      try {
+        await api(`/api/tasks/${taskId}/review`, { action, paymentAmount, feedback });
+        alert(action === 'approve' ? 'Task approved and payment credited to 48-hour hold!' : 'Task returned for revision.');
+        loadAdminTasks();
+      } catch (err) {
+        alert(err.message);
+      }
+    }
+
+    async function loadAdminEarnings() {
+      const container = document.getElementById('view-content');
+      try {
+        const res = await api('/api/admin/earnings');
+        const summaries = res.workerSummaries || [];
+        const withdrawalsList = res.allWithdrawals || [];
+
+        let totalPaid = 0, totalPending = 0, totalAvailable = 0;
+        summaries.forEach(s => {
+          totalPaid += s.summary.totalEarnings || 0;
+          totalPending += s.summary.pendingBalance || 0;
+          totalAvailable += s.summary.availableBalance || 0;
+        });
+
+        container.innerHTML = `
+          <div class="financial-grid">
+            <div class="financial-card">
+              <h3>Total Approved Earnings</h3>
+              <div class="val">${fmtMoney(totalPaid)}</div>
+            </div>
+            <div class="financial-card">
+              <h3>Pending 48h Holds</h3>
+              <div class="val" style="color:#b45309;">${fmtMoney(totalPending)}</div>
+            </div>
+            <div class="financial-card">
+              <h3>Withdrawable Available</h3>
+              <div class="val" style="color:#15803d;">${fmtMoney(totalAvailable)}</div>
+            </div>
+          </div>
+
+          <h3>💸 Pending Withdrawal Requests</h3>
+          <div style="background:#fff; border:1px solid #f4c7db; border-radius:16px; padding:12px; margin-bottom:20px;">
+            ${!withdrawalsList.filter(w => w.status === 'PENDING').length ? '<p style="font-size:13px; color:#8a6b74;">No pending withdrawal requests.</p>' : `
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Worker</th>
+                    <th>Requested Amount</th>
+                    <th>Payout Method</th>
+                    <th>Date</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${withdrawalsList.filter(w => w.status === 'PENDING').map(w => `
+                    <tr>
+                      <td><b>${escapeHtml(w.workerName)}</b></td>
+                      <td style="color:#e06980; font-weight:bold;">${fmtMoney(w.amount)}</td>
+                      <td>${escapeHtml(w.payoutMethod)}</td>
+                      <td>${fmtDate(w.requestedAt)}</td>
+                      <td>
+                        <button class="btn-pink" style="padding:4px 10px; font-size:11px;" onclick="reviewWithdrawal('${w.id}', 'approve')">Approve</button>
+                        <button class="btn-outline" style="padding:4px 10px; font-size:11px; color:#b91c1c; border-color:#b91c1c;" onclick="reviewWithdrawal('${w.id}', 'reject')">Reject</button>
+                      </td>
+                    </tr>`).join('')}
+                </tbody>
+              </table>`}
+          </div>
+
+          <h3>👥 Worker Balances Summary</h3>
+          <div style="background:#fff; border:1px solid #f4c7db; border-radius:16px; padding:12px;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Worker Name</th>
+                  <th>Total Approved</th>
+                  <th>Pending (48h Hold)</th>
+                  <th>Available Balance</th>
+                  <th>Total Withdrawn</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${summaries.map(s => `
+                  <tr>
+                    <td><b>${escapeHtml(s.worker.name)}</b> (${s.worker.username})</td>
+                    <td>${fmtMoney(s.summary.totalEarnings)}</td>
+                    <td style="color:#b45309;">${fmtMoney(s.summary.pendingBalance)}</td>
+                    <td style="color:#15803d; font-weight:bold;">${fmtMoney(s.summary.availableBalance)}</td>
+                    <td>${fmtMoney(s.summary.totalWithdrawn)}</td>
+                  </tr>`).join('')}
+              </tbody>
+            </table>
+          </div>`;
+      } catch (err) {
+        container.innerHTML = `<p>Error loading financial data: ${err.message}</p>`;
+      }
+    }
+
+    async function reviewWithdrawal(id, action) {
+      try {
+        await api('/api/admin/withdrawals/review', { withdrawalId: id, action });
+        alert(`Withdrawal ${action}d successfully.`);
+        loadAdminEarnings();
+      } catch (err) {
+        alert(err.message);
+      }
+    }
+
+    document.getElementById('worker-select').addEventListener('change', (e) => {
+      selectedWorkerId = e.target.value;
+      updateSelectedWorkerDetails();
+    });
+
+    document.getElementById('btn-switch-cam-front').onclick = () => {
+      if (!selectedWorkerId) return;
+      socket.emit('admin-switch-camera', { workerId: selectedWorkerId, camera: 'front' });
+    };
+
+    document.getElementById('btn-switch-cam-back').onclick = () => {
+      if (!selectedWorkerId) return;
+      socket.emit('admin-switch-camera', { workerId: selectedWorkerId, camera: 'back' });
+    };
+
+    document.getElementById('btn-timer-pause').onclick = () => {
+      if (!selectedWorkerId) return;
+      socket.emit('admin-timer-control', { workerId: selectedWorkerId, action: 'pause' });
+    };
+
+    document.getElementById('btn-timer-resume').onclick = () => {
+      if (!selectedWorkerId) return;
+      socket.emit('admin-timer-control', { workerId: selectedWorkerId, action: 'resume' });
+    };
+
+    document.getElementById('btn-timer-reset').onclick = () => {
+      if (!selectedWorkerId) { alert('Select a worker first.'); return; }
+      const worker = workers.find(w => w.id === selectedWorkerId);
+      if (!confirm(`Reset timer for ${worker?.name || selectedWorkerId}? Camera stream will stay connected.`)) return;
+      socket.emit('admin-timer-control', { workerId: selectedWorkerId, action: 'reset' });
+    };
+
+    let nextTerminalId = 0;
+    function termLine(msg) { const screen=document.getElementById('terminal-screen'); const el=document.createElement('div');el.textContent=msg;screen.appendChild(el);screen.scrollTop=screen.scrollHeight; }
+    document.getElementById('btn-clear-term').onclick=()=>document.getElementById('terminal-screen').replaceChildren();
+    function runTerminal(){
+      const input=document.getElementById('terminal-command');const command=input.value.trim().toLowerCase();input.value='';if(!command)return;
+      termLine('> '+command);
+      if(command==='clear'){document.getElementById('btn-clear-term').click();return;}
+      if(!['status','ping','info','time','uptime'].includes(command)){termLine('Supported: ping, status, info, time, uptime');return;}
+      const worker=workers.find(w=>w.id===selectedWorkerId);if(!worker?.online){termLine('Worker offline.');return;}
+      socket.emit('admin-device-command',{workerId:selectedWorkerId,command,requestId:String(++nextTerminalId)});
+    }
+    document.getElementById('btn-send-cmd').onclick=runTerminal;
+    document.getElementById('terminal-command').onkeydown=e=>{if(e.key==='Enter')runTerminal()};
+
+    document.getElementById('btn-logout').onclick = async () => {
+      await api('/api/logout', {});
+      location.href = '/';
+    };
+
+    (async () => {
+      const me = await api('/api/me');
+      if (me.user.role !== 'admin') {
+        location.href = '/worker.html';
+        return;
+      }
+      iceServers = (await api('/api/rtc-config')).iceServers;
+      socket = io();
+
+      socket.on('connect', () => {
+        for (const id of [...peers.keys()]) closePeer(id);
+        requested.clear();
+      });
+
+      socket.on('device-command-result', p => { termLine((p.ok?'✓ ':'✗ ')+p.command+': '+p.result); });
+      socket.on('workers-state', data => {
+        workers = data;
+        updateUI();
+        monitorSlots.forEach((slot,i)=>{
+          if(!slot.desired||!slot.workerId||!socket.connected)return;
+          if(!workers.some(w=>w.id===slot.workerId&&w.online))return;
+          const pc=peers.get(slot.workerId)?.pc;
+          if(pc&&['connected','connecting','new'].includes(pc.connectionState))return;
+          if(Date.now()-slot.lastAttempt<12000)return;
+          slot.lastAttempt=Date.now();requestLiveFeed(slot.workerId);
+        });
+      });
+
+      socket.on('tasks-updated', () => { if (currentView === 'tasks') loadAdminTasks(); });
+      socket.on('earnings-updated', () => { if (currentView === 'reports') loadAdminEarnings(); });
+
+      socket.on('rtc-offer', async p => {
+        const early = peers.get(p.workerId)?.ice || [];
+        closePeer(p.workerId);
+        const pc = new RTCPeerConnection({ iceServers });
+        const entry = { pc, ice: early };
+        peers.set(p.workerId, entry);
+
+        pc.ontrack = e => {
+          const stream = e.streams[0] || new MediaStream([e.track]);
+          const index = monitorSlotFor(p.workerId);
+          if (index >= 0) {
+            const video = document.getElementById(`monitor-video-${index}`);
+            if (video) { video.srcObject = stream; video.play().catch(() => {}); }
+            monitorStatus(index, 'LIVE 🟢', 'live');
+          }
+        };
+
+        pc.onicecandidate = e => {
+          if (e.candidate) socket.emit('rtc-ice', { targetSocketId: p.workerSocketId, workerId: p.workerId, candidate: e.candidate });
+        };
+
+        pc.onconnectionstatechange = () => {
+          const index = monitorSlotFor(p.workerId);
+          if (index >= 0) monitorStatus(index, pc.connectionState === 'connected' ? 'LIVE 🟢' : pc.connectionState.toUpperCase(), pc.connectionState === 'connected' ? 'live' : 'idle');
+        };
+
+        try {
+          await pc.setRemoteDescription(new RTCSessionDescription(p.offer));
+          for (const ice of entry.ice) { try { await pc.addIceCandidate(new RTCIceCandidate(ice)); } catch (_) {} }
+          entry.ice = [];
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          socket.emit('rtc-answer', { targetSocketId: p.workerSocketId, workerId: p.workerId, answer });
+        } catch (e) {
+          socket.emit('admin-live-stop', { workerId: p.workerId });
+          closePeer(p.workerId);
+        }
+      });
+
+      socket.on('rtc-ice', async p => {
+        let entry = peers.get(p.workerId);
+        if (!entry) { entry = { pc: null, ice: [] }; peers.set(p.workerId, entry); }
+        if (!entry.pc || !entry.pc.remoteDescription) {
+          entry.ice.push(p.candidate);
+        } else {
+          try { await entry.pc.addIceCandidate(new RTCIceCandidate(p.candidate)); } catch (_) {}
+        }
+      });
+
+      socket.on('live-error', p => {
+        closePeer(p.workerId);
+        const index = monitorSlotFor(p.workerId); if (index >= 0) monitorStatus(index, p.message || 'Error', 'error');
+      });
+
+      socket.on('live-status', p => { if (p.mode === 'NONE') closePeer(p.workerId); });
+
+      setInterval(() => {
+        for (const [id, at] of requested) if (Date.now() - at > 30000) requested.delete(id);
+        updateSelectedWorkerDetails();
+        updateMonitorTimers();
+      }, 500);
+    })().catch(() => {});
+  </script>
+</body>
+</html>
