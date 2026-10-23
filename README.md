@@ -1,29 +1,29 @@
-# Timee Worker Monitor
+# Timee Worker Monitor & Task Management System
 
-Standalone browser-based worker timer and monitoring app. It does not require an Android app; workers can sign in from a supported browser. Camera/microphone capture requires explicit browser permission and HTTPS (or localhost).
+Standalone Node.js backend & web dashboard with real-time WebRTC camera monitoring, functional Task Management System, and Earnings System with 48-Hour Payment Holds.
 
-## Run locally
+## 🚀 Run locally
 
 1. Install Node.js 18 or newer.
 2. Run `npm install`.
 3. Run `npm start`.
-4. Open `http://localhost:3000` (or the port configured by the server).
+4. Open `http://localhost:3000` (or `http://10.0.2.2:3000` for Android emulator).
 
-## Preserved functionality
+## 🌟 Task Management & Earnings System
 
-- Admin Dashboard, Workers, Devices, remote diagnostic commands, timer controls, and WebRTC camera/audio monitoring.
-- Four independent monitor slots with Connect, Disconnect, camera switching, audio, recording, zoom, and fullscreen controls.
-- Worker browser timer and WebRTC signaling.
-- Admin timer reset closes the current timer session and resets elapsed time without intentionally disconnecting the live camera feed.
+- **Task Creation (Admin Only)**: Create Direct or Open Tasks with Title, Instructions, Deadline, Base Reward ($).
+- **Direct Assignment**: Assigned to specific worker (`Worker 1-4`). Worker can Accept or Deny.
+- **Open Available Tasks**: Published for any worker to Grab (claimed atomically).
+- **Task Submission & Admin Review**: Workers submit completed work with notes; Admin approves with payment amount ($) or requests revision with feedback.
+- **48-Hour Payment Hold**: Approved task earnings are held in Pending Balance for exactly 48 hours before automatically shifting to Available Balance for withdrawal.
 
-## Display names
+## 🌐 Deploy to Render
 
-The four worker display labels are Worker 1 through Worker 4. Login usernames/passwords are unchanged and remain configurable with `WORKER1_USERNAME`, `WORKER1_PASSWORD`, etc. Default local credentials are: admin `admin` / `admin123`; Worker 1 `john` / `john123`; Worker 2 `mark` / `mark123`; Worker 3 `anne` / `anne123`; Worker 4 `thing` / `thing123`. Change these credentials through environment variables before public deployment.
+To update your live server at `https://worker-timer-monitor-yqg3.onrender.com/`:
+1. Push this `backend/` code to your GitHub repository connected to Render.com.
+2. Render will run `npm install` and `npm start` automatically.
+3. Once deployed, `https://worker-timer-monitor-yqg3.onrender.com/` will serve the active Task Management & Earnings system.
 
-## Design-only sections
+## 🧪 Tests
 
-Tasks, Chat, and Earning tabs remain as visual layouts only. Their UI actions and server endpoints are removed from this build. These sections do not create tasks, send messages, or calculate/store earnings.
-
-## Tests
-
-Run `npm test` for the included automated authentication, timer, and WebRTC-state protocol tests. Run `npm run check` for a server syntax check. These tests do not replace a manual browser/device camera test.
+Run `npm test` for the included automated task creation, 48h hold earnings, authentication, timer, and WebRTC protocol tests.

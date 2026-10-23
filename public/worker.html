@@ -936,7 +936,12 @@ document.getElementById('btn-save-settings').onclick = async () => {
     document.getElementById('status').textContent = 'Camera unavailable — ' + e.message;
   }
 
-  socket = io();
+  socket = io({
+    auth: { user: me.user },
+    reconnection: true,
+    reconnectionDelay: 1000,
+    reconnectionAttempts: Infinity
+  });
   socket.on('connect', () => {
     closePeer();
     api('/api/worker/state').then(d => { state = d.state; render(); tick(); }).catch(() => {});

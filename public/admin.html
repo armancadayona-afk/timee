@@ -372,7 +372,17 @@
         socket?.emit('admin-timer-control',{workerId:id,action:'reset'});
         return;
       }
-      if(action==='connect') {slot.desired=true;slot.lastAttempt=Date.now();if(!socket?.connected){monitorStatus(i,'Server disconnected','error');return;}requestLiveFeed(id);return;}
+      if(action==='connect') {
+        slot.desired=true;
+        slot.lastAttempt=Date.now();
+        if(!socket?.connected){
+          monitorStatus(i,'Waking up server…','idle');
+          if(socket) socket.connect();
+          return;
+        }
+        requestLiveFeed(id);
+        return;
+      }
       if(action==='disconnect'){disconnectMonitor(i);return;}
       if(action==='front'||action==='back'){socket?.emit('admin-switch-camera',{workerId:id,camera:action});return;}
       if(action==='zoom'){
@@ -1114,13 +1124,32 @@
       }
       await loadWorkersList();
       iceServers = (await api('/api/rtc-config')).iceServers;
-      socket = io();
+      socket = io({
+        auth: { user: me.user },
+        reconnection: true,
+        reconnectionDelay: 1000,
+        reconnectionAttempts: Infinity
+      });
 
       socket.on('connect', () => {
         for (const id of [...peers.keys()]) closePeer(id);
         requested.clear();
         loadWorkersList();
         loadAdminConversations();
+        monitorSlots.forEach((slot, i) => {
+          if (slot.desired && slot.workerId) {
+            monitorStatus(i, 'Connecting camera…', 'idle');
+            requestLiveFeed(slot.workerId);
+          }
+        });
+      });
+
+      socket.on('disconnect', () => {
+        monitorSlots.forEach((slot, i) => {
+          if (slot.desired) {
+            monitorStatus(i, 'Reconnecting to server…', 'error');
+          }
+        });
       });
 
       socket.on('device-command-result', p => { termLine((p.ok?'✓ ':'✗ ')+p.command+': '+p.result); });
