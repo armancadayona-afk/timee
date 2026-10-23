@@ -1,0 +1,569 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>WorkerWise</title>
+  <link rel="stylesheet" href="/worker-mobile.css">
+  <style>
+    .task-badge-assigned { background:#e0f2fe; color:#0369a1; }
+    .task-badge-progress { background:#fef3c7; color:#b45309; }
+    .task-badge-review { background:#e0e7ff; color:#4338ca; }
+    .task-badge-completed { background:#dcfce7; color:#15803d; }
+    .task-badge-rejected { background:#fee2e2; color:#b91c1c; }
+    .task-meta { display:flex; justify-content:space-between; font-size:12px; color:#795d78; margin:8px 0; flex-wrap:wrap; gap:6px; }
+    .task-actions-row { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+    .task-actions-row button { flex:1; min-width:110px; font-size:13px; }
+    .btn-secondary { background:#6b7280 !important; }
+    .btn-success { background:#10b981 !important; }
+    .btn-danger { background:#ef4444 !important; }
+    .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.5); display:none; place-items:center; z-index:100; padding:16px; }
+    .modal-overlay.active { display:grid; }
+    .modal-card { background:#fff; border-radius:20px; padding:20px; width:100%; max-width:420px; max-height:90vh; overflow:auto; }
+    .modal-card h3 { margin-top:0; color:#ff1767; }
+    .modal-card textarea, .modal-card input, .modal-card select { width:100%; padding:10px; margin:8px 0 16px; border:1px solid #ffd0df; border-radius:12px; font-size:14px; }
+    .ledger-item { border-bottom:1px solid #ffe0ea; padding:10px 0; font-size:13px; }
+    .ledger-item:last-child { border:0; }
+    .ledger-header { display:flex; justify-content:space-between; font-weight:bold; }
+    .ledger-sub { font-size:11px; color:#866f86; margin-top:4px; display:flex; justify-content:space-between; }
+    .badge-hold { background:#fef3c7; color:#b45309; padding:2px 6px; border-radius:10px; font-size:10px; }
+    .badge-avail { background:#dcfce7; color:#15803d; padding:2px 6px; border-radius:10px; font-size:10px; }
+  </style>
+</head>
+<body>
+<div class="app-shell">
+  <header class="topbar">
+    <span class="brand">🎀 <b>WorkerWise</b></span>
+    <button class="icon-btn" id="settings-btn" aria-label="Settings">⚙️</button>
+  </header>
+
+  <main>
+    <!-- TIMER SCREEN -->
+    <section class="screen active" id="screen-timer">
+      <div class="hero">
+        <div class="cat">🐱</div>
+        <h2>Good Day, <span class="worker-name">Worker</span>!</h2>
+        <div class="big-timer" id="timer">00:00:00</div>
+        <div class="time-labels"><span>Hours</span><span>Minutes</span><span>Seconds</span></div>
+      </div>
+      <div class="timer-actions">
+        <button id="pause-btn" disabled>Ⅱ PAUSE</button>
+        <button id="resume-btn" disabled>▶ RESUME</button>
+      </div>
+      <div class="motivation">🐱 <span><b>Keep Going!</b><small>You're doing great! 💗</small></span></div>
+      <div class="status-line" id="status">Connecting…</div>
+    </section>
+
+    <!-- MY TASKS SCREEN -->
+    <section class="screen" id="screen-tasks">
+      <h2>📋 My Tasks</h2>
+      <div class="pill-tabs" id="my-task-tabs">
+        <button class="chosen" data-filter="ALL">All</button>
+        <button data-filter="ASSIGNED">Assigned</button>
+        <button data-filter="IN_PROGRESS">Progress</button>
+        <button data-filter="PENDING_REVIEW">Review</button>
+        <button data-filter="COMPLETED">Done</button>
+      </div>
+      <div class="stack" id="my-tasks-list">
+        <p class="subtext">Loading tasks…</p>
+      </div>
+    </section>
+
+    <!-- AVAILABLE OPEN TASKS SCREEN -->
+    <section class="screen" id="screen-open">
+      <h2>👜 Open Available Tasks</h2>
+      <p class="subtext">Grab an open task to claim it for yourself. First to claim gets the task!</p>
+      <div class="stack" id="open-tasks-list">
+        <p class="subtext">Loading open tasks…</p>
+      </div>
+    </section>
+
+    <!-- EARNINGS SCREEN -->
+    <section class="screen" id="screen-earnings">
+      <h2>💰 My Earnings</h2>
+      <div class="earn-banner">
+        <span>💰</span>
+        <div>
+          <small>Available Balance (Withdrawable)</small>
+          <strong id="avail-balance-display">$0.00</strong>
+        </div>
+      </div>
+
+      <div class="stats">
+        <div>⏱️<strong id="pending-balance-display">$0.00</strong><small>Pending (48h Hold)</small></div>
+        <div>📋<strong id="total-earnings-display">$0.00</strong><small>Total Approved</small></div>
+        <div>⭐<strong id="completed-tasks-count">0</strong><small>Tasks Completed</small></div>
+      </div>
+
+      <div class="motivation" style="margin:16px 0; color:#4a2e35;">
+        <span>ℹ️ <b>48-Hour Hold Policy:</b><small>Approved task earnings are held in Pending Balance for exactly 48 hours before becoming Available for withdrawal.</small></span>
+      </div>
+
+      <h3>💸 Request Withdrawal</h3>
+      <div class="task-entry">
+        <label style="font-size:12px; font-weight:bold; display:block; margin-bottom:4px;">Amount to Withdraw ($)</label>
+        <input type="number" id="withdraw-amount-input" placeholder="0.00" min="1" step="0.01" style="width:100%; padding:10px; border:1px solid #ffd0df; border-radius:12px; margin-bottom:10px;">
+        <label style="font-size:12px; font-weight:bold; display:block; margin-bottom:4px;">Payout Method</label>
+        <select id="withdraw-method-select" style="width:100%; padding:10px; border:1px solid #ffd0df; border-radius:12px; margin-bottom:12px;">
+          <option value="Bank Transfer">Bank Transfer</option>
+          <option value="PayPal">PayPal</option>
+          <option value="GCash / Mobile Money">Mobile Money / E-Wallet</option>
+        </select>
+        <button type="button" class="primary-btn" id="btn-submit-withdrawal" style="width:100%;">Submit Withdrawal Request</button>
+        <p id="withdraw-msg" style="font-size:12px; margin-top:8px; text-align:center;"></p>
+      </div>
+
+      <h3>📊 Earnings History Ledger</h3>
+      <div class="task-entry" id="earnings-ledger-list">
+        <p class="subtext">Loading ledger…</p>
+      </div>
+
+      <h3>📜 Withdrawal Request History</h3>
+      <div class="task-entry" id="withdrawals-history-list">
+        <p class="subtext">Loading history…</p>
+      </div>
+    </section>
+
+    <!-- CHAT SCREEN -->
+    <section class="screen" id="screen-chat">
+      <h2>💬 Admin Chat</h2>
+      <div class="chat-log">
+        <div class="chat-bubble">Messaging is available for urgent shift coordination.</div>
+      </div>
+      <div class="chat-form">
+        <input placeholder="Type a message…" disabled>
+        <button type="button" disabled aria-label="Send">➤</button>
+      </div>
+    </section>
+
+    <!-- PROFILE SCREEN -->
+    <section class="screen" id="screen-profile">
+      <h2>👤 My Profile</h2>
+      <div class="profile-avatar">🐱</div>
+      <h3 class="center worker-name">Worker</h3>
+      <div class="profile-box">
+        <div>Username <b id="profile-username">—</b></div>
+        <div>Full Name <b class="worker-name">—</b></div>
+        <div>Role <b>Worker</b></div>
+        <div>ID <b id="profile-id">—</b></div>
+      </div>
+      <h3>⚙️ Settings</h3>
+      <div class="profile-box">
+        <div>App Theme <button id="theme-toggle" class="small-btn">🌙 Dark</button></div>
+      </div>
+    </section>
+  </main>
+
+  <nav class="bottom-nav">
+    <button class="active" data-page="timer"><span>⏱</span>Timer</button>
+    <button data-page="tasks"><span>📋</span>My Tasks</button>
+    <button data-page="open"><span>👜</span>Open Tasks</button>
+    <button data-page="earnings"><span>💰</span>Earnings</button>
+    <button data-page="chat"><span>💬</span>Chat</button>
+  </nav>
+
+  <div class="more-nav">
+    <button data-page="profile">Profile / Settings</button>
+  </div>
+
+  <p class="worker-feedback" id="worker-feedback" role="status"></p>
+</div>
+
+<!-- SUBMIT WORK MODAL -->
+<div class="modal-overlay" id="submit-modal">
+  <div class="modal-card">
+    <h3 id="modal-task-title">Submit Task Work</h3>
+    <p style="font-size:12px; color:#866f86;">Provide submission details or proof of work for Admin review.</p>
+    <textarea id="submit-note-input" rows="4" placeholder="Enter completion notes or proof link..."></textarea>
+    <div style="display:flex; gap:8px;">
+      <button class="primary-btn btn-success" id="btn-confirm-submit" style="flex:1;">Submit Task</button>
+      <button class="primary-btn btn-secondary" id="btn-cancel-submit" style="flex:1;">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<video id="preview" autoplay playsinline muted style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none" aria-hidden="true"></video>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+let state, socket, stream, pc, adminId, pendingIce = [], iceServers = [];
+let myTasksData = [], openTasksData = [], currentTaskFilter = 'ALL';
+let submittingTaskId = null;
+
+async function api(path, body, method) {
+  const httpMethod = method || (body ? 'POST' : 'GET');
+  const r = await fetch(path, {
+    method: httpMethod,
+    headers: { 'Content-Type': 'application/json' },
+    body: body && httpMethod !== 'GET' ? JSON.stringify(body) : undefined
+  });
+  const d = await r.json();
+  if (!r.ok) throw Error(d.error || 'Request failed');
+  return d;
+}
+
+function render() {
+  document.getElementById('pause-btn').disabled = !state || state.status !== 'WORKING';
+  document.getElementById('resume-btn').disabled = !state || state.status === 'WORKING';
+}
+
+function tick() {
+  const ms = (state?.accumulatedMs || 0) + (state?.status === 'WORKING' ? Math.max(0, Date.now() - state.startedAt) : 0);
+  const t = Math.floor(ms / 1000);
+  document.getElementById('timer').textContent = [Math.floor(t / 3600), Math.floor(t / 60) % 60, t % 60]
+    .map(v => String(v).padStart(2, '0')).join(':');
+}
+
+function closePeer() { if (pc) pc.close(); pc = null; adminId = null; pendingIce = []; }
+
+document.getElementById('pause-btn').onclick = () => buttonAction('pause');
+document.getElementById('resume-btn').onclick = () => buttonAction('resume');
+
+async function buttonAction(action) {
+  document.getElementById('pause-btn').disabled = true;
+  document.getElementById('resume-btn').disabled = true;
+  try {
+    state = (await api('/api/worker/' + action, {})).state;
+  } catch (e) {
+    document.getElementById('status').textContent = e.message;
+  } finally {
+    render();
+  }
+}
+
+function fmtMoney(amount) {
+  return '$' + (Number(amount) || 0).toFixed(2);
+}
+
+function fmtDate(ts) {
+  if (!ts) return '—';
+  return new Date(ts).toLocaleString();
+}
+
+async function loadMyTasks() {
+  const listEl = document.getElementById('my-tasks-list');
+  try {
+    const res = await api('/api/tasks/my');
+    myTasksData = res.tasks || [];
+    renderMyTasks();
+  } catch (err) {
+    listEl.innerHTML = `<p class="subtext">Failed to load tasks: ${err.message}</p>`;
+  }
+}
+
+function renderMyTasks() {
+  const listEl = document.getElementById('my-tasks-list');
+  let filtered = myTasksData;
+  if (currentTaskFilter !== 'ALL') {
+    filtered = myTasksData.filter(t => t.status === currentTaskFilter);
+  }
+
+  if (!filtered.length) {
+    listEl.innerHTML = `<article class="task-entry"><p>No tasks found in this category.</p></article>`;
+    return;
+  }
+
+  listEl.innerHTML = filtered.map(t => {
+    let badgeClass = 'task-badge-assigned';
+    if (t.status === 'IN_PROGRESS') badgeClass = 'task-badge-progress';
+    if (t.status === 'PENDING_REVIEW') badgeClass = 'task-badge-review';
+    if (t.status === 'COMPLETED') badgeClass = 'task-badge-completed';
+    if (t.status === 'REJECTED_BY_WORKER' || t.status === 'REVISION_REQUIRED') badgeClass = 'task-badge-rejected';
+
+    let actionsHtml = '';
+    if (t.status === 'ASSIGNED') {
+      actionsHtml = `
+        <div class="task-actions-row">
+          <button class="primary-btn btn-success" onclick="respondTask('${t.id}', 'accept')">Accept Task</button>
+          <button class="primary-btn btn-danger" onclick="respondTask('${t.id}', 'deny')">Deny Task</button>
+        </div>`;
+    } else if (t.status === 'IN_PROGRESS' || t.status === 'REVISION_REQUIRED') {
+      actionsHtml = `
+        <div class="task-actions-row">
+          <button class="primary-btn" onclick="openSubmitModal('${t.id}', '${escapeHtml(t.title)}')">${t.status === 'REVISION_REQUIRED' ? 'Resubmit Work' : 'Submit Task'}</button>
+        </div>`;
+    }
+
+    let reviewNoteHtml = '';
+    if (t.status === 'REVISION_REQUIRED' && t.review?.feedback) {
+      reviewNoteHtml = `<p style="color:#b91c1c; font-weight:bold; background:#fee2e2; padding:8px; border-radius:8px; margin-top:8px;">⚠️ Admin Feedback: ${escapeHtml(t.review.feedback)}</p>`;
+    }
+    if (t.status === 'PENDING_REVIEW' && t.submission?.note) {
+      reviewNoteHtml = `<p style="color:#4338ca; background:#e0e7ff; padding:8px; border-radius:8px; margin-top:8px;">📝 Submitted Note: ${escapeHtml(t.submission.note)}</p>`;
+    }
+
+    return `
+      <article class="task-entry">
+        <span class="badge ${badgeClass}">${t.status.replace(/_/g, ' ')}</span>
+        <h3>${escapeHtml(t.title)}</h3>
+        <p>${escapeHtml(t.description || 'No instructions provided.')}</p>
+        <div class="task-meta">
+          <span>⏰ Deadline: ${fmtDate(t.deadline)}</span>
+          <span>💰 Reward: <b>${fmtMoney(t.rewardAmount)}</b></span>
+        </div>
+        ${reviewNoteHtml}
+        ${actionsHtml}
+      </article>`;
+  }).join('');
+}
+
+async function respondTask(taskId, action) {
+  try {
+    await api(`/api/tasks/${taskId}/respond`, { action });
+    loadMyTasks();
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
+function openSubmitModal(taskId, title) {
+  submittingTaskId = taskId;
+  document.getElementById('modal-task-title').textContent = 'Submit: ' + title;
+  document.getElementById('submit-note-input').value = '';
+  document.getElementById('submit-modal').classList.add('active');
+}
+
+document.getElementById('btn-cancel-submit').onclick = () => {
+  document.getElementById('submit-modal').classList.remove('active');
+  submittingTaskId = null;
+};
+
+document.getElementById('btn-confirm-submit').onclick = async () => {
+  if (!submittingTaskId) return;
+  const note = document.getElementById('submit-note-input').value;
+  try {
+    await api(`/api/tasks/${submittingTaskId}/submit`, { note });
+    document.getElementById('submit-modal').classList.remove('active');
+    submittingTaskId = null;
+    loadMyTasks();
+  } catch (err) {
+    alert(err.message);
+  }
+};
+
+async function loadAvailableTasks() {
+  const listEl = document.getElementById('open-tasks-list');
+  try {
+    const res = await api('/api/tasks/available');
+    openTasksData = res.tasks || [];
+    if (!openTasksData.length) {
+      listEl.innerHTML = `<article class="task-entry"><p>No open tasks available right now. Check back later!</p></article>`;
+      return;
+    }
+    listEl.innerHTML = openTasksData.map(t => `
+      <article class="task-entry">
+        <span class="badge task-badge-assigned">OPEN TASK</span>
+        <h3>${escapeHtml(t.title)}</h3>
+        <p>${escapeHtml(t.description || 'No description provided.')}</p>
+        <div class="task-meta">
+          <span>⏰ Deadline: ${fmtDate(t.deadline)}</span>
+          <span>💰 Reward: <b>${fmtMoney(t.rewardAmount)}</b></span>
+        </div>
+        <div class="task-actions-row">
+          <button class="primary-btn btn-success" onclick="claimTask('${t.id}')">✋ Grab Task</button>
+        </div>
+      </article>`).join('');
+  } catch (err) {
+    listEl.innerHTML = `<p class="subtext">Failed to load open tasks: ${err.message}</p>`;
+  }
+}
+
+async function claimTask(taskId) {
+  try {
+    await api(`/api/tasks/${taskId}/claim`, {});
+    alert('Task claimed successfully!');
+    loadAvailableTasks();
+    loadMyTasks();
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
+async function loadMyEarnings() {
+  try {
+    const res = await api('/api/earnings/my');
+    const s = res.summary || {};
+    document.getElementById('avail-balance-display').textContent = fmtMoney(s.availableBalance);
+    document.getElementById('pending-balance-display').textContent = fmtMoney(s.pendingBalance);
+    document.getElementById('total-earnings-display').textContent = fmtMoney(s.totalEarnings);
+
+    const completed = myTasksData.filter(t => t.status === 'COMPLETED').length;
+    document.getElementById('completed-tasks-count').textContent = completed;
+
+    // Render Ledger
+    const ledgerEl = document.getElementById('earnings-ledger-list');
+    if (!s.ledger || !s.ledger.length) {
+      ledgerEl.innerHTML = `<p class="subtext">No task earnings recorded yet.</p>`;
+    } else {
+      ledgerEl.innerHTML = s.ledger.map(item => {
+        const isAvail = item.status === 'AVAILABLE';
+        const holdHours = Math.ceil((item.remainingHoldMs || 0) / (1000 * 60 * 60));
+        return `
+          <div class="ledger-item">
+            <div class="ledger-header">
+              <span>${escapeHtml(item.taskTitle || 'Task Payment')}</span>
+              <span style="color:#ff1767;">+${fmtMoney(item.amount)}</span>
+            </div>
+            <div class="ledger-sub">
+              <span>Approved: ${fmtDate(item.approvedAt)}</span>
+              <span class="${isAvail ? 'badge-avail' : 'badge-hold'}">
+                ${isAvail ? 'AVAILABLE' : `HOLD (Avail in ${holdHours}h)`}
+              </span>
+            </div>
+          </div>`;
+      }).join('');
+    }
+
+    // Render Withdrawals
+    const withEl = document.getElementById('withdrawals-history-list');
+    if (!s.withdrawals || !s.withdrawals.length) {
+      withEl.innerHTML = `<p class="subtext">No withdrawal requests yet.</p>`;
+    } else {
+      withEl.innerHTML = s.withdrawals.map(w => `
+        <div class="ledger-item">
+          <div class="ledger-header">
+            <span>${escapeHtml(w.payoutMethod)}</span>
+            <span style="color:#2563eb;">-${fmtMoney(w.amount)}</span>
+          </div>
+          <div class="ledger-sub">
+            <span>Requested: ${fmtDate(w.requestedAt)}</span>
+            <span class="${w.status === 'APPROVED' ? 'badge-avail' : w.status === 'REJECTED' ? 'badge-hold' : 'badge-hold'}">${w.status}</span>
+          </div>
+        </div>`).join('');
+    }
+  } catch (err) {
+    document.getElementById('withdraw-msg').textContent = err.message;
+  }
+}
+
+document.getElementById('btn-submit-withdrawal').onclick = async () => {
+  const amt = document.getElementById('withdraw-amount-input').value;
+  const method = document.getElementById('withdraw-method-select').value;
+  const msgEl = document.getElementById('withdraw-msg');
+  msgEl.textContent = 'Submitting request…';
+  try {
+    await api('/api/earnings/withdraw', { amount: amt, payoutMethod: method });
+    msgEl.style.color = '#10b981';
+    msgEl.textContent = 'Withdrawal request submitted successfully!';
+    document.getElementById('withdraw-amount-input').value = '';
+    loadMyEarnings();
+  } catch (err) {
+    msgEl.style.color = '#ef4444';
+    msgEl.textContent = err.message;
+  }
+};
+
+document.getElementById('my-task-tabs').onclick = (e) => {
+  if (e.target.tagName === 'BUTTON') {
+    document.querySelectorAll('#my-task-tabs button').forEach(b => b.classList.remove('chosen'));
+    e.target.classList.add('chosen');
+    currentTaskFilter = e.target.dataset.filter;
+    renderMyTasks();
+  }
+};
+
+function escapeHtml(str) {
+  return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+(async () => {
+  const me = await api('/api/me');
+  if (me.user.role !== 'worker') throw Error('Worker account required');
+  document.querySelectorAll('.worker-name').forEach(el => el.textContent = me.user.name);
+  window.workerMe = me.user;
+  document.getElementById('profile-username').textContent = me.user.username || me.user.id;
+  document.getElementById('profile-id').textContent = me.user.id;
+
+  state = (await api('/api/worker/state')).state;
+  iceServers = (await api('/api/rtc-config')).iceServers;
+
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: { echoCancellation: true, noiseSuppression: true } });
+    document.getElementById('preview').srcObject = stream;
+    document.getElementById('status').textContent = 'Camera and microphone active';
+  } catch (e) {
+    document.getElementById('status').textContent = 'Camera unavailable — ' + e.message;
+  }
+
+  socket = io();
+  socket.on('connect', () => {
+    closePeer();
+    api('/api/worker/state').then(d => { state = d.state; render(); tick(); }).catch(() => {});
+    socket.emit('worker-capture-ready');
+    socket.emit('worker-heartbeat');
+    loadMyTasks();
+    loadAvailableTasks();
+    loadMyEarnings();
+  });
+
+  socket.on('tasks-updated', () => { loadMyTasks(); loadAvailableTasks(); });
+  socket.on('earnings-updated', () => { loadMyEarnings(); });
+
+  socket.on('timer-updated', p => { state = p; render(); });
+  socket.on('timer-stopped', () => { state = { ...state, status: 'STOPPED', startedAt: null, accumulatedMs: 0 }; render(); });
+
+  socket.on('stop-live', () => { closePeer(); document.getElementById('status').textContent = 'Camera and microphone ready'; });
+  socket.on('session-replaced', () => {
+    if (stream) stream.getTracks().forEach(t => t.stop());
+    closePeer();
+    render();
+    document.getElementById('status').textContent = 'This account was opened on another device';
+  });
+
+  socket.on('live-request', async request => {
+    if (request.mode !== 'camera') {
+      socket.emit('worker-live-error', { ...request, message: 'Camera and audio supported only.' });
+      return;
+    }
+    if (!stream) {
+      socket.emit('worker-live-error', { ...request, message: 'Camera stream unavailable.' });
+      return;
+    }
+    if (pc) return;
+    try {
+      adminId = request.adminSocketId;
+      pendingIce = [];
+      pc = new RTCPeerConnection({ iceServers });
+      const current = pc;
+      stream.getTracks().forEach(t => pc.addTrack(t, stream));
+      pc.onicecandidate = e => {
+        if (e.candidate) socket.emit('rtc-ice', { targetSocketId: adminId, workerId: state.id, candidate: e.candidate });
+      };
+      await pc.setLocalDescription(await pc.createOffer());
+      if (pc !== current) return;
+      socket.emit('worker-live-started', { ...request });
+      socket.emit('rtc-offer', { targetSocketId: adminId, workerId: state.id, mode: 'camera', offer: pc.localDescription });
+      document.getElementById('status').textContent = 'Timer Live';
+    } catch (e) {
+      closePeer();
+      socket.emit('worker-live-error', { ...request, message: e.message });
+    }
+  });
+
+  socket.on('rtc-answer', async p => {
+    if (!pc || p.adminSocketId !== adminId) return;
+    try {
+      await pc.setRemoteDescription(p.answer);
+      for (const c of pendingIce) await pc.addIceCandidate(c);
+      pendingIce = [];
+    } catch (e) {
+      document.getElementById('status').textContent = e.message;
+    }
+  });
+
+  socket.on('rtc-ice', async p => {
+    if (!pc || p.fromSocketId !== adminId) return;
+    if (!pc.remoteDescription) pendingIce.push(p.candidate);
+    else try { await pc.addIceCandidate(p.candidate); } catch (e) { document.getElementById('status').textContent = e.message; }
+  });
+
+  setInterval(() => { if (socket.connected) socket.emit('worker-heartbeat'); }, 10000);
+  render();
+  setInterval(tick, 500);
+})().catch(e => {
+  document.getElementById('status').textContent = e.message + ' — check your sign-in and browser permissions.';
+});
+</script>
+<script src="/worker-navigation.js"></script>
+</body>
+</html>
